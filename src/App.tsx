@@ -306,8 +306,22 @@ export default function App() {
     } catch (_) {}
     return null;
   });
+  const [selectedStoryId, setSelectedStoryId] = useState<string | null>(() => {
+    try {
+      const pathParam = window.location.pathname.replace(/^\//, '');
+      const segments = pathParam.split('/');
+      if (segments[0] === 'story' && segments[1]) {
+        return segments[1];
+      }
+    } catch (_) {}
+    return null;
+  });
   const [isGuest, setIsGuest] = useState(() => {
     try {
+      const pathParam = window.location.pathname.replace(/^\//, '');
+      if (pathParam.startsWith('story/')) {
+        return true;
+      }
       const cached = localStorage.getItem('bloodlink_persisted_user');
       return !cached;
     } catch (_) {
@@ -482,12 +496,12 @@ export default function App() {
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
         'community', 'explore', 'nearby', 'home', 'about', 'contact', 'privacy',
-        'terms', 'faq'
+        'terms', 'faq', 'story'
       ];
 
       if (viewKey) {
         let mappedView = viewKey;
-        if (viewKey === 'community') {
+        if (viewKey === 'community' || viewKey === 'story') {
           mappedView = 'feed';
         } else if (viewKey === 'home' || viewKey === 'explore' || viewKey === 'nearby') {
           mappedView = 'requests';
@@ -515,9 +529,12 @@ export default function App() {
       let orgIdParam = '';
 
       if (pathParam) {
-        // e.g. "public-profile" or "community"
+        // e.g. "public-profile" or "community" or "story/storyId"
         const segments = pathParam.split('/');
         viewKey = segments[0];
+        if (viewKey === 'story' && segments[1]) {
+          setSelectedStoryId(segments[1]);
+        }
       }
       
       // Look at search parameters (supports query backups)
@@ -552,12 +569,12 @@ export default function App() {
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
         'community', 'explore', 'nearby', 'home', 'about', 'contact', 'privacy',
-        'terms', 'faq'
+        'terms', 'faq', 'story'
       ];
       
       if (viewKey) {
         let mappedView = viewKey;
-        if (viewKey === 'community') {
+        if (viewKey === 'community' || viewKey === 'story') {
           mappedView = 'feed';
         } else if (viewKey === 'home' || viewKey === 'explore' || viewKey === 'nearby') {
           mappedView = 'requests';
@@ -589,12 +606,67 @@ export default function App() {
       let urlKey = view === 'feed' ? 'community' : view === 'requests' ? 'home' : view;
       let pathName = `/${urlKey}`;
       let searchStr = '';
+      let pageTitle = 'BloodLink Bangladesh | Find Urgent Blood Donors & Post Blood Needs';
+      let pageDesc = 'BloodLink Bangladesh connects blood donors and recipients across all districts of Bangladesh. Find voluntary blood donors for emergency blood needs instantly.';
       
-      if (view === 'public-profile' && selectedUserId) {
+      if (view === 'feed' && selectedStoryId) {
+        pathName = `/story/${selectedStoryId}`;
+        const targetPost = posts.find(p => p.id === selectedStoryId);
+        if (targetPost) {
+          const authorText = targetPost.authorName ? ` by ${targetPost.authorName}` : '';
+          const snippetText = targetPost.content ? (targetPost.content.length > 50 ? targetPost.content.slice(0, 50) + '...' : targetPost.content) : 'Blood Donation Success Story';
+          pageTitle = `Story: "${snippetText}"${authorText} | BloodLink Bangladesh`;
+          pageDesc = `Read this inspiring voluntary blood donation story on BloodLink Bangladesh: "${targetPost.content ? targetPost.content.slice(0, 150) : ''}"`;
+        } else {
+          pageTitle = 'Read Community Blood Donation Story | BloodLink Bangladesh';
+        }
+      } else if (view === 'feed') {
+        pageTitle = 'Community Blood Donation Stories & Success Feed | BloodLink BD';
+        pageDesc = 'Discover beautiful blood donation success stories, awareness posts, and blood drive memories from voluntary community members across Bangladesh.';
+      } else if (view === 'requests') {
+        pageTitle = 'BloodLink Bangladesh | Active Emergency Blood Requests & Donors';
+        pageDesc = 'Urgent blood need board for Bangladesh. View real-time pending blood requests for A+, A-, B+, B-, O+, O-, AB+, AB- in Dhaka, Chittagong, Sylhet, etc., and contact donors instantly.';
+      } else if (view === 'find') {
+        pageTitle = 'Search Voluntary Blood Donors in Bangladesh | Dhaka, CTG, Sylhet';
+        pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
+      } else if (view === 'public-profile' && selectedUserId) {
         searchStr = `?uid=${selectedUserId}`;
+        const targetUser = allUsers.find(u => u.uid === selectedUserId);
+        if (targetUser) {
+          pageTitle = `Voluntary Blood Donor: ${targetUser.displayName} (${targetUser.bloodGroup}) | BloodLink BD`;
+          pageDesc = `View the active blood donor profile of ${targetUser.displayName} in ${targetUser.district}, ${targetUser.thana}. Contact directly for blood need matching ${targetUser.bloodGroup}.`;
+        } else {
+          pageTitle = 'Blood Donor Profile | BloodLink Bangladesh';
+        }
       } else if (view === 'org-dashboard' && selectedOrgId) {
         searchStr = `?id=${selectedOrgId}`;
+        const targetOrg = organizations.find(o => o.id === selectedOrgId);
+        if (targetOrg) {
+          pageTitle = `${targetOrg.name} | Verified Blood Organization Bangladesh`;
+          pageDesc = `Official portal for ${targetOrg.name} in ${targetOrg.district}. Apply to join as a partner or find active coordinate camps and blood banks.`;
+        } else {
+          pageTitle = 'Blood Organization Portal | BloodLink Bangladesh';
+        }
+      } else if (view === 'organizations') {
+        pageTitle = 'Voluntary Blood Club Networks & Organizations of Bangladesh';
+        pageDesc = 'Connect with verified voluntary blood donation organizations, clubs, and student associations across Bangladesh for mass blood drives or rare blood groups.';
+      } else if (view === 'stats') {
+        pageTitle = 'Bangladesh Blood Donation Statistics & Impact Analytics';
+        pageDesc = 'Real-time database metrics detailing active blood donors, successfully fulfilled requests, and district-wise blood supply density charts in BD.';
       }
+
+      document.title = pageTitle;
+      
+      const metaDescription = document.querySelector('meta[name="description"]');
+      if (metaDescription) {
+        metaDescription.setAttribute('content', pageDesc);
+      }
+      
+      const ogTitle = document.querySelector('meta[property="og:title"]');
+      if (ogTitle) ogTitle.setAttribute('content', pageTitle);
+      
+      const ogDesc = document.querySelector('meta[property="og:description"]');
+      if (ogDesc) ogDesc.setAttribute('content', pageDesc);
 
       const cleanUrl = `${pathName}${searchStr}`;
       
@@ -603,7 +675,7 @@ export default function App() {
         window.history.replaceState(null, '', cleanUrl);
       }
     }
-  }, [view, selectedUserId, selectedOrgId]);
+  }, [view, selectedUserId, selectedOrgId, selectedStoryId, posts, allUsers, organizations]);
 
   useEffect(() => {
     const ephemeral = ['admin-login', 'chat-room', 'post-opinion', 'request-form', 'org-apply', 'public-profile', 'org-dashboard'];
@@ -3036,6 +3108,14 @@ export default function App() {
           mainTouchStartRef.current = null;
         }}
       >
+        {/* Google Bangladesh SEO & Web Accessibility Scraper Optimization */}
+        <div className="sr-only select-none pointer-events-none">
+          <h1>BloodLink Bangladesh | Direct Voluntary Blood Donors, Requests & Urgent Need Board</h1>
+          <p>The leading nonprofit digital blood database connects donors with urgent blood needs in Dhaka, Chittagong, Sylhet, and other districts of Bangladesh.</p>
+          <h2>Search Active Blood Groups BD</h2>
+          <p>Find A positive (A+), A negative (A-), B positive (B+), B negative (B-), O positive (O+), O negative (O-), AB positive (AB+), and AB negative (AB-) blood groups. Save lives by donating blood regularly.</p>
+        </div>
+
         <AnimatePresence mode="wait">
           {view === 'org-apply' && (
             <motion.div key="org-apply" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
@@ -3606,12 +3686,39 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-
-                {/* Stream feeds container */}
+                       {/* Stream feeds container */}
                 <div className="space-y-4">
+                  {selectedStoryId && (
+                    <div className="bg-rose-50 border border-slate-200 p-6 rounded-[2rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center shrink-0">
+                          <Flame className="w-6 h-6 text-rose-600 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-rose-950 uppercase tracking-wider">Direct Shared Story Link</p>
+                          <p className="text-[11px] text-rose-700 font-semibold max-w-md">You are viewing a directly linked community experience. Explore or search for more below!</p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setSelectedStoryId(null);
+                          window.history.replaceState(null, '', '/community');
+                        }}
+                        className="py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider transition-all self-start sm:self-auto cursor-pointer shadow-md"
+                      >
+                        Show All Stories
+                      </button>
+                    </div>
+                  )}
+
                   {/* Dynamic Filtering Code */}
                   {(() => {
-                    const filtered = posts.filter(post => {
+                    let filtered = posts.filter(post => {
+                      // If this is the direct post we came to read, always keep it first and bypass filter!
+                      if (selectedStoryId && post.id === selectedStoryId) {
+                        return true;
+                      }
+
                       // Tab Check
                       if (communityTab === 'following') {
                         if (!user) return false;
@@ -3641,6 +3748,15 @@ export default function App() {
                       return true;
                     });
 
+                    // Sort so that the target directPost is always at index 0!
+                    if (selectedStoryId) {
+                      filtered = [...filtered].sort((a, b) => {
+                        if (a.id === selectedStoryId) return -1;
+                        if (b.id === selectedStoryId) return 1;
+                        return 0; // maintain default order for other posts
+                      });
+                    }
+
                     if (filtered.length === 0) {
                       return (
                         <div className="bg-white rounded-[2.5rem] p-12 text-center border border-dashed border-slate-200 shadow-sm">
@@ -3667,20 +3783,28 @@ export default function App() {
                       );
                     }
 
-                    return filtered.slice(0, feedLimit).map(post => (
-                      <div key={post.id} className="transition-all hover:translate-y-[-1px]">
-                        <PostCard 
-                          post={post} 
-                          user={user} 
-                          profile={profile} 
-                          allUsers={allUsers}
-                          onViewProfile={(uid) => onViewProfile(uid)}
-                          askConfirm={askConfirm}
-                          addToast={addToast}
-                          notifyAdmins={notifyAdmins}
-                        />
-                      </div>
-                    ));
+                    return filtered.slice(0, feedLimit).map(post => {
+                      const isTarget = post.id === selectedStoryId;
+                      return (
+                        <div 
+                          key={post.id} 
+                          className={`transition-all duration-300 hover:translate-y-[-1px] ${
+                            isTarget ? 'ring-2 ring-rose-500 ring-offset-2 rounded-[2.5rem] shadow-xl shadow-rose-100 bg-rose-50/5 p-1' : ''
+                          }`}
+                        >
+                          <PostCard 
+                            post={post} 
+                            user={user} 
+                            profile={profile} 
+                            allUsers={allUsers}
+                            onViewProfile={(uid) => onViewProfile(uid)}
+                            askConfirm={askConfirm}
+                            addToast={addToast}
+                            notifyAdmins={notifyAdmins}
+                          />
+                        </div>
+                      );
+                    });
                   })()}
 
                   {posts.length >= feedLimit && (
