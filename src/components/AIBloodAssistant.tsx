@@ -265,9 +265,27 @@ export default function AIBloodAssistant({
           history: messages.map(m => ({ role: m.role, text: m.text })),
           slots: slots,
           currentUserPhone: currentUser?.phone || currentUser?.phoneNumber || '',
-          donors: allUsers
+          donors: (allUsers || []).map((u: any) => ({
+            displayName: u.displayName || u.name || '',
+            bloodGroup: u.bloodGroup || '',
+            lastDonationDate: u.lastDonationDate || '',
+            nextDonationEligibility: u.nextDonationEligibility || '',
+            district: u.district || '',
+            thana: u.thana || ''
+          }))
         })
       });
+
+      if (!response.ok) {
+        let errText = `Server responded with status ${response.status}`;
+        try {
+          const errObj = await response.json();
+          errText = errObj.error || errText;
+        } catch (_) {
+          // Fallback if not JSON
+        }
+        throw new Error(errText);
+      }
 
       const resData = await response.json();
       
