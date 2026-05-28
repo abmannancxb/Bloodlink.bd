@@ -6,6 +6,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 import { GoogleGenAI, Type } from "@google/genai";
 import { BANGLADESH_LOCATIONS } from "./src/constants";
+import Groq from "groq-sdk";
 
 // Initialize firebase-admin safely
 try {
@@ -146,28 +147,6 @@ async function startServer() {
     try {
       const { message, history, slots } = req.body;
       
-      if (!process.env.GEMINI_API_KEY) {
-        return res.status(200).json({
-          success: true,
-          replyText: "দুঃখিত, কৃত্রিম বুদ্ধিমত্তা (AI) সার্ভিসটি কনফিগার করা নেই। অনুগ্রহ করে Settings > Secrets প্যানেল থেকে GEMINI_API_KEY প্রদান করুন।",
-          bloodGroup: null,
-          district: null,
-          thana: null,
-          intentType: "unknown",
-          actionTriggered: false,
-          requestFormTriggered: false
-        });
-      }
-
-      const ai = new GoogleGenAI({
-        apiKey: process.env.GEMINI_API_KEY,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build',
-          }
-        }
-      });
-
       const locationsPreview = Object.keys(BANGLADESH_LOCATIONS).reduce((acc, dist) => {
         acc[dist] = BANGLADESH_LOCATIONS[dist];
         return acc;
@@ -180,7 +159,7 @@ CRITICAL INSTRUCTIONS FOR CONVERSATIONAL MEMORY AND FIELD CAPTURE:
 1. SLOT MEMORY RETENTION: You MUST carry forward and return the non-null values provided below in "Current extracted slots state from previous turns" in your final JSON response keys ('bloodGroup', 'district', 'thana'). NEVER reset them to null if they were already captured in previous turns unless the user specifically speaks a new/different value for that field.
 
 2. EXTRACTION ON ANY ENTRY ORDER: The user might say these fields in any random order or all together (e.g. "মিরপুর" first, or "ঢাকা ও পজিটিভ" first). Carefully extract them whenever they are mentioned in any format:
-   - 'bloodGroup': Valid values are A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize "ও পজিটিভ", "বি পজিটিভ", "বি নেগেটিভ", "O positive" etc. to their standard English labels like "O+", "B+", "B-", "AB+".
+   - 'bloodGroup': Valid values are A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize "ও পজিটিভ", "বি পজিটিভ", "বি নেগেティブ", "O positive" etc. to their standard English labels like "O+", "B+", "B-", "AB+".
    - 'district': Match and normalize any Bangla/English district names to the English district key from BANGLADESH_LOCATIONS (e.g. "ঢাকা" -> "Dhaka", "চট্টগ্রাম" -> "Chittagong", "সিলেট" -> "Sylhet").
    - 'thana': Match the Thana/sub-district with values in BANGLADESH_LOCATIONS. (e.g. "মিরপুর" -> "Mirpur", "খিলগাঁও" -> "Khilgaon").
 
@@ -202,63 +181,102 @@ Current extracted slots state from previous turns:
 Valid locations map for matching districts and thanas (English names):
 ${JSON.stringify(locationsPreview)}
 
-You must output STRICT valid JSON matching the schema. Always answer in clear, polite standard Bangla dialouge.`;
+You must output STRICT valid JSON matching the following schema. Always answer in clear, polite standard Bangla dialogue.
+Response JSON Schema:
+{
+  "replyText": string (Bangla dialogue response),
+  "bloodGroup": string or null (e.g. "O+", "A+", "B-", etc),
+  "district": string or null (matching keys of BANGLADESH_LOCATIONS in English like "Dhaka"),
+  "thana": string or null (matching values of BANGLADESH_LOCATIONS in English like "Mirpur"),
+  "intentType": "search_donors" | "create_request" | "greeting" | "unknown",
+  "actionTriggered": boolean,
+  "requestFormTriggered": boolean
+}`;
 
-      const chatMessages = [
-        ...(history || []).map((msg: any) => ({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.text }]
-        })),
-        {
-          role: 'user',
-          parts: [{ text: message }]
+      let responseText = "{}";
+
+      if (process.env.GROQ_API_KEY) {
+        console.log("Using Groq API Key...");
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        
+        const chatMessages: any[] = [
+          { role: "system", content: systemInstruction },
+          ...(history || []).map((msg: any) => ({
+            role: msg.role === 'assistant' ? 'assistant' : 'user',
+            content: msg.text
+          })),
+          { role: "user", content: message }
+        ];
+
+        const chatCompletion = await groq.chat.completions.create({
+          messages: chatMessages,
+          model: "llama-3.3-70b-versatile",
+          response_format: { type: "json_object" },
+          temperature: 0.1
+        });
+
+        responseText = chatCompletion.choices[0]?.message?.content || "{}";
+      } else {
+        // Fallback to Gemini if only GEMINI_API_KEY is configured
+        if (!process.env.GEMINI_API_KEY) {
+          return res.status(200).json({
+            success: true,
+            replyText: "দুঃখিত, কৃত্রিম বুদ্ধিমত্তা (AI) সার্ভিসটি কনফিগার করা নেই। অনুগ্রহ করে Settings > Secrets প্যানেল থেকে GROQ_API_KEY বা GEMINI_API_KEY প্রদান করুন।",
+            bloodGroup: null,
+            district: null,
+            thana: null,
+            intentType: "unknown",
+            actionTriggered: false,
+            requestFormTriggered: false
+          });
         }
-      ];
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: chatMessages,
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              replyText: {
-                type: Type.STRING,
-                description: "Bangla speech text to speak or display to the user.",
-              },
-              bloodGroup: {
-                type: Type.STRING,
-                description: "Extracted blood group (must be one of A+, A-, B+, B-, AB+, AB-, O+, O- or null).",
-              },
-              district: {
-                type: Type.STRING,
-                description: "Extracted english district name from BANGLADESH_LOCATIONS keys or null.",
-              },
-              thana: {
-                type: Type.STRING,
-                description: "Extracted english thana name matching one of the values in the selected district or null.",
-              },
-              intentType: {
-                type: Type.STRING,
-                description: "Must be one of: 'search_donors', 'create_request', 'greeting', 'unknown'.",
-              },
-              actionTriggered: {
-                type: Type.BOOLEAN,
-                description: "Set to true when bloodGroup is captured and you are ready to trigger the database search.",
-              },
-              requestFormTriggered: {
-                type: Type.BOOLEAN,
-                description: "Set to true if user wants to post or create a blood request.",
-              }
-            },
-            required: ["replyText", "bloodGroup", "district", "thana", "intentType", "actionTriggered", "requestFormTriggered"]
+        
+        console.log("Using Gemini API Key (Fallback)...");
+        const ai = new GoogleGenAI({
+          apiKey: process.env.GEMINI_API_KEY,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            }
           }
-        }
-      });
+        });
 
-      const responseText = response.text || "{}";
+        const chatMessages = [
+          ...(history || []).map((msg: any) => ({
+            role: msg.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: msg.text }]
+          })),
+          {
+            role: 'user',
+            parts: [{ text: message }]
+          }
+        ];
+
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: chatMessages,
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                replyText: { type: Type.STRING },
+                bloodGroup: { type: Type.STRING },
+                district: { type: Type.STRING },
+                thana: { type: Type.STRING },
+                intentType: { type: Type.STRING },
+                actionTriggered: { type: Type.BOOLEAN },
+                requestFormTriggered: { type: Type.BOOLEAN }
+              },
+              required: ["replyText", "bloodGroup", "district", "thana", "intentType", "actionTriggered", "requestFormTriggered"]
+            }
+          }
+        });
+
+        responseText = response.text || "{}";
+      }
+
       const data = JSON.parse(responseText.trim());
 
       // Server-side fallback/carry-forward of slots to prevent the AI from ever forgetting them
