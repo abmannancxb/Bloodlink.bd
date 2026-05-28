@@ -148,6 +148,7 @@ import {
   Smile,
   Navigation,
   Camera,
+  Image,
   FileUp,
   FileSpreadsheet,
   Home,
@@ -5223,7 +5224,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   hasUpdate: boolean,
   setHasUpdate: (v: boolean) => void
 }) {
-  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery'>('stats');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
@@ -5236,6 +5237,8 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   const [userFilterAvailability, setUserFilterAvailability] = useState<'all' | 'available' | 'unavailable'>('all');
   const [userFilterStatus, setUserFilterStatus] = useState<'all' | 'blocked' | 'active'>('all');
   const [seoEditTab, setSeoEditTab] = useState<'about' | 'contact' | 'privacy' | 'terms' | 'faq'>('about');
+  const [galleryFilter, setGalleryFilter] = useState<'all' | 'post' | 'profile'>('all');
+  const [lightboxImage, setLightboxImage] = useState<any | null>(null);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
@@ -5268,6 +5271,59 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
       value: users.filter(u => u.bloodGroup === bg).length
     })).filter(d => d.value > 0);
   }, [users]);
+
+  const galleryItems = useMemo(() => {
+    const items: Array<{
+      id: string;
+      url: string;
+      source: 'post' | 'profile';
+      title: string;
+      author: string;
+      authorUid: string;
+      createdAt?: any;
+    }> = [];
+
+    // 1. Gather post images
+    posts.forEach(p => {
+      if (p.imageUrl) {
+        const authorProfile = users.find(u => u.uid === p.authorUid);
+        const authorName = authorProfile?.displayName || 'Unknown member';
+        items.push({
+          id: p.id,
+          url: p.imageUrl,
+          source: 'post',
+          title: p.content ? (p.content.length > 80 ? p.content.slice(0, 80) + '...' : p.content) : 'Post attachment',
+          author: authorName,
+          authorUid: p.authorUid,
+          createdAt: p.createdAt
+        });
+      }
+    });
+
+    // 2. Gather profile images
+    users.forEach(u => {
+      if (u.photoURL && u.photoURL.trim() !== '') {
+        items.push({
+          id: u.uid,
+          url: u.photoURL,
+          source: 'profile',
+          title: 'Profile avatar photo',
+          author: u.displayName || 'Unnamed member',
+          authorUid: u.uid,
+          createdAt: u.lastSeen || null
+        });
+      }
+    });
+
+    // Sort by createdAt desc
+    items.sort((a, b) => {
+      const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt instanceof Date ? a.createdAt.getTime() : 0);
+      const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt instanceof Date ? b.createdAt.getTime() : 0);
+      return timeB - timeA;
+    });
+
+    return items;
+  }, [posts, users]);
 
   const COLORS = ['#ef4444', '#f87171', '#fb7185', '#fda4af', '#fecdd3', '#fee2e2', '#3b82f6', '#60a5fa'];
   const stats = {
@@ -5550,6 +5606,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: notifications.filter(n => !n.isRead).length > 0 ? notifications.filter(n => !n.isRead).length : null },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'system', label: 'System', icon: <HardDrive className="w-4 h-4" /> },
+    { id: 'gallery', label: 'Server Gallery', icon: <Image className="w-4 h-4" /> },
   ];
 
   return (
@@ -6440,7 +6497,318 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                   </div>
                 </div>
               </div>
+
+              {/* Server Details & Quota Limits */}
+              <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mt-6">
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <HardDrive className="w-4 h-4 text-rose-600" /> Firebase & Google Cloud Server Quotas
+                </h3>
+                <p className="text-xs text-slate-500 mb-6 font-medium">
+                  Monitoring data usage and limits on the Google Cloud / Firebase Spark (Free) plan.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Limit Item 1: Storage */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Firestore Space (1GB Free Limit)</span>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded-md">Spark Free Tier</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mt-1.5">
+                        <span className="text-2xl font-black text-slate-900">{((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024).toFixed(2)} MB</span>
+                        <span className="text-xs text-slate-400">/ 1,024 MB</span>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-rose-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(1, Math.min(100, (((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024) / 1024) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-medium text-slate-400 mt-2">
+                        <span>{(1024 - (posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024).toFixed(2)} MB Free Space</span>
+                        <span>{(((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024) / 1024 * 100).toFixed(4)}% Used</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Limit Item 2: Daily Reads */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily Document Reads</span>
+                        <span className="px-2 py-0.5 bg-rose-50 text-rose-600 text-[9px] font-black rounded-md">50,000 / day Limit</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mt-1.5">
+                        <span className="text-2xl font-black text-slate-900">~{users.length * 5 + posts.length * 2} reads</span>
+                        <span className="text-xs text-slate-400">estimated daily active</span>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(1, Math.min(100, ((users.length * 5 + posts.length * 2) / 50000) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-medium text-slate-400 mt-2">
+                        <span>{50000 - (users.length * 5 + posts.length * 2)} remaining free reads</span>
+                        <span>{(((users.length * 5 + posts.length * 2) / 50000) * 100).toFixed(2)}% Used</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Limit Item 3: Daily Writes */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Daily Document Writes</span>
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[9px] font-black rounded-md">20,000 / day Limit</span>
+                      </div>
+                      <div className="flex items-baseline gap-1 mt-1.5">
+                        <span className="text-2xl font-black text-slate-900">~{requests.length * 2 + posts.length} writes</span>
+                        <span className="text-xs text-slate-400">average activity scale</span>
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${Math.max(1, Math.min(100, ((requests.length * 2 + posts.length) / 20000) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[9px] font-medium text-slate-400 mt-2">
+                        <span>{20000 - (requests.length * 2 + posts.length)} remaining free writes</span>
+                        <span>{(((requests.length * 2 + posts.length) / 20000) * 100).toFixed(2)}% Used</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 bg-amber-50 rounded-2xl p-4 border border-amber-200 flex items-start gap-3">
+                  <Info className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-800 font-medium font-sans">
+                    <h4 className="font-bold mb-1 font-sans">Scale Advisory</h4>
+                    <p className="leading-relaxed font-sans">
+                      Currently running on the <strong className="font-mono">Firebase Spark (Free) plan</strong> hosted in Google Cloud. These resource limits are perpetual and reset daily. If the user base scale exceeds 10,000 registered donors, we recommend upgrading to the <strong className="font-mono">Blaze (Pay-As-You-Go) plan</strong> to lift write/read caps.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
+          </motion.div>
+        )}
+
+        {tab === 'gallery' && (
+          <motion.div 
+            key="gallery"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            {/* Gallery Headers and Stats */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Media Server</p>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Active Image Repository</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Showing all user profiles and community media attachments uploaded to the platform.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-slate-50 px-5 py-3 rounded-2xl border border-slate-100 shrink-0">
+                <div className="text-right">
+                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Media Items</p>
+                  <p className="text-xl font-black text-rose-600 font-mono">{galleryItems.length} photos</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter controls */}
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm">
+                <button
+                  onClick={() => setGalleryFilter('all')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                    galleryFilter === 'all' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  All Photos ({galleryItems.length})
+                </button>
+                <button
+                  onClick={() => setGalleryFilter('post')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                    galleryFilter === 'post' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Posts Media ({galleryItems.filter(i => i.source === 'post').length})
+                </button>
+                <button
+                  onClick={() => setGalleryFilter('profile')}
+                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
+                    galleryFilter === 'profile' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                  }`}
+                >
+                  Profiles ({galleryItems.filter(i => i.source === 'profile').length})
+                </button>
+              </div>
+            </div>
+
+            {/* Photo Grid */}
+            {galleryItems.filter(i => galleryFilter === 'all' || i.source === galleryFilter).length === 0 ? (
+              <div className="bg-white rounded-3xl p-16 text-center border border-slate-100 shadow-sm">
+                <Image className="w-12 h-12 text-slate-200 mx-auto mb-4 animate-pulse" />
+                <h3 className="text-lg font-bold text-slate-950">No photos found</h3>
+                <p className="text-slate-400 text-sm mt-1">There are currently no uploaded files matching this filter.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {galleryItems
+                  .filter(i => galleryFilter === 'all' || i.source === galleryFilter)
+                  .map((item) => (
+                    <div 
+                      key={`${item.source}-${item.id}`}
+                      className="group bg-white rounded-3xl overflow-hidden border border-slate-150 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between hover:translate-y-[-2px]"
+                    >
+                      {/* Image Area */}
+                      <div className="relative aspect-square w-full bg-slate-950/5 overflow-hidden flex items-center justify-center">
+                        <img 
+                          src={item.url} 
+                          alt={item.title}
+                          onClick={() => setLightboxImage(item)}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 cursor-zoom-in"
+                        />
+                        <span className={`absolute top-3 left-3 px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase shadow-sm ${
+                          item.source === 'post' ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'
+                        }`}>
+                          {item.source === 'post' ? 'Story Post' : 'Profile'}
+                        </span>
+                      </div>
+
+                      {/* Info Area */}
+                      <div className="p-5 flex-1 flex flex-col justify-between gap-4">
+                        <div>
+                          <p className="text-xs text-slate-700 font-medium line-clamp-2 leading-relaxed mb-3">
+                            {item.title}
+                          </p>
+                          <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Owner</p>
+                              <p className="text-[11px] font-bold text-slate-900 truncate">{item.author}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            onClick={() => {
+                              if (item.source === 'post') {
+                                setTab('feed');
+                                addToast("Post Location", `Locate post ID: ${item.id} in feed.`, "info");
+                              } else {
+                                setTab('users');
+                                setUserSearchTerm(item.author);
+                                addToast("Profile Searching", `Searching user: ${item.author} in base.`, "info");
+                              }
+                            }}
+                            className="flex-1 py-1.5 px-3 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[9px] font-black uppercase tracking-widest text-center transition-all"
+                          >
+                            Trace Origin
+                          </button>
+                          
+                          <button
+                            onClick={async () => {
+                              const proceed = await askConfirm(
+                                "Remove Image?", 
+                                `Are you sure you want to permanently delete this ${item.source === 'post' ? 'post media attachment' : 'profile image'} from the server? This action is immediate and cannot be undone.`,
+                                "Confirm Delete",
+                                "warning"
+                              );
+                              if (proceed) {
+                                try {
+                                  if (item.source === 'post') {
+                                    await updateDoc(doc(db, 'posts', item.id), { imageUrl: '' });
+                                    addToast("Media Removed", "Story attachment removed successfully.", "success");
+                                  } else {
+                                    await updateDoc(doc(db, 'users', item.id), { photoURL: '' });
+                                    addToast("Media Removed", "Profile picture cleared successfully.", "success");
+                                  }
+                                } catch (error: any) {
+                                  console.error(error);
+                                  addToast("Action Failed", error.message || "Failed to remove photo.", "error");
+                                }
+                              }
+                            }}
+                            className="bg-red-50 hover:bg-red-100 text-red-600 p-2 rounded-xl transition-all"
+                            title="Delete Image"
+                          >
+                            <Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            {/* Lightbox Modal */}
+            <AnimatePresence>
+              {lightboxImage && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-[2000] flex flex-col justify-center items-center p-4 sm:p-8"
+                  onClick={() => setLightboxImage(null)}
+                >
+                  <button 
+                    onClick={() => setLightboxImage(null)}
+                    className="absolute top-6 right-6 p-2 bg-white/10 text-white hover:bg-white/20 rounded-full transition-all"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  
+                  <motion.div 
+                    initial={{ scale: 0.95, y: 15 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.95, y: 15 }}
+                    className="max-w-4xl max-h-[85vh] overflow-hidden flex flex-col items-center justify-center bg-slate-900 rounded-3xl border border-white/10"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="w-full flex justify-between items-center p-4 bg-slate-950/50 border-b border-white/5">
+                      <div>
+                        <span className={`px-2 py-0.5 rounded text-[8px] font-black tracking-widest uppercase ${
+                          lightboxImage.source === 'post' ? 'bg-rose-500 text-white' : 'bg-indigo-600 text-white'
+                        }`}>
+                          {lightboxImage.source === 'post' ? 'Story Post' : 'Profile Avatar'}
+                        </span>
+                        <h4 className="text-white font-bold text-xs mt-1">Uploaded by: {lightboxImage.author}</h4>
+                      </div>
+                      <a 
+                        href={lightboxImage.url} 
+                        target="_blank"
+                        rel="noreferrer"
+                        className="py-1 px-3 bg-red-600 hover:bg-red-700 text-white rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                      >
+                        Open Original
+                      </a>
+                    </div>
+                    <div className="flex-1 overflow-auto flex items-center justify-center bg-slate-950 p-2">
+                      <img 
+                        src={lightboxImage.url} 
+                        alt="Lightbox detail" 
+                        className="max-w-[95vw] lg:max-w-4xl max-h-[70vh] object-contain rounded-xl"
+                      />
+                    </div>
+                    <p className="w-full p-4 bg-slate-900 text-slate-300 text-xs leading-relaxed text-center border-t border-white/5 select-all">
+                      {lightboxImage.title}
+                    </p>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 
@@ -6882,10 +7250,68 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                          if (data.success) {
                            addToast("Sitemap Generated", "Successfully updated sitemap.xml with https://bloodlink.bd URLs!", 'success');
                          } else {
-                           addToast("Generation Failed", data.error || "Could not write public/sitemap.xml", 'error');
+                           throw new Error(data.error || "Could not write public/sitemap.xml");
                          }
                        } catch (e: any) {
-                         addToast("Connection Error", e.message || "Could not contact sitemap endpoint", 'error');
+                         try {
+                            const getClientSitemapXml = () => {
+                              const host = 'bloodlink.bd';
+                              const baseUrl = `https://${host}`;
+                              const views = [
+                                { path: "", priority: "1.0", changefreq: "daily" },
+                                { path: "/home", priority: "0.9", changefreq: "daily" },
+                                { path: "/requests", priority: "0.9", changefreq: "daily" },
+                                { path: "/find", priority: "0.8", changefreq: "weekly" },
+                                { path: "/feed", priority: "0.8", changefreq: "hourly" },
+                                { path: "/organizations", priority: "0.7", changefreq: "weekly" },
+                                { path: "/stats", priority: "0.6", changefreq: "monthly" },
+                                { path: "/profile", priority: "0.6", changefreq: "weekly" },
+                                { path: "/nearby", priority: "0.7", changefreq: "weekly" },
+                                { path: "/community", priority: "0.8", changefreq: "daily" },
+                                { path: "/explore", priority: "0.7", changefreq: "weekly" },
+                                { path: "/notifications", priority: "0.5", changefreq: "daily" },
+                                { path: "/chats", priority: "0.5", changefreq: "daily" },
+                                { path: "/about", priority: "0.8", changefreq: "weekly" },
+                                { path: "/contact", priority: "0.8", changefreq: "weekly" },
+                                { path: "/privacy", priority: "0.8", changefreq: "weekly" },
+                                { path: "/terms", priority: "0.8", changefreq: "weekly" },
+                                { path: "/faq", priority: "0.8", changefreq: "weekly" },
+                                { path: "/admin", priority: "0.4", changefreq: "monthly" },
+                                { path: "/admin-login", priority: "0.4", changefreq: "monthly" },
+                                { path: "/org-apply", priority: "0.6", changefreq: "weekly" },
+                                { path: "/request-form", priority: "0.7", changefreq: "weekly" },
+                                { path: "/post-opinion", priority: "0.7", changefreq: "weekly" },
+                                { path: "/public-profile", priority: "0.6", changefreq: "weekly" },
+                                { path: "/chat-room", priority: "0.5", changefreq: "daily" },
+                                { path: "/org-dashboard", priority: "0.7", changefreq: "weekly" }
+                              ];
+                              const lastMod = new Date().toISOString().split('T')[0];
+                              let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+                              xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+                              views.forEach(v => {
+                                xml += `  <url>\n`;
+                                xml += `    <loc>${baseUrl}${v.path}</loc>\n`;
+                                xml += `    <lastmod>${lastMod}</lastmod>\n`;
+                                xml += `    <changefreq>${v.changefreq}</changefreq>\n`;
+                                xml += `    <priority>${v.priority}</priority>\n`;
+                                xml += `  </url>\n`;
+                              });
+                              xml += `</urlset>`;
+                              return xml;
+                            };
+                            const xml = getClientSitemapXml();
+                            const blob = new Blob([xml], { type: 'application/xml;charset=utf-8;' });
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement("a");
+                            link.href = url;
+                            link.setAttribute("download", "sitemap.xml");
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            addToast("Sitemap Downloaded", "Generated locally! Save this sitemap.xml in your public_html root directory on cPanel.", 'success');
+                          } catch (err: any) {
+                            addToast("Generation Failed", err.message || "Failed to download sitemap.xml", 'error');
+                          }
                        }
                      }}
                      className="bg-slate-900 hover:bg-slate-800 text-white font-black px-6 py-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 text-xs uppercase tracking-wider cursor-pointer"
@@ -11098,6 +11524,7 @@ interface PostCardProps {
 
 function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, addToast, notifyAdmins }: PostCardProps) {
   const [showComments, setShowComments] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const authorProfile = allUsers.find(u => u.uid === post.authorUid);
   const handleReaction = async (type: 'likes' | 'dislikes') => {
     if (!user) {
@@ -11189,6 +11616,37 @@ function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, ad
     }
   };
 
+  const handleShare = async () => {
+    const shareUrl = `https://bloodlink.bd/story/${post.id}`;
+
+    const shareData = {
+      title: 'BloodLink Story',
+      text: post.content ? (post.content.length > 100 ? `${post.content.substring(0, 100)}...` : post.content) : '',
+      url: shareUrl
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+        addToast("Story Shared", "Story shared successfully!", "success");
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          copyToClipboardAndNotify(shareUrl);
+        }
+      }
+    } else {
+      copyToClipboardAndNotify(shareUrl);
+    }
+  };
+
+  const copyToClipboardAndNotify = (url: string) => {
+    navigator.clipboard.writeText(url).then(() => {
+      addToast("Link Copied!", "Share link has been copied to clipboard.", "success");
+    }).catch(() => {
+      addToast("Failed to Copy", "Please copy the URL manually: " + url, "error");
+    });
+  };
+
   const isAdmin = profile?.role === 'admin';
   const isAuthor = user?.uid === post.authorUid;
   const isNew = post.createdAt && (Date.now() - post.createdAt.toMillis()) < 600000;
@@ -11267,7 +11725,36 @@ function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, ad
         </div>
       </div>
       <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap mb-4">
-        {post.content}
+        {(() => {
+          const words = (post.content || '').trim().split(/\s+/).filter(Boolean);
+          const isLongStory = words.length > 60;
+          if (isLongStory && !expanded) {
+            return (
+              <>
+                {words.slice(0, 60).join(' ')}...
+                <button 
+                  onClick={() => setExpanded(true)} 
+                  className="text-red-600 hover:text-red-700 font-bold ml-1.5 focus:outline-none hover:underline cursor-pointer"
+                >
+                  Read More
+                </button>
+              </>
+            );
+          }
+          return (
+            <>
+              {post.content}
+              {isLongStory && (
+                <button 
+                  onClick={() => setExpanded(false)} 
+                  className="text-red-600 hover:text-red-700 font-bold ml-1.5 focus:outline-none hover:underline cursor-pointer"
+                >
+                  Read Less
+                </button>
+              )}
+            </>
+          );
+        })()}
       </p>
 
       {post.imageUrl && (
@@ -11275,7 +11762,7 @@ function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, ad
           <img 
             src={post.imageUrl} 
             alt="Post attachment" 
-            className="w-full object-cover max-h-[400px] sm:max-h-[600px]"
+            className="w-full aspect-video object-cover"
             loading="lazy"
           />
         </div>
@@ -11302,6 +11789,14 @@ function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, ad
         >
           <MessageCircle className="w-4 h-4" />
           <span>{post.commentCount || 0}</span>
+        </button>
+        <button 
+          onClick={handleShare}
+          className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-rose-600 transition-colors"
+          title="Share Story"
+        >
+          <Share2 className="w-4 h-4" />
+          <span>Share</span>
         </button>
         <button 
           onClick={() => setShowReportForm(!showReportForm)}
@@ -11683,9 +12178,8 @@ function PostForm({ onCancel, onSuccess, user, profile, notifyAdmins }: { onCanc
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Show loading indicator or handle state if needed, but for now just process
       try {
-        const resizedImage = await new Promise<string>((resolve, reject) => {
+        const compressedImage = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.readAsDataURL(file);
           reader.onload = (event) => {
@@ -11711,16 +12205,15 @@ function PostForm({ onCancel, onSuccess, user, profile, notifyAdmins }: { onCanc
               
               ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
               
-              // Low size quality (0.6)
               resolve(canvas.toDataURL('image/jpeg', 0.6));
             };
             img.onerror = reject;
           };
           reader.onerror = reject;
         });
-        setImageUrl(resizedImage);
+        setImageUrl(compressedImage);
       } catch (error) {
-        console.error("Error resizing image:", error);
+        console.error("Error compressing image:", error);
       }
     }
   };
@@ -11792,11 +12285,11 @@ function PostForm({ onCancel, onSuccess, user, profile, notifyAdmins }: { onCanc
           />
           
           {imageUrl && (
-            <div className="mt-4 relative group">
+            <div className="mt-4 relative group rounded-2xl overflow-hidden border border-slate-100 bg-slate-50 border-slate-100">
               <img 
                 src={imageUrl} 
                 alt="Upload preview" 
-                className="w-full aspect-video object-cover rounded-2xl border border-slate-100"
+                className="w-full aspect-video object-cover rounded-2xl"
               />
               <button
                 type="button"
