@@ -4,6 +4,8 @@ import fs from "fs/promises";
 import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
+import { GoogleGenAI, Type } from "@google/genai";
+import { BANGLADESH_LOCATIONS } from "./src/constants";
 
 // Initialize firebase-admin safely
 try {
@@ -136,6 +138,173 @@ async function getSitemapXml(): Promise<string> {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  app.use(express.json());
+
+  // AI Blood Assistant API Route
+  app.post("/api/gemini/blood-assistant", async (req, res) => {
+    try {
+      const { message, history, slots } = req.body;
+      
+      if (!process.env.GEMINI_API_KEY) {
+        return res.status(200).json({
+          success: true,
+          replyText: "দুঃখিত, কৃত্রিম বুদ্ধিমত্তা (AI) সার্ভিসটি কনফিগার করা নেই। অনুগ্রহ করে Settings > Secrets প্যানেল থেকে GEMINI_API_KEY প্রদান করুন।",
+          bloodGroup: null,
+          district: null,
+          thana: null,
+          intentType: "unknown",
+          actionTriggered: false,
+          requestFormTriggered: false
+        });
+      }
+
+      const ai = new GoogleGenAI({
+        apiKey: process.env.GEMINI_API_KEY,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+
+      const locationsPreview = Object.keys(BANGLADESH_LOCATIONS).reduce((acc, dist) => {
+        acc[dist] = BANGLADESH_LOCATIONS[dist];
+        return acc;
+      }, {} as any);
+
+      const systemInstruction = `You are a helpful standard Bangla (বাংলাদেশী বাংলা) voice assistant for 'BloodLink Bangladesh'.
+Your EXCLUSIVE task is to get exactly 3 parameters from the user to search for a blood donor. The three fields are: 'bloodGroup', 'district', and 'thana'. DO NOT ask for anything else.
+
+CRITICAL INSTRUCTIONS FOR CONVERSATIONAL MEMORY AND FIELD CAPTURE:
+1. SLOT MEMORY RETENTION: You MUST carry forward and return the non-null values provided below in "Current extracted slots state from previous turns" in your final JSON response keys ('bloodGroup', 'district', 'thana'). NEVER reset them to null if they were already captured in previous turns unless the user specifically speaks a new/different value for that field.
+
+2. EXTRACTION ON ANY ENTRY ORDER: The user might say these fields in any random order or all together (e.g. "মিরপুর" first, or "ঢাকা ও পজিটিভ" first). Carefully extract them whenever they are mentioned in any format:
+   - 'bloodGroup': Valid values are A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize "ও পজিটিভ", "বি পজিটিভ", "বি নেগেটিভ", "O positive" etc. to their standard English labels like "O+", "B+", "B-", "AB+".
+   - 'district': Match and normalize any Bangla/English district names to the English district key from BANGLADESH_LOCATIONS (e.g. "ঢাকা" -> "Dhaka", "চট্টগ্রাম" -> "Chittagong", "সিলেট" -> "Sylhet").
+   - 'thana': Match the Thana/sub-district with values in BANGLADESH_LOCATIONS. (e.g. "মিরপুর" -> "Mirpur", "খিলগাঁও" -> "Khilgaon").
+
+3. CONVERSATIONAL DIRECTIVENESS & STEPS (ONLY ASK MISSING FIELDS):
+   - Every response must look at what is still missing among 'bloodGroup', 'district', and 'thana' based on both previous slots and the new message.
+   - If 'bloodGroup' is missing: Say: "আপনার কোন গ্রুপের রক্ত লাগবে?"
+   - If 'bloodGroup' is present but 'district' is missing: Say: "কোন জেলায় রক্ত প্রয়োজন?"
+   - If 'bloodGroup' and 'district' are present but 'thana' is missing: Say: "উক্ত জেলার কোন থানায় রক্ত লাগবে?"
+   - Do NOT ask more than one question at a time. Do NOT ask for health conditions, hospital names, or patient descriptions. Only ask for the missing slot of these three.
+
+4. TRIGGER SEARCH:
+   - When all 3 fields ('bloodGroup', 'district', 'thana') are filled, set 'actionTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার দেওয়া গ্রুপ এবং এলাকা অনুযায়ী রক্তদাতা খুঁজে দিচ্ছি।" (Thank you, I am finding donor based on your group and location).
+
+Current extracted slots state from previous turns:
+- bloodGroup: ${slots?.bloodGroup || 'null'}
+- district: ${slots?.district || 'null'}
+- thana: ${slots?.thana || 'null'}
+
+Valid locations map for matching districts and thanas (English names):
+${JSON.stringify(locationsPreview)}
+
+You must output STRICT valid JSON matching the schema. Always answer in clear, polite standard Bangla dialouge.`;
+
+      const chatMessages = [
+        ...(history || []).map((msg: any) => ({
+          role: msg.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: msg.text }]
+        })),
+        {
+          role: 'user',
+          parts: [{ text: message }]
+        }
+      ];
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: chatMessages,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              replyText: {
+                type: Type.STRING,
+                description: "Bangla speech text to speak or display to the user.",
+              },
+              bloodGroup: {
+                type: Type.STRING,
+                description: "Extracted blood group (must be one of A+, A-, B+, B-, AB+, AB-, O+, O- or null).",
+              },
+              district: {
+                type: Type.STRING,
+                description: "Extracted english district name from BANGLADESH_LOCATIONS keys or null.",
+              },
+              thana: {
+                type: Type.STRING,
+                description: "Extracted english thana name matching one of the values in the selected district or null.",
+              },
+              intentType: {
+                type: Type.STRING,
+                description: "Must be one of: 'search_donors', 'create_request', 'greeting', 'unknown'.",
+              },
+              actionTriggered: {
+                type: Type.BOOLEAN,
+                description: "Set to true when bloodGroup is captured and you are ready to trigger the database search.",
+              },
+              requestFormTriggered: {
+                type: Type.BOOLEAN,
+                description: "Set to true if user wants to post or create a blood request.",
+              }
+            },
+            required: ["replyText", "bloodGroup", "district", "thana", "intentType", "actionTriggered", "requestFormTriggered"]
+          }
+        }
+      });
+
+      const responseText = response.text || "{}";
+      const data = JSON.parse(responseText.trim());
+
+      // Server-side fallback/carry-forward of slots to prevent the AI from ever forgetting them
+      const cleanInputSlot = (val: any) => {
+        if (!val) return null;
+        const s = String(val).trim().toLowerCase();
+        if (s === 'null' || s === 'undefined' || s === '') return null;
+        return val;
+      };
+
+      const prevBloodGroup = cleanInputSlot(slots?.bloodGroup);
+      const prevDistrict = cleanInputSlot(slots?.district);
+      const prevThana = cleanInputSlot(slots?.thana);
+
+      const returnedBloodGroup = cleanInputSlot(data.bloodGroup);
+      const returnedDistrict = cleanInputSlot(data.district);
+      const returnedThana = cleanInputSlot(data.thana);
+
+      if (!returnedBloodGroup && prevBloodGroup) {
+        data.bloodGroup = prevBloodGroup;
+      }
+      if (!returnedDistrict && prevDistrict) {
+        data.district = prevDistrict;
+      }
+      if (!returnedThana && prevThana) {
+        data.thana = prevThana;
+      }
+
+      // If all three slots are filled, force actionTriggered to be true
+      const finalBloodGroup = cleanInputSlot(data.bloodGroup);
+      const finalDistrict = cleanInputSlot(data.district);
+      const finalThana = cleanInputSlot(data.thana);
+
+      if (finalBloodGroup && finalDistrict && finalThana) {
+        data.actionTriggered = true;
+        // Adjust response greeting slightly to reflect search launch
+        data.replyText = data.replyText || "ধন্যবাদ, আমি আপনার দেওয়া গ্রুপ এবং এলাকা অনুযায়ী রক্তদাতা খুঁজে দিচ্ছি।";
+      }
+
+      res.json({ success: true, ...data });
+
+    } catch (error: any) {
+      console.error("Error in blood-assistant API:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
 
   // Dynamic Sitemap with direct Firestore integration
   app.get(["/sitemap.xml", "/sitemap"], async (req, res) => {

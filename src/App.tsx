@@ -49,6 +49,7 @@ import {
 import { auth, db, messaging } from './firebase';
 export { auth, db, messaging };
 import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
+import AIBloodAssistant from './components/AIBloodAssistant';
 
 import { 
   OperationType,
@@ -4498,6 +4499,23 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* AI Blood Assistant Voice Dialog Trigger */}
+      <AIBloodAssistant 
+        onSearchDonors={(bloodGroup, district, thana) => {
+          setView('find');
+          setShowRequestsOverlay(false);
+          if (bloodGroup) setFilterBloodGroup(bloodGroup);
+          if (district) setFilterDistrict(district);
+          if (thana) setFilterThana(thana);
+          addToast("এআই সহকারী", `রক্তদাতা বা রক্তের গ্রুপ খুঁজছি: ${bloodGroup || ''} (${district || ''}, ${thana || ''})`, 'info');
+        }}
+        onOpenRequestForm={() => {
+          if (user) setView('request-form');
+          else handleLogin();
+        }}
+        currentUser={user}
+      />
 
       <nav className="fixed bottom-0 sm:bottom-4 left-0 sm:left-4 right-0 sm:right-4 max-w-lg sm:mx-auto h-16 bg-white/95 backdrop-blur-md sm:rounded-2xl border-t sm:border border-slate-200/50 px-3 flex justify-around items-center z-[100] shadow-[0_-10px_35px_rgba(15,23,42,0.03)] sm:shadow-[0_12px_40px_rgba(15,23,42,0.12)]">
         <NavButton 
