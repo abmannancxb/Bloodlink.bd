@@ -1,0 +1,308 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Global Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn(); }
+    function getProfile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin() { 
+      return isSignedIn() && (
+        request.auth.token.email.lower() == 'abmannancxb@gmail.com' ||
+        request.auth.token.email.lower() == 'connect.abmannan@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      ); 
+    }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isOrgAdmin(orgId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)) && 
+             get(/databases/$(database)/documents/organizations/$(orgId)).data.adminUid == request.auth.uid;
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Global Safety Net ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return (!('uid' in data) || data.uid == userId)
+          && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 100))
+          && (!('email' in data) || (data.email is string && data.email.size() <= 100))
+          && (!('bloodGroup' in data) || (data.bloodGroup is string && data.bloodGroup.size() <= 10))
+          && (!('role' in data) || (data.role in ['user', 'admin']))
+          && (!('isBlocked' in data) || (data.isBlocked is bool))
+          && (!('district' in data) || (data.district is string && data.district.size() <= 100))
+          && (!('thana' in data) || (data.thana is string && data.thana.size() <= 100))
+          && (!('phone' in data) || (data.phone is string && data.phone.size() <= 20))
+          && (!('isAvailable' in data) || (data.isAvailable is bool))
+          && (!('photoURL' in data) || (data.photoURL == null || (data.photoURL is string && data.photoURL.size() <= 5000000)))
+          && (!('coverURL' in data) || (data.coverURL == null || (data.coverURL is string && data.coverURL.size() <= 5000000)))
+          && (!('organizationId' in data) || (data.organizationId == null || data.organizationId is string))
+          && (!('organizationName' in data) || (data.organizationName == null || data.organizationName is string))
+          && (!('isVerified' in data) || (data.isVerified is bool))
+          && (!('gender' in data) || (data.gender in ['male', 'female', 'other', null]))
+          && (!('nextDonationEligibility' in data) || (data.nextDonationEligibility == null || (data.nextDonationEligibility is string && data.nextDonationEligibility.size() <= 20)));
+      }
+
+      allow read: if true;
+      allow create: if isValidId(userId) && isOwner(userId) && isValidUser(incoming())
+        && incoming().keys().hasAll(['uid', 'displayName', 'bloodGroup', 'district', 'thana'])
+        && incoming().role == 'user'
+        && incoming().isBlocked == false;
+      
+      allow update: if (isAdmin()) || (
+        isOwner(userId) && isValidUser(incoming()) && (
+          // Owners cannot change their own role/isBlocked/uid
+          incoming().get('role', 'user') == existing().get('role', 'user') &&
+          incoming().get('isBlocked', false) == existing().get('isBlocked', false) &&
+          incoming().get('isVerified', existing().get('isVerified', false)) == existing().get('isVerified', false) &&
+          incoming().get('uid', userId) == existing().get('uid', userId) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'bloodGroup', 'district', 'thana', 'phone', 'isAvailable', 'lastDonationDate', 'fcmToken', 'photoURL', 'coverURL', 'lastSeen', 'updatedAt', 'organizationId', 'organizationName', 'role', 'isBlocked', 'uid', 'donationCount', 'isVerified', 'isAvailable', 'followers', 'gender', 'nextDonationEligibility'])
+        )
+      ) || (
+        // Organization admins can manage their members' affiliation
+        isSignedIn() && 
+        (existing().get('organizationId', null) != null && isOrgAdmin(existing().organizationId)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['organizationId', 'organizationName'])
+      ) || (
+        // Follow/Unfollow logic: Allow anyone to add/remove THEMSELVES from a user's followers list
+        isSignedIn() && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['followers']) &&
+        (
+          // Adding self to followers
+          (incoming().get('followers', []).size() == existing().get('followers', []).size() + 1 &&
+           incoming().get('followers', []).hasAll(existing().get('followers', [])) &&
+           incoming().get('followers', []).hasAll([request.auth.uid]))
+          ||
+          // Removing self from followers
+          (existing().get('followers', []).size() == incoming().get('followers', []).size() + 1 &&
+           existing().get('followers', []).hasAll(incoming().get('followers', [])) &&
+           existing().get('followers', []).hasAll([request.auth.uid]))
+        )
+      );
+
+      match /donations/{donationId} {
+        allow read: if true;
+        allow create: if isValidId(donationId) && isOwner(userId) && incoming().requestId != null && isValidId(incoming().requestId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // --- Blood Requests ---
+    match /requests/{requestId} {
+      function isValidRequest(data) {
+        return (!('requesterUid' in data) || data.requesterUid == request.auth.uid)
+          && (!('bloodGroup' in data) || data.bloodGroup is string)
+          && (!('district' in data) || (data.district is string && data.district.size() <= 100))
+          && (!('thana' in data) || (data.thana is string && data.thana.size() <= 100))
+          && (!('urgency' in data) || (data.urgency in ['Urgent', 'Normal']))
+          && (!('status' in data) || (data.status in ['Pending', 'Fulfilled', 'Cancelled']))
+          && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 20));
+      }
+
+      allow list: if true;
+      allow get: if true;
+      allow create: if isValidId(requestId) && isVerified() && isValidRequest(incoming()) 
+        && incoming().keys().hasAll(['requesterUid', 'bloodGroup', 'district', 'thana', 'hospital', 'urgency', 'status', 'contactPhone', 'createdAt'])
+        && incoming().createdAt == request.time;
+      allow update: if (isSignedIn() && (
+        // Action: Mark as fulfillment/cancel by owner
+        (isOwner(existing().requesterUid) && isValidRequest(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'hospital', 'hospitalAddress', 'medicalReason', 'lastReminderAt'])) ||
+        // Action: Mark as Fulfilled by any user (Donor)
+        (incoming().get('status', 'Pending') == 'Fulfilled' && existing().status == 'Pending' && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Action: Record contact (increment count)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['contactCount']) && incoming().contactCount == existing().contactCount + 1)
+      )) || isAdmin();
+      allow delete: if isOwner(existing().requesterUid) || isAdmin();
+    }
+
+    // --- Community Posts ---
+    match /posts/{postId} {
+      function isValidPost(data) {
+        return (!('authorUid' in data) || data.authorUid == request.auth.uid)
+          && (!('authorName' in data) || (data.authorName is string && data.authorName.size() <= 100))
+          && (!('authorPhoto' in data) || (data.authorPhoto == null || (data.authorPhoto is string && data.authorPhoto.size() <= 2000)))
+          && (!('authorBloodGroup' in data) || (data.authorBloodGroup == null || (data.authorBloodGroup is string && data.authorBloodGroup.size() <= 10)))
+          && (!('content' in data) || (data.content is string && data.content.size() <= 2000))
+          && (!('imageUrl' in data) || (data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 5000000)))
+          && (!('likes' in data) || data.likes is list)
+          && (!('dislikes' in data) || data.dislikes is list)
+          && (!('commentCount' in data) || data.commentCount is number)
+          && (!('reportCount' in data) || data.reportCount is number)
+          && (!('isHidden' in data) || data.isHidden is bool);
+      }
+
+      allow list: if true;
+      allow get: if true;
+      allow create: if isValidId(postId) && isSignedIn() && isValidPost(incoming()) 
+        && incoming().keys().hasAll(['authorUid', 'authorName', 'content', 'createdAt'])
+        && incoming().createdAt == request.time
+        && incoming().get('likes', []).size() == 0
+        && incoming().get('dislikes', []).size() == 0
+        && incoming().get('commentCount', 0) == 0
+        && incoming().get('reportCount', 0) == 0
+        && incoming().get('isHidden', false) == false;
+      allow update: if (isSignedIn() && (
+        // Action: Edit by author
+        (isOwner(existing().authorUid) && isValidPost(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'imageUrl'])) ||
+        // Action: React
+        (incoming().diff(existing()).affectedKeys().hasAny(['likes', 'dislikes']) && incoming().get('authorUid', existing().authorUid) == existing().authorUid) ||
+        // Action: Report
+        (incoming().diff(existing()).affectedKeys().hasOnly(['reportCount']) && (
+          (!('reportCount' in existing()) && incoming().reportCount == 1) ||
+          ('reportCount' in existing() && incoming().reportCount == existing().reportCount + 1)
+        ))
+      )) || isAdmin();
+      allow delete: if isOwner(existing().authorUid) || isAdmin();
+
+      match /comments/{commentId} {
+        function isValidComment(data) {
+          return (!('authorUid' in data) || data.authorUid == request.auth.uid)
+            && (!('authorName' in data) || (data.authorName is string))
+            && (!('content' in data) || (data.content is string && data.content.size() <= 1000))
+            && (!('postId' in data) || data.postId == postId);
+        }
+
+        allow read: if true;
+        allow create: if isValidId(commentId) && isSignedIn() && isValidComment(incoming()) 
+          && incoming().keys().hasAll(['authorUid', 'authorName', 'content', 'postId', 'createdAt'])
+          && incoming().createdAt == request.time;
+        allow update: if isAdmin();
+        allow delete: if isOwner(existing().authorUid) || isAdmin();
+
+        match /replies/{replyId} {
+          allow read: if true;
+          allow create: if isValidId(replyId) && isSignedIn() && incoming().authorUid == request.auth.uid && incoming().content is string;
+          allow delete: if isOwner(existing().authorUid) || isAdmin();
+        }
+      }
+    }
+
+    // --- Chats ---
+    match /chats/{chatId} {
+      function isChatParticipant(data) {
+        return isSignedIn() && (request.auth.uid in data.participants);
+      }
+      
+      function isValidChat(data) {
+        return data.participants is list && data.participants.size() == 2
+          && data.participants[0] is string && data.participants[1] is string
+          && (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() <= 1000));
+      }
+
+      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants);
+      allow get: if isSignedIn() && ((resource != null && request.auth.uid in resource.data.participants) || isAdmin());
+      allow create: if isSignedIn() && (request.auth.uid in incoming().participants) && isValidChat(incoming());
+      allow update: if isSignedIn() && (request.auth.uid in existing().participants || isAdmin()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount', 'typing', 'updatedAt']) ||
+        isAdmin()
+      );
+
+      match /messages/{messageId} {
+        function canAccessMessages() {
+          return isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        }
+        allow read: if canAccessMessages();
+        allow create: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
+          && incoming().senderId == request.auth.uid 
+          && (incoming().createdAt == request.time || incoming().createdAt == null)
+          && incoming().text is string && incoming().text.size() <= 5000;
+        allow update: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+        allow delete: if isAdmin();
+      }
+    }
+
+    // --- Voice Calls ---
+    match /calls/{callId} {
+      function canAccessCall(data) {
+        return isSignedIn() && (request.auth.uid == data.callerUid || request.auth.uid == data.receiverUid);
+      }
+
+      allow create: if isSignedIn() && (incoming().callerUid == request.auth.uid || isAdmin()) 
+        && incoming().status == 'ringing'
+        && incoming().callerUid is string && incoming().receiverUid is string;
+      allow list: if isSignedIn() && (request.auth.uid == resource.data.callerUid || request.auth.uid == resource.data.receiverUid);
+      allow get: if isSignedIn() && (canAccessCall(resource.data) || isAdmin());
+      allow update: if isSignedIn() && (canAccessCall(resource.data) || isAdmin()) && (
+        incoming().diff(existing()).affectedKeys().hasAny(['status', 'offer', 'answer', 'endedAt', 'connectedAt', 'iceCandidate', 'receiverCandidates', 'callerCandidates']) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+
+      match /callerCandidates/{candidateId} { 
+        allow read, write: if isSignedIn(); 
+      }
+      match /receiverCandidates/{candidateId} { 
+        allow read, write: if isSignedIn(); 
+      }
+    }
+
+    // --- Reports ---
+    match /reports/{reportId} {
+      allow create: if (isSignedIn() && incoming().reportedBy == request.auth.uid) || (!isSignedIn() && incoming().reportedBy == 'guest');
+      allow read, update, delete: if isAdmin();
+    }
+
+    // --- Organizations ---
+    match /organizations/{orgId} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update: if (isSignedIn() && (
+        (existing().adminUid == request.auth.uid) || 
+        isAdmin() ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['memberCount']) && 
+         (incoming().memberCount == existing().memberCount + 1 || incoming().memberCount == existing().memberCount - 1))
+      ));
+      allow delete: if isAdmin();
+
+      match /members/{userId} {
+        allow read: if true;
+        allow create, update, delete: if (isSignedIn() && request.auth.uid == userId) || 
+                                       (isSignedIn() && get(/databases/$(database)/documents/organizations/$(orgId)).data.adminUid == request.auth.uid) ||
+                                       isAdmin();
+      }
+    }
+
+    // --- Organization Applications ---
+    match /organization_applications/{appId} {
+      function isValidOrgApp(data) {
+        return (request.auth != null ? data.applicantUid == request.auth.uid : data.applicantUid == 'anonymous')
+          && data.applicantName is string && data.applicantName.size() > 0
+          && data.applicantEmail is string && data.applicantEmail.size() > 0
+          && data.orgName is string && data.orgName.size() > 0
+          && data.status == 'pending';
+      }
+
+      allow create: if isValidOrgApp(incoming()) && incoming().createdAt == request.time;
+      allow read: if isSignedIn() && (isOwner(existing().applicantUid) || isAdmin());
+      allow update, delete: if isAdmin();
+    }
+
+    // --- Settings ---
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // --- Connection Test ---
+    match /_connection_test/{docId} { allow read: if true; }
+
+    // --- Admin Notifications ---
+    match /admin_notifications/{notificationId} {
+      allow create: if isSignedIn() || (!isSignedIn() && incoming().title != null);
+      allow read, update, delete: if isAdmin();
+    }
+
+    // --- Global Alerts (User Broadcasts) ---
+    match /global_alerts/{alertId} {
+      allow read, list: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}

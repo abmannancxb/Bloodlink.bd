@@ -1,0 +1,11 @@
+{
+  "name": "BloodLink Bangladesh",
+  "description": "A real-time blood donation platform for Bangladesh. Available as a web app and ready for Android deployment via Capacitor.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

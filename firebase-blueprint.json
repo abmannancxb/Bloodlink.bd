@@ -1,0 +1,285 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Information about a blood donor or seeker.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "bloodGroup": { "type": "string", "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "phone": { "type": "string" },
+        "isAvailable": { "type": "boolean" },
+        "lastDonationDate": { "type": "string", "format": "date" },
+        "fcmToken": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "isVerified": { "type": "boolean" },
+        "organizationId": { "type": "string", "description": "ID of the organization the user belongs to" },
+        "isBlocked": { "type": "boolean" },
+        "donationCount": { "type": "number" },
+        "followers": { "type": "array", "items": { "type": "string" } },
+        "gender": { "type": "string", "enum": ["male", "female", "other"] },
+        "nextDonationEligibility": { "type": "string", "format": "date" },
+        "coverURL": { "type": "string", "format": "uri" },
+        "lastSeen": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "bloodGroup", "district", "thana"]
+    },
+    "BloodRequest": {
+      "title": "Blood Request",
+      "description": "A request for blood donation in a specific area.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requesterUid": { "type": "string" },
+        "requesterName": { "type": "string" },
+        "bloodGroup": { "type": "string", "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"] },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "hospital": { "type": "string" },
+        "hospitalAddress": { "type": "string" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "unitsNeeded": { "type": "number" },
+        "urgency": { "type": "string", "enum": ["Urgent", "Normal"] },
+        "medicalReason": { "type": "string" },
+        "contactPhone": { "type": "string" },
+        "contactCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pending", "Fulfilled", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requesterUid", "bloodGroup", "district", "thana", "unitsNeeded", "urgency", "contactPhone", "status", "createdAt"]
+    },
+    "CommunityPost": {
+      "title": "Community Post",
+      "description": "User opinions and sharing related to blood donation.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "authorBloodGroup": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "dislikes": { "type": "array", "items": { "type": "string" } },
+        "commentCount": { "type": "number" },
+        "reportCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "authorName", "content", "createdAt"]
+    },
+    "PostComment": {
+      "title": "Post Comment",
+      "description": "A comment on a post.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "postId": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "authorUid", "authorName", "content", "createdAt"]
+    },
+    "Chat": {
+      "title": "Chat Session",
+      "description": "A conversation between two users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "object", "additionalProperties": { "type": "number" } },
+        "typing": { "type": "object", "additionalProperties": { "type": "boolean" } }
+      },
+      "required": ["participants", "lastMessageAt"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "An individual message in a chat.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "text", "createdAt"]
+    },
+    "Report": {
+      "title": "Report",
+      "description": "Reports against users or posts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string", "enum": ["post", "comment", "user"] },
+        "targetContent": { "type": "string" },
+        "reportedBy": { "type": "string" },
+        "reportedByName": { "type": "string" },
+        "reason": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["targetId", "targetType", "reportedBy", "reason", "status", "createdAt"]
+    },
+    "Organization": {
+      "title": "Organization",
+      "description": "A local blood donation community or organization.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "contact": { "type": "string" },
+        "adminUid": { "type": "string", "description": "UID of the user who manages this organization" },
+        "memberCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "district", "thana", "adminUid", "createdAt"]
+    },
+    "OrganizationMember": {
+      "title": "Organization Member",
+      "description": "A user who is a member of an organization.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "bloodGroup": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "blocked"] },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "bloodGroup", "status", "joinedAt"]
+    },
+    "OrganizationApplication": {
+      "title": "Organization Application",
+      "description": "An application to create a new organization.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "applicantUid": { "type": "string" },
+        "applicantName": { "type": "string" },
+        "applicantEmail": { "type": "string" },
+        "orgName": { "type": "string" },
+        "description": { "type": "string" },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "contact": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["applicantUid", "applicantName", "orgName", "district", "thana", "contact", "status", "createdAt"]
+    },
+    "SystemSettings": {
+      "title": "System Settings",
+      "description": "Global application configuration.",
+      "type": "object",
+      "properties": {
+        "googleMapsApiKey": { "type": "string" },
+        "googleMapsMapId": { "type": "string" },
+        "showLoginGoogle": { "type": "boolean" },
+        "showLoginOrg": { "type": "boolean" },
+        "showLoginGuest": { "type": "boolean" },
+        "showDistrictRequests": { "type": "boolean" },
+        "showDonorsOnMap": { "type": "boolean" },
+        "showGroupRequests": { "type": "boolean" },
+        "defaultLat": { "type": "number" },
+        "defaultLng": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      }
+    },
+    "AdminNotification": {
+      "title": "Admin Notification",
+      "description": "Real-time alerts for system admins.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "linkView": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "isRead": { "type": "boolean" }
+      },
+      "required": ["title", "body", "createdAt", "isRead"]
+    },
+    "UserBroadcastAlert": {
+      "title": "User Broadcast Alert",
+      "description": "Global system-wide alert messages sent by admins directly to all users.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["message", "createdAt", "createdBy"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and donor status."
+    },
+    "/requests/{requestId}": {
+      "schema": "BloodRequest",
+      "description": "Active and past blood donation requests."
+    },
+    "/posts/{postId}": {
+      "schema": "CommunityPost",
+      "description": "Community posts and opinions."
+    },
+    "/posts/{postId}/comments/{commentId}": {
+      "schema": "PostComment",
+      "description": "Comments on community posts."
+    },
+    "/chats/{chatId}": {
+      "schema": "Chat",
+      "description": "Conversation metadata."
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Individual messages in a conversation."
+    },
+    "/reports/{reportId}": {
+      "schema": "Report",
+      "description": "User and content reports."
+    },
+    "/organizations/{orgId}": {
+      "schema": "Organization",
+      "description": "Blood donation organizations."
+    },
+    "/organizations/{orgId}/members/{userId}": {
+      "schema": "OrganizationMember",
+      "description": "Members of an organization."
+    },
+    "/organization_applications/{appId}": {
+      "schema": "OrganizationApplication",
+      "description": "Applications for new organizations."
+    },
+    "/settings/{settingId}": {
+      "schema": "SystemSettings",
+      "description": "Global application configuration documents."
+    },
+    "/admin_notifications/{notificationId}": {
+      "schema": "AdminNotification",
+      "description": "Internal notifications for administrators."
+    },
+    "/global_alerts/{alertId}": {
+      "schema": "UserBroadcastAlert",
+      "description": "Global system-wide alert messages sent by admins directly to all users."
+    }
+  }
+}

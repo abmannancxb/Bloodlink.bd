@@ -1,0 +1,114 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- Global Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function getProfile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function isAdmin() { return isSignedIn() && getProfile().role == 'admin'; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Default Deny ---
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == request.auth.uid
+          && data.displayName is string && data.displayName.size() <= 100
+          && data.email is string && data.email.size() <= 100
+          && data.bloodGroup in ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
+          && data.district is string && data.district.size() <= 50
+          && data.thana is string && data.thana.size() <= 50
+          && data.phone is string && data.phone.size() <= 20
+          && data.isAvailable is bool;
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().role == 'user' 
+        && incoming().isBlocked == false;
+      allow update: if (isOwner(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'bloodGroup', 'district', 'thana', 'phone', 'isAvailable', 'lastDonationDate', 'fcmToken', 'photoURL'])
+      )) || isAdmin();
+    }
+
+    // --- Blood Requests ---
+    match /requests/{requestId} {
+      function isValidRequest(data) {
+        return data.requesterUid == request.auth.uid
+          && data.bloodGroup is string
+          && data.district is string
+          && data.thana is string
+          && data.hospital is string
+          && data.urgency in ['Urgent', 'Normal']
+          && data.status in ['Pending', 'Fulfilled', 'Cancelled']
+          && data.contactPhone is string;
+      }
+
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isVerified() && isValidRequest(incoming()) && incoming().createdAt == request.time;
+      allow update: if (isSignedIn() && (
+        // Action: Mark as fulfillment/cancel by owner
+        (isOwner(existing().requesterUid) && isValidRequest(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'hospital', 'hospitalAddress', 'medicalReason'])) ||
+        // Action: Increment contact count by anyone
+        (incoming().diff(existing()).affectedKeys().hasOnly(['contactCount']) && incoming().contactCount == existing().contactCount + 1)
+      )) || isAdmin();
+      allow delete: if isOwner(existing().requesterUid) || isAdmin();
+    }
+
+    // --- Community Posts ---
+    match /posts/{postId} {
+      function isValidPost(data) {
+        return data.authorUid == request.auth.uid
+          && data.content is string && data.content.size() <= 2000;
+      }
+
+      allow list: if isSignedIn();
+      allow get: if isSignedIn();
+      allow create: if isVerified() && isValidPost(incoming()) && incoming().createdAt == request.time;
+      allow update: if (isSignedIn() && (
+        // Action: Edit by owner
+        (isOwner(existing().authorUid) && isValidPost(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['content'])) ||
+        // Action: React (like/dislike)
+        (incoming().diff(existing()).affectedKeys().hasAny(['likes', 'dislikes']) && incoming().authorUid == existing().authorUid)
+      )) || isAdmin();
+      allow delete: if isOwner(existing().authorUid) || isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isVerified() && incoming().authorUid == request.auth.uid && incoming().postId == postId;
+        allow delete: if isOwner(resource.data.authorUid) || isAdmin();
+      }
+    }
+
+    // --- Chats ---
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && request.auth.uid in existing().participants;
+      allow create: if isSignedIn() && request.auth.uid in incoming().participants;
+      allow update: if isSignedIn() && request.auth.uid in existing().participants && (
+        incoming().diff(existing()).affectedKeys().hasAny(['lastMessage', 'lastMessageAt', 'unreadCount'])
+      );
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants 
+          && incoming().senderId == request.auth.uid 
+          && incoming().createdAt == request.time;
+      }
+    }
+
+    // --- Reports ---
+    match /reports/{reportId} {
+      allow create: if isVerified() && incoming().reporterUid == request.auth.uid;
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
