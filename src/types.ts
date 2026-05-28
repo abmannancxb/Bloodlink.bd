@@ -79,6 +79,13 @@ export interface SystemSettings {
   seoPrivacy?: string;
   seoTerms?: string;
   seoFaq?: string;
+  // AI Assistant configuration
+  aiEnginePreference?: 'both_gemini' | 'both_groq' | 'gemini' | 'groq';
+  geminiApiKeyOverride?: string;
+  groqApiKeyOverride?: string;
+  aiDailyLimit?: number;
+  aiTodayUsageCount?: number;
+  aiTodayResetDate?: string;
   updatedAt?: any;
   updatedBy?: string;
 }

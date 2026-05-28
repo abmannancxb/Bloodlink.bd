@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { db } from '../firebase';
+import { doc, setDoc } from 'firebase/firestore';
 import { 
   Sparkles, 
   Mic, 
@@ -13,7 +15,8 @@ import {
   Droplet, 
   Search, 
   CheckCircle,
-  HelpCircle
+  HelpCircle,
+  Plus
 } from 'lucide-react';
 
 interface AIBloodAssistantProps {
@@ -21,6 +24,10 @@ interface AIBloodAssistantProps {
   onOpenRequestForm: (preloadedData?: any) => void;
   currentUser: any;
   allUsers?: any[];
+  currentUserProfile?: any;
+  settings?: any;
+  isExternalOpen?: boolean;
+  onRequestClose?: () => void;
 }
 
 interface Message {
@@ -44,7 +51,11 @@ export default function AIBloodAssistant({
   onSearchDonors, 
   onOpenRequestForm, 
   currentUser,
-  allUsers = []
+  allUsers = [],
+  currentUserProfile,
+  settings,
+  isExternalOpen,
+  onRequestClose
 }: AIBloodAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -210,7 +221,19 @@ export default function AIBloodAssistant({
     setIsOpen(false);
     stopSpeaking();
     stopListening();
+    onRequestClose?.();
   };
+
+  // Sync external open state
+  useEffect(() => {
+    if (isExternalOpen !== undefined && isExternalOpen !== isOpen) {
+      if (isExternalOpen) {
+        handleOpenAssistant();
+      } else {
+        handleCloseAssistant();
+      }
+    }
+  }, [isExternalOpen]);
 
   const handleReset = () => {
     stopSpeaking();
@@ -272,7 +295,14 @@ export default function AIBloodAssistant({
             nextDonationEligibility: u.nextDonationEligibility || '',
             district: u.district || '',
             thana: u.thana || ''
-          }))
+          })),
+          settings: settings ? {
+            aiEnginePreference: settings.aiEnginePreference,
+            geminiApiKeyOverride: settings.geminiApiKeyOverride,
+            groqApiKeyOverride: settings.groqApiKeyOverride,
+            aiDailyLimit: settings.aiDailyLimit,
+            aiTodayUsageCount: settings.aiTodayUsageCount
+          } : null
         })
       });
 
@@ -290,6 +320,19 @@ export default function AIBloodAssistant({
       const resData = await response.json();
       
       if (resData.success) {
+        // Client-side auto-update/persist settings count in Firestore if server returned fresh usage (permissions resolved in client scope)
+        if (typeof resData.updatedUsageCount === 'number') {
+          try {
+            const globalDocRef = doc(db, 'settings', 'global');
+            await setDoc(globalDocRef, {
+              aiTodayUsageCount: resData.updatedUsageCount,
+              aiTodayResetDate: new Date().toISOString().split('T')[0]
+            }, { merge: true });
+          } catch (writeErr) {
+            console.warn("Client side settings update failed (expected if non-admin guest):", writeErr);
+          }
+        }
+
         const assistantText = resData.replyText || "আমি দুঃখিত, আমি বুঝতে পারিনি।";
         
         // Clean and normalize slot values to prevent "null" strings from resetting memory
@@ -310,6 +353,18 @@ export default function AIBloodAssistant({
           contactPhone: cleanSlot(resData.contactPhone) || slots.contactPhone,
           taskMode: resData.taskMode || slots.taskMode || 'idle'
         };
+
+        if (resData.limitReached) {
+          // If limit is reached, set defaults according to the user's profile/address details
+          updatedSlots.bloodGroup = currentUserProfile?.bloodGroup || slots.bloodGroup;
+          updatedSlots.district = currentUserProfile?.district || slots.district;
+          updatedSlots.thana = currentUserProfile?.thana || slots.thana;
+          updatedSlots.contactPhone = currentUserProfile?.phone || slots.contactPhone;
+          if (!updatedSlots.hospital) updatedSlots.hospital = "সদরের যেকোনো হাসপাতাল";
+          if (!updatedSlots.medicalReason) updatedSlots.medicalReason = "জরুরি রক্তের প্রয়োজন";
+          updatedSlots.taskMode = 'create_request'; // to trigger the default filling
+        }
+
         setSlots(updatedSlots);
 
         // Append Assistant Message
@@ -373,33 +428,44 @@ export default function AIBloodAssistant({
     <>
       {/* Floating Sparkle/Mic Action Button */}
       <AnimatePresence>
-        {!isOpen && (
+        {!isOpen && isExternalOpen === undefined && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className="fixed z-[110] bottom-24 right-6 select-none"
+            className="fixed z-[110] bottom-24 right-4 sm:right-6 select-none"
           >
             <div className="relative group">
-              {/* Soft purple/red pulsate bubble effect */}
-              <div className="absolute -inset-1.5 bg-gradient-to-r from-red-500 to-rose-600 rounded-full blur-md opacity-70 group-hover:opacity-100 transition duration-1000 animate-pulse" />
+              {/* Premium pulsating glowing ring borders with gradients */}
+              <div className="absolute -inset-1 bg-gradient-to-r from-red-600 via-rose-500 to-orange-500 rounded-full blur-xl opacity-75 group-hover:opacity-100 transition duration-500 animate-pulse" />
+              <div className="absolute -inset-2.5 bg-gradient-to-r from-red-500 to-rose-600 rounded-full blur-2xl opacity-40 group-hover:opacity-60 transition duration-700 animate-pulse" style={{ animationDelay: '0.2s' }} />
               
               <button
                 type="button"
                 onClick={handleOpenAssistant}
-                className="w-16 h-16 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-full flex flex-col items-center justify-center shadow-2xl border-2 border-white cursor-pointer select-none relative z-10 hover:scale-[1.08] active:scale-95 transition-all text-center"
+                className="h-14 px-5 bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white rounded-full flex items-center gap-3 shadow-[0_12px_45px_rgba(220,38,38,0.45)] border-2 border-white/40 cursor-pointer select-none relative z-10 hover:scale-[1.06] hover:border-white active:scale-95 transition-all text-center"
                 style={{ touchAction: 'manipulation' }}
-                title="AI Blood Finder"
+                title="রক্তবন্ধু AI — আপনার এআই রক্তদাতা সাহায্যকারী"
                 id="ai-blood-assistant-floating-btn"
               >
-                <Sparkles className="w-5 h-5 text-white stroke-[2.5] mb-0.5 animate-bounce" />
-                <span className="text-[7.5px] font-black uppercase tracking-widest text-red-100 leading-tight block">
-                  AI Voice<br />Assistant
-                </span>
+                {/* Micro Animated Pulse Avatar Dot/Icon */}
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center relative shadow-inner shrink-0">
+                  <span className="absolute -inset-1 bg-white/30 rounded-full animate-ping opacity-60" />
+                  <Sparkles className="w-4 h-4 text-white stroke-[2.5]" />
+                </div>
                 
-                {/* Small indicator if speech recognizer exists */}
+                <div className="flex flex-col text-left pr-1.5">
+                  <span className="text-[12.5px] font-black uppercase tracking-wide text-white leading-tight flex items-center gap-1">
+                    রক্তবন্ধু AI <span className="text-[8px] bg-white text-red-600 font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 tracking-normal translate-y-[-0.5px]">LIVE</span>
+                  </span>
+                  <span className="text-[8.5px] font-bold text-red-100/90 tracking-widest uppercase leading-none mt-0.5">
+                    কথা বলুন (Voice Helper)
+                  </span>
+                </div>
+                
+                {/* Tiny blinking green radar if speech synthesis is available */}
                 {window.speechSynthesis && (
-                  <span className="absolute bottom-1 right-1 flex h-2 w-2">
+                  <span className="relative flex h-2 w-2 ml-0.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
@@ -437,7 +503,7 @@ export default function AIBloodAssistant({
                     <Sparkles className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '4s' }} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider">AI ব্লাড অ্যাসিস্ট্যান্ট</h3>
+                    <h3 className="text-sm font-black uppercase tracking-wider">রক্তবন্ধু AI</h3>
                     <p className="text-[10px] text-red-100 font-medium">রক্তদাতা খুঁজুন এবং রক্তের রিকোয়েস্ট তৈরি করুন</p>
                   </div>
                 </div>
@@ -574,6 +640,49 @@ export default function AIBloodAssistant({
                         : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none'
                     }`}>
                       <p className="font-medium leading-relaxed leading-7">{m.text}</p>
+                      
+                      {/* One-click prefilled actions if limit warning has shown */}
+                      {m.role === 'assistant' && m.text.includes("আমার সিস্টেমের কাজ চলমান") && (
+                        <div className="mt-3 p-3 bg-red-50/90 rounded-2xl border border-red-100 space-y-2 text-slate-900 font-sans">
+                          <p className="text-[11px] font-bold text-slate-800">
+                            সরাসরি ১-ক্লিকে আপনার প্রোফাইল ঠিকানা ও রক্তের গ্রুপ ব্যবহার করে কাজ সম্পন্ন করুন:
+                          </p>
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onOpenRequestForm({
+                                  bloodGroup: currentUserProfile?.bloodGroup || '',
+                                  district: currentUserProfile?.district || '',
+                                  thana: currentUserProfile?.thana || '',
+                                  hospital: 'জরুরি যেকোনো হাসপাতাল',
+                                  medicalReason: 'জরুরি রক্তের প্রয়োজন',
+                                  contactPhone: currentUserProfile?.phone || ''
+                                });
+                                handleCloseAssistant();
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-red-600 text-white hover:bg-red-700 rounded-xl font-bold text-[10px] transition cursor-pointer select-none border-none outline-none"
+                            >
+                              <Plus className="w-3.5 h-3.5" /> রিকোয়েস্ট ফর্ম
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onSearchDonors(
+                                  currentUserProfile?.bloodGroup || '', 
+                                  currentUserProfile?.district || '', 
+                                  currentUserProfile?.thana || ''
+                                );
+                                handleCloseAssistant();
+                              }}
+                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold text-[10px] transition cursor-pointer select-none border-none outline-none"
+                            >
+                              <Search className="w-3.5 h-3.5" /> ডোনার খুঁজুন
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       <span className="text-[9px] block text-right mt-1 opacity-60">
                         {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>

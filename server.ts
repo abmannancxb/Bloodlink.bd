@@ -2,7 +2,7 @@ import express from "express";
 import path from "path";
 import fs from "fs/promises";
 import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 import { GoogleGenAI, Type } from "@google/genai";
 import { BANGLADESH_LOCATIONS } from "./src/constants";
@@ -136,6 +136,16 @@ async function getSitemapXml(): Promise<string> {
   return xml;
 }
 
+// Safe server-side memory state for AI assistant settings and limits fallback (useful when Firestore write/read permissions are restricted)
+const inMemoryAiSettings = {
+  aiEnginePreference: "both_gemini",
+  geminiApiKeyOverride: "",
+  groqApiKeyOverride: "",
+  aiDailyLimit: 500,
+  aiTodayUsageCount: 0,
+  aiTodayResetDate: new Date().toISOString().split('T')[0]
+};
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -146,12 +156,150 @@ async function startServer() {
   // AI Blood Assistant API Route
   app.post("/api/gemini/blood-assistant", async (req, res) => {
     try {
-      const { message, history, slots, currentUserPhone, donors } = req.body;
+      const { message, history, slots, currentUserPhone, donors, settings: clientSettings } = req.body;
+
+      // 1. Fetch Dynamic Configuration & Usage tracking from Firestore with absolute resilience
+      let geminiApiKey = process.env.GEMINI_API_KEY || "";
+      let groqApiKey = process.env.GROQ_API_KEY || "";
+      let aiEnginePreference = inMemoryAiSettings.aiEnginePreference; 
+      let aiDailyLimit = inMemoryAiSettings.aiDailyLimit; 
+      let aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
+      let aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
+
+      const todayStr = new Date().toISOString().split('T')[0]; // Current date YYYY-MM-DD
+
+      // Auto-reset check for in-memory
+      if (inMemoryAiSettings.aiTodayResetDate !== todayStr) {
+        inMemoryAiSettings.aiTodayUsageCount = 0;
+        inMemoryAiSettings.aiTodayResetDate = todayStr;
+      }
+
+      let isFirestoreOperational = false;
+
+      try {
+        const settingsDoc = await adminDb.collection("settings").doc("global").get();
+        if (settingsDoc.exists) {
+          const settingsData = settingsDoc.data() || {};
+          if (settingsData.geminiApiKeyOverride && settingsData.geminiApiKeyOverride.trim() !== '') {
+            geminiApiKey = settingsData.geminiApiKeyOverride.trim();
+            inMemoryAiSettings.geminiApiKeyOverride = settingsData.geminiApiKeyOverride.trim();
+          }
+          if (settingsData.groqApiKeyOverride && settingsData.groqApiKeyOverride.trim() !== '') {
+            groqApiKey = settingsData.groqApiKeyOverride.trim();
+            inMemoryAiSettings.groqApiKeyOverride = settingsData.groqApiKeyOverride.trim();
+          }
+          if (settingsData.aiEnginePreference) {
+            aiEnginePreference = settingsData.aiEnginePreference;
+            inMemoryAiSettings.aiEnginePreference = settingsData.aiEnginePreference;
+          }
+          if (typeof settingsData.aiDailyLimit === 'number') {
+            aiDailyLimit = settingsData.aiDailyLimit;
+            inMemoryAiSettings.aiDailyLimit = settingsData.aiDailyLimit;
+          }
+
+          aiTodayResetDate = settingsData.aiTodayResetDate || "";
+          aiTodayUsageCount = typeof settingsData.aiTodayUsageCount === 'number' ? settingsData.aiTodayUsageCount : 0;
+
+          // Auto-reset check
+          if (aiTodayResetDate !== todayStr) {
+            aiTodayUsageCount = 0;
+            aiTodayResetDate = todayStr;
+            try {
+              await adminDb.collection("settings").doc("global").set({
+                aiTodayUsageCount: 0,
+                aiTodayResetDate: todayStr
+              }, { merge: true });
+            } catch (err) {
+              // Ignore silent write failures on auto-reset
+            }
+          }
+          
+          inMemoryAiSettings.aiTodayUsageCount = aiTodayUsageCount;
+          inMemoryAiSettings.aiTodayResetDate = aiTodayResetDate;
+          isFirestoreOperational = true;
+        }
+      } catch (settingsError: any) {
+        console.warn("Firestore settings read permission restricted. Falling back to in-memory configurations dashboard:", settingsError.message || settingsError);
+      }
+
+      // If client provided active config cached states, accept them as secondary overrides
+      if (clientSettings) {
+        if (clientSettings.aiEnginePreference) {
+          aiEnginePreference = clientSettings.aiEnginePreference;
+          inMemoryAiSettings.aiEnginePreference = clientSettings.aiEnginePreference;
+        }
+        if (clientSettings.geminiApiKeyOverride && clientSettings.geminiApiKeyOverride.trim() !== '') {
+          geminiApiKey = clientSettings.geminiApiKeyOverride.trim();
+          inMemoryAiSettings.geminiApiKeyOverride = clientSettings.geminiApiKeyOverride.trim();
+        }
+        if (clientSettings.groqApiKeyOverride && clientSettings.groqApiKeyOverride.trim() !== '') {
+          groqApiKey = clientSettings.groqApiKeyOverride.trim();
+          inMemoryAiSettings.groqApiKeyOverride = clientSettings.groqApiKeyOverride.trim();
+        }
+        if (typeof clientSettings.aiDailyLimit === 'number') {
+          aiDailyLimit = clientSettings.aiDailyLimit;
+          inMemoryAiSettings.aiDailyLimit = clientSettings.aiDailyLimit;
+        }
+        if (typeof clientSettings.aiTodayUsageCount === 'number') {
+          // Sync with clients who successfully write counters
+          if (clientSettings.aiTodayUsageCount > inMemoryAiSettings.aiTodayUsageCount) {
+            inMemoryAiSettings.aiTodayUsageCount = clientSettings.aiTodayUsageCount;
+          }
+        }
+      }
+
+      // Ensure robust local fallback if Firestore couldn't be loaded at all
+      if (!isFirestoreOperational) {
+        if (inMemoryAiSettings.geminiApiKeyOverride && inMemoryAiSettings.geminiApiKeyOverride.trim() !== '') {
+          geminiApiKey = inMemoryAiSettings.geminiApiKeyOverride;
+        }
+        if (inMemoryAiSettings.groqApiKeyOverride && inMemoryAiSettings.groqApiKeyOverride.trim() !== '') {
+          groqApiKey = inMemoryAiSettings.groqApiKeyOverride;
+        }
+        aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
+        aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
+        aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
+        aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
+      }
+
+      // Check if daily limit reached
+      if (aiTodayUsageCount >= aiDailyLimit) {
+        console.warn(`AI assistant message limit reached! Current count: ${aiTodayUsageCount}, Daily limit: ${aiDailyLimit}`);
+        return res.status(200).json({
+          success: true,
+          replyText: "আমার সিস্টেমের কাজ চলমান, অনুগ্রহ করে ম্যানুয়ালি খুঁজে নিন। দুঃখিত।",
+          limitReached: true,
+          bloodGroup: slots?.bloodGroup || null,
+          district: slots?.district || null,
+          thana: slots?.thana || null,
+          hospital: slots?.hospital || null,
+          medicalReason: slots?.medicalReason || null,
+          contactPhone: slots?.contactPhone || null,
+          taskMode: slots?.taskMode || "idle",
+          actionTriggered: false,
+          requestFormTriggered: false,
+          updatedUsageCount: aiTodayUsageCount
+        });
+      }
       
-      const locationsPreview = Object.keys(BANGLADESH_LOCATIONS).reduce((acc, dist) => {
-        acc[dist] = BANGLADESH_LOCATIONS[dist];
-        return acc;
-      }, {} as any);
+      // Optimize tokens to prevent "PayloadTooLargeError" and Groq/Gemini "Rate limit exceeded" (TPD):
+      // Instead of sending all 64 districts & hundreds of thanas on every turn, we send a highly optimized view.
+      const selectedDistrict = slots?.district;
+      const locationsPreview: any = {};
+      const allDistricts = Object.keys(BANGLADESH_LOCATIONS);
+      
+      locationsPreview["AvailableDistricts_ChooseOne"] = allDistricts;
+      if (selectedDistrict && BANGLADESH_LOCATIONS[selectedDistrict as keyof typeof BANGLADESH_LOCATIONS]) {
+        locationsPreview[`Thanas_For_${selectedDistrict}`] = BANGLADESH_LOCATIONS[selectedDistrict as keyof typeof BANGLADESH_LOCATIONS];
+      } else {
+        // Safe check for partially matched/differently cased districts to be resilient
+        const matchedDist = allDistricts.find(d => d.toLowerCase() === String(selectedDistrict).trim().toLowerCase());
+        if (matchedDist) {
+          locationsPreview[`Thanas_For_${matchedDist}`] = BANGLADESH_LOCATIONS[matchedDist as keyof typeof BANGLADESH_LOCATIONS];
+        } else {
+          locationsPreview["Note"] = "Thanas Checklist for correct matching will be provided dynamically here once values are stored in slots.district.";
+        }
+      }
 
       // Simple JSON formatted view of available donors for lookup
       const simpleDonorsList = Array.isArray(donors) ? donors.map((d: any) => ({
@@ -191,7 +339,7 @@ PATH C: Donor Lookup ("taskMode": "donor_lookup")
 
 PATH D: Out-of-Scope Rule (CRITICAL REJECTION)
 - If the user asks general questions, math puzzles, coding questions, general advice, or anything irrelevant to BloodLink, blood donor searching, request creation, or donor lookups, you MUST respond EXACTLY with the following Bangla sentence and absolutely nothing else:
-  "অনুগ্রহ করে আমি এর বাহিরে সহযোগিতা করতে পারব না ক্ষমা করবেন।"
+  "অনুগ্রহ করে আমাকে অপ্রয়োজনীয় প্রশ্ন করবেন না , আপনার রক্ত দাতার তথ্য লাগবে নাকি রক্তের জন্য আবেদন করবেন ?"
   Set "taskMode" to "idle", "actionTriggered" to false, and "requestFormTriggered" to false. Do not collect any parameters.
 
 Conversational Steps & Parameter Memory Rules:
@@ -231,104 +379,170 @@ Response JSON Schema:
 }`;
 
       let responseText = "{}";
+      let usedEngine = "";
 
-      if (process.env.GROQ_API_KEY) {
-        console.log("Using Groq API Key...");
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-        
-        const chatMessages: any[] = [
-          { role: "system", content: systemInstruction },
-          ...(history || []).map((msg: any) => ({
-            role: msg.role === 'assistant' ? 'assistant' : 'user',
-            content: msg.text
-          })),
-          { role: "user", content: message }
-        ];
-
-        const chatCompletion = await groq.chat.completions.create({
-          messages: chatMessages,
-          model: "llama-3.3-70b-versatile",
-          response_format: { type: "json_object" },
-          temperature: 0.1
-        });
-
-        responseText = chatCompletion.choices[0]?.message?.content || "{}";
-      } else {
-        // Fallback to Gemini if only GEMINI_API_KEY is configured
-        if (!process.env.GEMINI_API_KEY) {
-          return res.status(200).json({
-            success: true,
-            replyText: "দুঃখিত, কৃত্রিম বুদ্ধিমত্তা (AI) সার্ভিসটি কনফিগার করা নেই। অনুগ্রহ করে Settings > Secrets প্যানেল থেকে GROQ_API_KEY বা GEMINI_API_KEY প্রদান করুন।",
-            bloodGroup: null,
-            district: null,
-            thana: null,
-            hospital: null,
-            medicalReason: null,
-            contactPhone: null,
-            taskMode: "idle",
-            actionTriggered: false,
-            requestFormTriggered: false
-          });
+      const tryGemini = async (): Promise<boolean> => {
+        if (!geminiApiKey) {
+          console.warn("Gemini API key is not configured.");
+          return false;
         }
-        
-        console.log("Using Gemini API Key (Fallback)...");
-        const ai = new GoogleGenAI({
-          apiKey: process.env.GEMINI_API_KEY,
-          httpOptions: {
-            headers: {
-              'User-Agent': 'aistudio-build',
+        try {
+          console.log("Using Gemini-3.5-Flash model with loaded Key...");
+          const ai = new GoogleGenAI({
+            apiKey: geminiApiKey,
+            httpOptions: {
+              headers: {
+                'User-Agent': 'aistudio-build',
+              }
             }
-          }
-        });
+          });
 
-        const chatMessages = [
-          ...(history || []).map((msg: any) => ({
-            role: msg.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: msg.text }]
-          })),
-          {
-            role: 'user',
-            parts: [{ text: message }]
-          }
-        ];
-
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: chatMessages,
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                replyText: { type: Type.STRING },
-                bloodGroup: { type: Type.STRING },
-                district: { type: Type.STRING },
-                thana: { type: Type.STRING },
-                hospital: { type: Type.STRING },
-                medicalReason: { type: Type.STRING },
-                contactPhone: { type: Type.STRING },
-                taskMode: { type: Type.STRING },
-                actionTriggered: { type: Type.BOOLEAN },
-                requestFormTriggered: { type: Type.BOOLEAN }
-              },
-              required: [
-                "replyText", 
-                "bloodGroup", 
-                "district", 
-                "thana", 
-                "hospital", 
-                "medicalReason", 
-                "contactPhone", 
-                "taskMode", 
-                "actionTriggered", 
-                "requestFormTriggered"
-              ]
+          const chatMessages = [
+            ...(history || []).map((msg: any) => ({
+              role: msg.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: msg.text }]
+            })),
+            {
+              role: 'user',
+              parts: [{ text: message }]
             }
-          }
-        });
+          ];
 
-        responseText = response.text || "{}";
+          const response = await ai.models.generateContent({
+            model: "gemini-3.5-flash",
+            contents: chatMessages,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  replyText: { type: Type.STRING },
+                  bloodGroup: { type: Type.STRING },
+                  district: { type: Type.STRING },
+                  thana: { type: Type.STRING },
+                  hospital: { type: Type.STRING },
+                  medicalReason: { type: Type.STRING },
+                  contactPhone: { type: Type.STRING },
+                  taskMode: { type: Type.STRING },
+                  actionTriggered: { type: Type.BOOLEAN },
+                  requestFormTriggered: { type: Type.BOOLEAN }
+                },
+                required: [
+                  "replyText", 
+                  "bloodGroup", 
+                  "district", 
+                  "thana", 
+                  "hospital", 
+                  "medicalReason", 
+                  "contactPhone", 
+                  "taskMode", 
+                  "actionTriggered", 
+                  "requestFormTriggered"
+                ]
+              }
+            }
+          });
+
+          if (response && response.text) {
+            responseText = response.text;
+            usedEngine = "gemini";
+            return true;
+          }
+          return false;
+        } catch (geminiError: any) {
+          console.error("Gemini API error during query:", geminiError.message || geminiError);
+          return false;
+        }
+      };
+
+      const tryGroq = async (): Promise<boolean> => {
+        if (!groqApiKey) {
+          console.warn("Groq API key is not configured.");
+          return false;
+        }
+        try {
+          console.log("Using Groq API Key...");
+          const groq = new Groq({ apiKey: groqApiKey });
+          
+          const chatMessages: any[] = [
+            { role: "system", content: systemInstruction },
+            ...(history || []).map((msg: any) => ({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              content: msg.text
+            })),
+            { role: "user", content: message }
+          ];
+
+          const chatCompletion = await groq.chat.completions.create({
+            messages: chatMessages,
+            model: "llama-3.3-70b-versatile",
+            response_format: { type: "json_object" },
+            temperature: 0.1
+          });
+
+          if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
+            responseText = chatCompletion.choices[0].message.content;
+            usedEngine = "groq";
+            return true;
+          }
+          return false;
+        } catch (groqError: any) {
+          console.error("Groq API error during query:", groqError.message || groqError);
+          return false;
+        }
+      };
+
+      // Implement Engines Orchestration depending on Selected Preferences
+      if (aiEnginePreference === 'gemini') {
+        await tryGemini();
+      } else if (aiEnginePreference === 'groq') {
+        await tryGroq();
+      } else if (aiEnginePreference === 'both_groq') {
+        const ok = await tryGroq();
+        if (!ok) {
+          console.log("Groq failed or limit exceeded, trying fallback to Gemini...");
+          await tryGemini();
+        }
+      } else {
+        // Defaults to 'both_gemini'
+        const ok = await tryGemini();
+        if (!ok) {
+          console.log("Gemini failed or limit exceeded, trying fallback to Groq...");
+          await tryGroq();
+        }
+      }
+
+      // If neither succeeded or rate limits/quotas were hit
+      if (!usedEngine) {
+        console.warn("All available AI Engines failed or keys are missing. Triggering precise fallback error.");
+        return res.status(200).json({
+          success: true,
+          replyText: "আমার সিস্টেমের কাজ চলমান, অনুগ্রহ করে ম্যানুয়ালি খুঁজে নিন। দুঃখিত।",
+          limitReached: true,
+          bloodGroup: slots?.bloodGroup || null,
+          district: slots?.district || null,
+          thana: slots?.thana || null,
+          hospital: slots?.hospital || null,
+          medicalReason: slots?.medicalReason || null,
+          contactPhone: slots?.contactPhone || null,
+          taskMode: slots?.taskMode || "idle",
+          actionTriggered: false,
+          requestFormTriggered: false
+        });
+      }
+
+      // Increment successful usage counter (both in memory and try DB with safe try/catch)
+      inMemoryAiSettings.aiTodayUsageCount += 1;
+      
+      try {
+        await adminDb.collection("settings").doc("global").set({
+          aiTodayUsageCount: FieldValue.increment(1),
+          aiTodayResetDate: todayStr
+        }, { merge: true });
+        console.log(`Incremented AI usage counter in Firestore settings/global.`);
+      } catch (incError: any) {
+        console.warn("Firestore write permissions restricted on Cloud Run service account, using in-memory live tracking counter fallback safely.");
       }
 
       // Safe robust JSON cleaning/parsing to support formatting quirks
@@ -408,7 +622,11 @@ Response JSON Schema:
         data.replyText = data.replyText || "ধন্যবাদ, আমি আপনার দেওয়া তথ্যগুলো দিয়ে রক্তের রিকোয়েস্ট তৈরি করে দিচ্ছি।";
       }
 
-      res.json({ success: true, ...data });
+      res.json({ 
+        success: true, 
+        ...data,
+        updatedUsageCount: inMemoryAiSettings.aiTodayUsageCount 
+      });
 
     } catch (error: any) {
       console.error("Error in blood-assistant API:", error);

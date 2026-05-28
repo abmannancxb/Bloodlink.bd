@@ -355,6 +355,7 @@ export default function App() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
+  const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const activeChatRef = useRef<Chat | null>(null);
   const profileScrollRef = useRef<HTMLDivElement | null>(null);
   const profileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -4527,6 +4528,10 @@ export default function App() {
         }}
         currentUser={user}
         allUsers={allUsers}
+        currentUserProfile={profile}
+        settings={settings}
+        isExternalOpen={isAiAssistantOpen}
+        onRequestClose={() => setIsAiAssistantOpen(false)}
       />
 
       <nav className="fixed bottom-0 sm:bottom-4 left-0 sm:left-4 right-0 sm:right-4 max-w-lg sm:mx-auto h-16 bg-white/95 backdrop-blur-md sm:rounded-2xl border-t sm:border border-slate-200/50 px-3 flex justify-around items-center z-[100] shadow-[0_-10px_35px_rgba(15,23,42,0.03)] sm:shadow-[0_12px_40px_rgba(15,23,42,0.12)]">
@@ -4553,6 +4558,29 @@ export default function App() {
           }} 
         />
 
+        {/* Special Middle Sparkle AI Button (Half inside the menu, half sticking up above) */}
+        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-4 h-16 pointer-events-auto">
+          <div className="absolute -inset-1.5 bg-gradient-to-r from-red-650 via-rose-500 to-orange-500 rounded-full blur-md opacity-70 animate-pulse pointer-events-none" />
+          <button
+            type="button"
+            onClick={() => setIsAiAssistantOpen(true)}
+            className="w-14 h-14 bg-gradient-to-tr from-red-600 via-rose-500 to-rose-650 text-white rounded-full flex flex-col items-center justify-center shadow-[0_8px_25px_rgba(220,38,38,0.4)] border-4 border-white cursor-pointer select-none relative z-10 hover:scale-110 active:scale-95 transition-all duration-300"
+            style={{ touchAction: 'manipulation' }}
+            title="রক্তবন্ধু AI — আপনার এআই রক্তদাতা সাহায্যকারী"
+          >
+            <Sparkles className="w-5.5 h-5.5 text-white stroke-[2.5] animate-bounce" style={{ animationDuration: '3s' }} />
+            <span className="text-[8px] font-black uppercase tracking-wider text-red-50 -mt-0.5 leading-none">
+              AI
+            </span>
+            
+            {/* Pulsing online green dot indicator */}
+            <span className="absolute top-0.5 right-0.5 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+          </button>
+        </div>
+
         <NavButton 
           active={view === 'find'} 
           icon={<Search />} 
@@ -4571,18 +4599,6 @@ export default function App() {
           label="Community" 
           onClick={() => { 
             setView('feed'); 
-            setShowRequestsOverlay(false); 
-            handleSetActiveChat(null); 
-          }} 
-        />
-
-        <NavButton 
-          active={view === 'profile'} 
-          icon={user ? <UserIcon /> : <UserIcon />} 
-          label={user ? "Profile" : "Sign In"} 
-          onClick={() => { 
-            if (user) setView('profile'); 
-            else handleLogin(); 
             setShowRequestsOverlay(false); 
             handleSetActiveChat(null); 
           }} 
@@ -5378,7 +5394,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   hasUpdate: boolean,
   setHasUpdate: (v: boolean) => void
 }) {
-  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant'>('stats');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [broadcastText, setBroadcastText] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
@@ -5393,6 +5409,30 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   const [seoEditTab, setSeoEditTab] = useState<'about' | 'contact' | 'privacy' | 'terms' | 'faq'>('about');
   const [galleryFilter, setGalleryFilter] = useState<'all' | 'post' | 'profile'>('all');
   const [lightboxImage, setLightboxImage] = useState<any | null>(null);
+
+  // AI Assistant Panel States
+  const [aiEnginePrefValue, setAiEnginePrefValue] = useState<'both_gemini' | 'both_groq' | 'gemini' | 'groq'>('both_gemini');
+  const [geminiApiKeyVal, setGeminiApiKeyVal] = useState('');
+  const [groqApiKeyVal, setGroqApiKeyVal] = useState('');
+  const [aiLimitValue, setAiLimitValue] = useState(500);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [showGroqKey, setShowGroqKey] = useState(false);
+  const [savingAiSettings, setSavingAiSettings] = useState(false);
+
+  // Test Sandbox state
+  const [testMessage, setTestMessage] = useState('MIRPUR এ O+ রক্ত আবশ্যক');
+  const [testResult, setTestResult] = useState<any | null>(null);
+  const [testingAiConnection, setTestingAiConnection] = useState(false);
+
+  // Sync with Firestore settings prop
+  useEffect(() => {
+    if (settings) {
+      setAiEnginePrefValue(settings.aiEnginePreference || 'both_gemini');
+      setGeminiApiKeyVal(settings.geminiApiKeyOverride || '');
+      setGroqApiKeyVal(settings.groqApiKeyOverride || '');
+      setAiLimitValue(settings.aiDailyLimit || 500);
+    }
+  }, [settings]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
@@ -5758,6 +5798,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'feed', label: 'Community Feed', icon: <Users className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <ShieldAlert className="w-4 h-4" />, badge: stats.pendingReports > 0 ? stats.pendingReports : null },
     { id: 'alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: notifications.filter(n => !n.isRead).length > 0 ? notifications.filter(n => !n.isRead).length : null },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: <Sparkles className="w-4 h-4 text-emerald-500" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'system', label: 'System', icon: <HardDrive className="w-4 h-4" /> },
     { id: 'gallery', label: 'Server Gallery', icon: <Image className="w-4 h-4" /> },
@@ -6592,6 +6633,385 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
               )}
             </motion.div>
           )}
+
+        {tab === 'ai-assistant' && (
+          <motion.div 
+            key="ai-assistant"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden"
+          >
+            {/* Header */}
+            <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" /> AI Engine Controller
+                </p>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">এ আই এসিস্ট্যান্ট ম্যানেজমেন্ট (AI Dashboard)</h2>
+                <p className="text-xs text-slate-500 mt-1">Configure Gemini vs Groq API configurations, dynamic threshold limits, and live-test the model.</p>
+              </div>
+            </div>
+
+            {/* Quick Metrics Bento Grid */}
+            <div className="p-8 pb-4 grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Card 1: Status */}
+              <div className="bg-slate-50/70 p-6 rounded-3xl border border-slate-100 relative overflow-hidden">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Service Status</p>
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-sm font-black text-slate-900">সিস্টেম সক্রিয় (Active)</span>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-3 font-medium">Automatic fallback systems are operational.</p>
+              </div>
+
+              {/* Card 2: Preference Engine */}
+              <div className="bg-slate-50/70 p-6 rounded-3xl border border-slate-100 relative overflow-hidden">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Active AI Strategy</p>
+                <span className="text-xs font-black px-2.5 py-1 bg-slate-900 text-white rounded-lg">
+                  {aiEnginePrefValue === 'both_gemini' && 'Gemini Preferred (Fallback to Groq)'}
+                  {aiEnginePrefValue === 'both_groq' && 'Groq Preferred (Fallback to Gemini)'}
+                  {aiEnginePrefValue === 'gemini' && 'Gemini Engine Only'}
+                  {aiEnginePrefValue === 'groq' && 'Groq Llama Engine Only'}
+                </span>
+                <p className="text-[10px] text-slate-500 mt-3.5 font-medium">Resolution priority handles high-density tokens.</p>
+              </div>
+
+              {/* Card 3: Traffic Quota limits */}
+              <div className="bg-slate-50/70 p-6 rounded-3xl border border-slate-100 relative overflow-hidden">
+                <div className="flex justify-between items-center mb-2">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Daily Limit Usage</p>
+                  <span className="text-[10px] font-black font-mono text-emerald-600">
+                    {Math.round(((settings?.aiTodayUsageCount || 0) / (settings?.aiDailyLimit || aiLimitValue)) * 100)}%
+                  </span>
+                </div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-2xl font-black text-slate-900">{settings?.aiTodayUsageCount || 0}</span>
+                  <span className="text-xs font-bold text-slate-400">/ {settings?.aiDailyLimit || aiLimitValue} queries</span>
+                </div>
+
+                <div className="w-full bg-slate-200 h-2 rounded-full mt-3 overflow-hidden">
+                  <div 
+                    className={`h-full ring-1 transition-all duration-300 ${
+                      (settings?.aiTodayUsageCount || 0) >= (settings?.aiDailyLimit || aiLimitValue) 
+                        ? 'bg-rose-500' 
+                        : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.min(100, (((settings?.aiTodayUsageCount || 0) / (settings?.aiDailyLimit || aiLimitValue)) * 100))}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Warning if limits are reached */}
+            {(settings?.aiTodayUsageCount || 0) >= (settings?.aiDailyLimit || aiLimitValue) && (
+              <div className="mx-8 mb-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-3">
+                <div className="p-1.5 bg-rose-500 text-white rounded-lg">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-black text-rose-900 uppercase tracking-wide">Daily Limit Reached! (সীমা অতিক্রমের সতর্কতা)</p>
+                  <p className="text-xs text-rose-700 mt-0.5">
+                    The requested AI Traffic quota limit ({settings?.aiDailyLimit || aiLimitValue} msgs) is exceeded. 
+                    The fallback auto-warning is currently active. Users will be given standard Bangla redirection instructions:
+                  </p>
+                  <div className="bg-white py-1.5 px-3 rounded-lg border border-rose-100 text-slate-900 font-bold text-xs mt-2 italic">
+                    "আমার সিস্টেমের কাজ চলমান, অনুগ্রহ করে ম্যানুয়ালি খুঁজে নিন। দুঃখিত।"
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Settings Forms and Interactive Sandbox Split */}
+            <div className="p-8 pt-4 grid grid-cols-1 lg:grid-cols-12 gap-8 border-t border-slate-50">
+              
+              {/* Column 1: Config Form (7 cols) */}
+              <div className="lg:col-span-7 space-y-6">
+                <div>
+                  <h3 className="text-sm font-black text-slate-950 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                    <Settings className="w-4 h-4 text-emerald-600" /> AI Provider Configuration
+                  </h3>
+                  <p className="text-xs text-slate-400">Apply primary credentials, set preference strategies and daily boundaries.</p>
+                </div>
+
+                {/* AI engine Preference Strategy */}
+                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-500 mb-2 tracking-widest px-1">preferred engine strategy (এ আই ইঞ্জিন নির্ধারণ)</label>
+                    <select
+                      value={aiEnginePrefValue}
+                      onChange={(e) => setAiEnginePrefValue(e.target.value as any)}
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                    >
+                      <option value="both_gemini">Auto-priority: Use Gemini-3.5-Flash primarily (fallback to Groq)</option>
+                      <option value="both_groq">Auto-priority: Use Groq Llama-3.3 primarily (fallback to Gemini)</option>
+                      <option value="gemini">Strict Mode: Gemini-3.5-Flash ONLY (Disabled Groq)</option>
+                      <option value="groq">Strict Mode: Groq Llama-3.3-70b ONLY (Disabled Gemini)</option>
+                    </select>
+                  </div>
+
+                  {/* Daily threshold limit */}
+                  <div>
+                    <label className="block text-[10px] font-black uppercase text-slate-500 mb-1.5 tracking-widest px-1">Daily Assistant Message Limit (দৈনিক লিমিট সংখ্যা)</label>
+                    <input
+                      type="number"
+                      value={aiLimitValue}
+                      onChange={(e) => setAiLimitValue(parseInt(e.target.value) || 0)}
+                      placeholder="e.g. 500"
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                    />
+                    <p className="text-[9px] text-slate-400 mt-1 px-1">The system will yield to instructions fallback once count is reached for the calendar date.</p>
+                  </div>
+                </div>
+
+                {/* Secret Key Overrides */}
+                <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                  {/* Gemini Key */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">gemini api key (জেমনি এপিআই কি)</label>
+                      <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Optionally Custom</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showGeminiKey ? 'text' : 'password'}
+                        value={geminiApiKeyVal}
+                        onChange={(e) => setGeminiApiKeyVal(e.target.value)}
+                        placeholder="Using system GEMINI_API_KEY if left blank"
+                        className="w-full bg-white border border-slate-200 rounded-2xl pl-4 pr-12 py-3 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 transition-all outline-none font-mono"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowGeminiKey(!showGeminiKey)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 outline-none"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Groq Key */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">groq api key (গ্রক এপিআই কি)</label>
+                      <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Optionally Custom</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showGroqKey ? 'text' : 'password'}
+                        value={groqApiKeyVal}
+                        onChange={(e) => setGroqApiKeyVal(e.target.value)}
+                        placeholder="Using system GROQ_API_KEY if left blank"
+                        className="w-full bg-white border border-slate-200 rounded-2xl pl-4 pr-12 py-3 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 transition-all outline-none font-mono"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowGroqKey(!showGroqKey)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 outline-none"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions Panel */}
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <button
+                    onClick={async () => {
+                      setSavingAiSettings(true);
+                      try {
+                        const globalDocRef = doc(db, 'settings', 'global');
+                        await setDoc(globalDocRef, {
+                          aiEnginePreference: aiEnginePrefValue,
+                          geminiApiKeyOverride: geminiApiKeyVal.trim(),
+                          groqApiKeyOverride: groqApiKeyVal.trim(),
+                          aiDailyLimit: aiLimitValue,
+                          updatedAt: serverTimestamp(),
+                          updatedBy: adminUser?.uid
+                        }, { merge: true });
+                        addToast("Settings Updated", "AI configurations successfully saved in Firestore & initialized!", "success");
+                      } catch (err: any) {
+                        addToast("Error Saving Settings", err.message || "Failed", "error");
+                      } finally {
+                        setSavingAiSettings(false);
+                      }
+                    }}
+                    disabled={savingAiSettings}
+                    className="flex-1 min-w-[150px] py-4 bg-slate-900 text-white hover:bg-slate-800 disabled:bg-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  >
+                    {savingAiSettings ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Check className="w-3.5 h-3.5" />
+                    )}
+                    Save Configurations (সংরক্ষণ করুন)
+                  </button>
+
+                  <button
+                    onClick={async () => {
+                      if (await askConfirm('Reset Quota Usage?', 'This will clear today\'s accumulated assistant usage counter back to 0. Do you want to proceed?', 'Yes, Reset Now')) {
+                        try {
+                          await setDoc(doc(db, 'settings', 'global'), {
+                            aiTodayUsageCount: 0,
+                            updatedAt: serverTimestamp()
+                          }, { merge: true });
+                          addToast("Quota Usage Reset", "The system AI daily counter has been cleared.", "success");
+                        } catch (err: any) {
+                          addToast("Action Failed", err.message || "Failed", "error");
+                        }
+                      }
+                    }}
+                    className="py-4 px-6 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer"
+                  >
+                    Reset Usage Counter
+                  </button>
+                </div>
+              </div>
+
+              {/* Column 2: Live Test Sandbox console (5 cols) */}
+              <div className="lg:col-span-5 bg-slate-900 text-white rounded-[2rem] p-6 flex flex-col justify-between">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b border-white/10">
+                    <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="text-[10px] font-black uppercase tracking-wider text-white/70">Console Sandbox (এ আই পরীক্ষা)</span>
+                  </div>
+
+                  {/* Quick templates */}
+                  <div>
+                    <p className="text-[9px] font-black text-white/50 uppercase tracking-widest mb-2">Preset Quick queries</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'O+ রক্ত লাগবে ঢাকায়',
+                        'রফিক মিয়া শেষ কবে রক্ত দিয়েছেন?',
+                        'শুভ সকাল কেমন আছেন',
+                        'লিমিট চেক করার টেস্ট ভ্যালু'
+                      ].map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => setTestMessage(preset)}
+                          className={`text-[9.5px] font-medium px-2.5 py-1.5 rounded-lg transition-colors text-left truncate max-w-full ${
+                            testMessage === preset 
+                              ? 'bg-emerald-500 text-white' 
+                              : 'bg-white/10 hover:bg-white/15 text-white/80'
+                          }`}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Custom Test text */}
+                  <div className="space-y-1.5 focus-within:ring-1 focus-within:ring-emerald-500 rounded-xl">
+                    <label className="block text-[8px] font-black text-white/40 uppercase tracking-widest px-1">Write prompt / Query</label>
+                    <textarea
+                      value={testMessage}
+                      onChange={(e) => setTestMessage(e.target.value)}
+                      placeholder="Type custom prompt..."
+                      className="w-full bg-black/40 border border-white/5 text-xs text-white p-3 rounded-xl focus:outline-none min-h-[60px] font-sans"
+                    />
+                  </div>
+
+                  {/* Action invoke */}
+                  <button
+                    onClick={async () => {
+                      setTestingAiConnection(true);
+                      setTestResult(null);
+                      const startTime = Date.now();
+                      try {
+                        const res = await fetch('/api/gemini/blood-assistant', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            message: testMessage,
+                            history: [],
+                            slots: {},
+                            currentUserPhone: adminUser?.phoneNumber || '',
+                            donors: [],
+                            settings: settings ? {
+                              aiEnginePreference: settings.aiEnginePreference,
+                              geminiApiKeyOverride: settings.geminiApiKeyOverride,
+                              groqApiKeyOverride: settings.groqApiKeyOverride,
+                              aiDailyLimit: settings.aiDailyLimit,
+                              aiTodayUsageCount: settings.aiTodayUsageCount
+                            } : null
+                          })
+                        });
+                        const data = await res.json();
+                        // Client-side auto-update settings today count in Firestore
+                        if (data && typeof data.updatedUsageCount === 'number') {
+                          try {
+                            const globalDocRef = doc(db, 'settings', 'global');
+                            await setDoc(globalDocRef, {
+                              aiTodayUsageCount: data.updatedUsageCount,
+                              aiTodayResetDate: new Date().toISOString().split('T')[0]
+                            }, { merge: true });
+                          } catch (writeErr) {
+                            console.warn("Client side settings update failed (expected if non-admin):", writeErr);
+                          }
+                        }
+                        const latency = Date.now() - startTime;
+                        setTestResult({
+                          success: true,
+                          respStatus: res.status,
+                          latencyMs: latency,
+                          payload: data
+                        });
+                      } catch (err: any) {
+                        setTestResult({
+                          success: false,
+                          error: err.message || "Failed connection"
+                        });
+                      } finally {
+                        setTestingAiConnection(false);
+                      }
+                    }}
+                    disabled={testingAiConnection}
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 rounded-xl text-white font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                  >
+                    {testingAiConnection ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Megaphone className="w-3 h-3" />
+                    )}
+                    Send API Request (টেস্ট করুন)
+                  </button>
+                </div>
+
+                {/* API JSON View Outlet */}
+                <div className="mt-4 pt-4 border-t border-white/5 space-y-2">
+                  <p className="text-[8px] font-black text-white/40 uppercase tracking-widest px-1">HTTP Responses logs</p>
+                  <div className="bg-black/80 rounded-xl p-3 h-[180px] overflow-y-auto font-mono text-[10px] space-y-2 text-emerald-400 shadow-inner border border-white/5">
+                    {testingAiConnection && (
+                      <p className="text-white/60 animate-pulse">Running live API call... awaiting model tokens...</p>
+                    )}
+                    {!testingAiConnection && !testResult && (
+                      <p className="text-white/30 text-center py-12 italic">Click Send API Request to test keys & latency live</p>
+                    )}
+                    {testResult && (
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-[9px]">
+                          <span className={`px-1.5 py-0.5 rounded text-white ${testResult.success ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+                            {testResult.success ? 'SUCCESS' : 'ERROR'}
+                          </span>
+                          {testResult.latencyMs && (
+                            <span className="text-white/50">{testResult.latencyMs} ms latency</span>
+                          )}
+                        </div>
+                        <pre className="text-[9px] whitespace-pre-wrap text-emerald-300">
+                          {JSON.stringify(testResult.payload, null, 2) || JSON.stringify(testResult, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+          </motion.div>
+        )}
 
         {tab === 'system' && (
           <motion.div 
