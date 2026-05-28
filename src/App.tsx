@@ -6849,59 +6849,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                </div>
             </div>
 
-            {/* Login Page Settings */}
-            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
-               <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none text-slate-900">
-                 <LogIn className="w-32 h-32" />
-               </div>
-               
-               <div className="relative z-10">
-                 <div className="flex items-center gap-3 mb-8">
-                    <div className="w-10 h-10 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-200">
-                      <LogIn className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-slate-900 tracking-tight">Login Page Settings</h3>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Visibility Controls</p>
-                    </div>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { key: 'showLoginGoogle', label: 'Google Login', desc: 'Enable sign-in with Google' },
-                    { key: 'showLoginOrg', label: 'Register Org', desc: 'Show organization register button' },
-                    { key: 'showLoginGuest', label: 'Guest Access', desc: 'Show "Access without Login"' }
-                  ].map((item) => (
-                    <div key={item.key} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
-                      <button 
-                        onClick={async () => {
-                          try {
-                            const currentVal = (settings as any)?.[item.key] !== false;
-                            await setDoc(doc(db, 'settings', 'global'), {
-                              [item.key]: !currentVal,
-                              updatedAt: serverTimestamp()
-                            }, { merge: true });
-                            addToast("Setting Updated", `${item.label} updated.`, 'success');
-                          } catch (e) {
-                            handleFirestoreError(e, OperationType.UPDATE, 'settings/global');
-                          }
-                        }}
-                        className={`w-10 h-5 rounded-full relative transition-colors shrink-0 ${((settings as any)?.[item.key] !== false) ? 'bg-green-500' : 'bg-slate-300'}`}
-                      >
-                        <motion.div 
-                          animate={{ x: ((settings as any)?.[item.key] !== false) ? 22 : 2 }}
-                          className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm"
-                        />
-                      </button>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-900 uppercase tracking-wider">{item.label}</p>
-                        <p className="text-[8px] text-slate-400 font-bold">{item.desc}</p>
-                      </div>
-                    </div>
-                  ))}
-                 </div>
-               </div>
-            </div>
+
 
             <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden mt-6 mb-6">
                <div className="absolute top-0 right-0 p-8 opacity-[0.03] pointer-events-none text-slate-900">
