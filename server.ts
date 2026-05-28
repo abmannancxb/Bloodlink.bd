@@ -145,50 +145,86 @@ async function startServer() {
   // AI Blood Assistant API Route
   app.post("/api/gemini/blood-assistant", async (req, res) => {
     try {
-      const { message, history, slots } = req.body;
+      const { message, history, slots, currentUserPhone, donors } = req.body;
       
       const locationsPreview = Object.keys(BANGLADESH_LOCATIONS).reduce((acc, dist) => {
         acc[dist] = BANGLADESH_LOCATIONS[dist];
         return acc;
       }, {} as any);
 
-      const systemInstruction = `You are a helpful standard Bangla (বাংলাদেশী বাংলা) voice assistant for 'BloodLink Bangladesh'.
-Your EXCLUSIVE task is to get exactly 3 parameters from the user to search for a blood donor. The three fields are: 'bloodGroup', 'district', and 'thana'. DO NOT ask for anything else.
+      // Simple JSON formatted view of available donors for lookup
+      const simpleDonorsList = Array.isArray(donors) ? donors.map((d: any) => ({
+        name: d.displayName || d.name || '',
+        bloodGroup: d.bloodGroup || '',
+        lastDonationDate: d.lastDonationDate || 'কখনো রক্ত দেননি বা তথ্য নেই',
+        nextDonationEligibility: d.nextDonationEligibility || 'রক্ত দেওয়ার জন্য উপযুক্ত',
+        district: d.district || '',
+        thana: d.thana || ''
+      })) : [];
 
-CRITICAL INSTRUCTIONS FOR CONVERSATIONAL MEMORY AND FIELD CAPTURE:
-1. SLOT MEMORY RETENTION: You MUST carry forward and return the non-null values provided below in "Current extracted slots state from previous turns" in your final JSON response keys ('bloodGroup', 'district', 'thana'). NEVER reset them to null if they were already captured in previous turns unless the user specifically speaks a new/different value for that field.
+      const systemInstruction = `You are an intelligent standard Bangla (বাংলাদেশী বাংলা) voice and text assistant for 'BloodLink Bangladesh'.
 
-2. EXTRACTION ON ANY ENTRY ORDER: The user might say these fields in any random order or all together (e.g. "মিরপুর" first, or "ঢাকা ও পজিটিভ" first). Carefully extract them whenever they are mentioned in any format:
-   - 'bloodGroup': Valid values are A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize "ও পজিটিভ", "বি পজিটিভ", "বি নেগেティブ", "O positive" etc. to their standard English labels like "O+", "B+", "B-", "AB+".
-   - 'district': Match and normalize any Bangla/English district names to the English district key from BANGLADESH_LOCATIONS (e.g. "ঢাকা" -> "Dhaka", "চট্টগ্রাম" -> "Chittagong", "সিলেট" -> "Sylhet").
-   - 'thana': Match the Thana/sub-district with values in BANGLADESH_LOCATIONS. (e.g. "মিরপুর" -> "Mirpur", "খিলগাঁও" -> "Khilgaon").
+Core Capabilities & Conversational Paths:
+You support exactly TWO primary workflows (A and B), a specific Lookup capability (C), and you STRICTLY reject anything else (D).
 
-3. CONVERSATIONAL DIRECTIVENESS & STEPS (ONLY ASK MISSING FIELDS):
-   - Every response must look at what is still missing among 'bloodGroup', 'district', and 'thana' based on both previous slots and the new message.
-   - If 'bloodGroup' is missing: Say: "আপনার কোন গ্রুপের রক্ত লাগবে?"
-   - If 'bloodGroup' is present but 'district' is missing: Say: "কোন জেলায় রক্ত প্রয়োজন?"
-   - If 'bloodGroup' and 'district' are present but 'thana' is missing: Say: "উক্ত জেলার কোন থানায় রক্ত লাগবে?"
-   - Do NOT ask more than one question at a time. Do NOT ask for health conditions, hospital names, or patient descriptions. Only ask for the missing slot of these three.
+PATH A: Donor Search ("taskMode": "search_donors")
+- Use when the user wants to search/find/match donors by blood group and location.
+- You must collect exactly 3 parameters: 'bloodGroup', 'district', and 'thana'. DO NOT ask for anything else in this mode.
+- Valid bloodGroup values: A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize terms like "ও পজিটিভ", "বি পজিটিভ" to standard English "O+", "B+", etc.
+- Match Bangla/English locations to the BANGLADESH_LOCATIONS keys (English) like "Dhaka", "Chittagong" or sub-districts like "Mirpur", "Uttara".
 
-4. TRIGGER SEARCH:
-   - When all 3 fields ('bloodGroup', 'district', 'thana') are filled, set 'actionTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার দেওয়া গ্রুপ এবং এলাকা অনুযায়ী রক্তদাতা খুঁজে দিচ্ছি।" (Thank you, I am finding donor based on your group and location).
+PATH B: Post Blood Request ("taskMode": "create_request")
+- Use when the user states they want to create/post a blood request (e.g. "আমি একটি রক্তের আবেদন পোস্ট করতে চাই", "একটি রিকোয়েস্ট তৈরি করুন", "আবেদন করুন").
+- You must collect 5 slots: 'bloodGroup', 'district', 'thana', 'hospital' (hospital name), and 'medicalReason' (রোগীর সমস্যা বা কারণ).
+- Standard 'contactPhone' tracking:
+  * The user's account phone number provides a default ("currentUserPhone" is: '${currentUserPhone || ''}').
+  * If "currentUserPhone" is provided and not empty, set 'contactPhone' to it and tell the user: "আপনার একাউন্ট থেকে ফোন নম্বরটি (${currentUserPhone}) নিয়ে নিয়েছি।"
+  * If "currentUserPhone" is missing, ask the user politely for an active contact phone number. If they provide it, extract it.
+
+PATH C: Donor Lookup ("taskMode": "donor_lookup")
+- Use when the user asks about a specific donor by name (e.g. "রফিক শেষ কবে রক্ত দিয়েছে?", "করিমের রক্তের গ্রুপ কী?", "করিম কি রক্ত দিতে পারবে?").
+- Match the requested name in the provided 'donors' list below.
+- Respond with: Name, Blood Group, Last Donation Date ("শেষ কবে দিয়েছে"), and eligibility/duration info in standard polite Bangla.
+- Available Donors List:
+  ${JSON.stringify(simpleDonorsList)}
+
+PATH D: Out-of-Scope Rule (CRITICAL REJECTION)
+- If the user asks general questions, math puzzles, coding questions, general advice, or anything irrelevant to BloodLink, blood donor searching, request creation, or donor lookups, you MUST respond EXACTLY with the following Bangla sentence and absolutely nothing else:
+  "অনুগ্রহ করে আমি এর বাহিরে সহযোগিতা করতে পারব না ক্ষমা করবেন।"
+  Set "taskMode" to "idle", "actionTriggered" to false, and "requestFormTriggered" to false. Do not collect any parameters.
+
+Conversational Steps & Parameter Memory Rules:
+1. SLOT RETENTION: You MUST carry forward and return the non-null values provided in "Current extracted slots state" in your final JSON response keys ('bloodGroup', 'district', 'thana', 'hospital', 'medicalReason', 'contactPhone'). NEVER reset or forget them unless the user changes them.
+2. Directivenes: Ask only for ONE missing slot at a time, based on the selected mode:
+   - For Path A: ask in the order: bloodGroup -> district -> thana.
+   - For Path B: ask in the order: bloodGroup -> district -> thana -> hospital -> medicalReason -> contactPhone.
+3. TRIGGER FORWARDING:
+   - Path A: When all 3 fields ('bloodGroup', 'district', 'thana') are filled, set 'actionTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার দেওয়া গ্রুপ এবং এলাকা অনুযায়ী রক্তদাতা খুঁজে দিচ্ছি।"
+   - Path B: When all 5 request parameters and phone are filled, set 'requestFormTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার দেওয়া তথ্যগুলো দিয়ে রক্তের রিকোয়েস্ট তৈরি করে দিচ্ছি।"
 
 Current extracted slots state from previous turns:
 - bloodGroup: ${slots?.bloodGroup || 'null'}
 - district: ${slots?.district || 'null'}
 - thana: ${slots?.thana || 'null'}
+- hospital: ${slots?.hospital || 'null'}
+- medicalReason: ${slots?.medicalReason || 'null'}
+- contactPhone: ${slots?.contactPhone || 'null'}
+- activeMode: ${slots?.taskMode || 'idle'}
 
 Valid locations map for matching districts and thanas (English names):
 ${JSON.stringify(locationsPreview)}
 
-You must output STRICT valid JSON matching the following schema. Always answer in clear, polite standard Bangla dialogue.
+Always output STRICT valid JSON matching the following schema. Always answer in clear, polite standard Bangla dialogue.
 Response JSON Schema:
 {
-  "replyText": string (Bangla dialogue response),
-  "bloodGroup": string or null (e.g. "O+", "A+", "B-", etc),
-  "district": string or null (matching keys of BANGLADESH_LOCATIONS in English like "Dhaka"),
-  "thana": string or null (matching values of BANGLADESH_LOCATIONS in English like "Mirpur"),
-  "intentType": "search_donors" | "create_request" | "greeting" | "unknown",
+  "replyText": string (Bangla response),
+  "bloodGroup": string or null (e.g. "O+", "A+", etc),
+  "district": string or null (matching keys of BANGLADESH_LOCATIONS like "Dhaka"),
+  "thana": string or null (matching values of BANGLADESH_LOCATIONS like "Mirpur"),
+  "hospital": string or null,
+  "medicalReason": string or null,
+  "contactPhone": string or null,
+  "taskMode": "search_donors" | "create_request" | "donor_lookup" | "idle",
   "actionTriggered": boolean,
   "requestFormTriggered": boolean
 }`;
@@ -225,7 +261,10 @@ Response JSON Schema:
             bloodGroup: null,
             district: null,
             thana: null,
-            intentType: "unknown",
+            hospital: null,
+            medicalReason: null,
+            contactPhone: null,
+            taskMode: "idle",
             actionTriggered: false,
             requestFormTriggered: false
           });
@@ -265,11 +304,25 @@ Response JSON Schema:
                 bloodGroup: { type: Type.STRING },
                 district: { type: Type.STRING },
                 thana: { type: Type.STRING },
-                intentType: { type: Type.STRING },
+                hospital: { type: Type.STRING },
+                medicalReason: { type: Type.STRING },
+                contactPhone: { type: Type.STRING },
+                taskMode: { type: Type.STRING },
                 actionTriggered: { type: Type.BOOLEAN },
                 requestFormTriggered: { type: Type.BOOLEAN }
               },
-              required: ["replyText", "bloodGroup", "district", "thana", "intentType", "actionTriggered", "requestFormTriggered"]
+              required: [
+                "replyText", 
+                "bloodGroup", 
+                "district", 
+                "thana", 
+                "hospital", 
+                "medicalReason", 
+                "contactPhone", 
+                "taskMode", 
+                "actionTriggered", 
+                "requestFormTriggered"
+              ]
             }
           }
         });
@@ -277,7 +330,29 @@ Response JSON Schema:
         responseText = response.text || "{}";
       }
 
-      const data = JSON.parse(responseText.trim());
+      // Safe robust JSON cleaning/parsing to support formatting quirks
+      let data: any = {};
+      try {
+        let cleanText = responseText.trim();
+        if (cleanText.startsWith("```")) {
+          cleanText = cleanText.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/, "").trim();
+        }
+        data = JSON.parse(cleanText);
+      } catch (parseErr) {
+        console.error("JSON parse error:", parseErr, "Raw response was:", responseText);
+        data = {
+          replyText: "আমি বুঝতে পেরেছি, দয়া করে আবার বলুন।",
+          bloodGroup: slots?.bloodGroup || null,
+          district: slots?.district || null,
+          thana: slots?.thana || null,
+          hospital: slots?.hospital || null,
+          medicalReason: slots?.medicalReason || null,
+          contactPhone: slots?.contactPhone || null,
+          taskMode: slots?.taskMode || "idle",
+          actionTriggered: false,
+          requestFormTriggered: false
+        };
+      }
 
       // Server-side fallback/carry-forward of slots to prevent the AI from ever forgetting them
       const cleanInputSlot = (val: any) => {
@@ -290,30 +365,46 @@ Response JSON Schema:
       const prevBloodGroup = cleanInputSlot(slots?.bloodGroup);
       const prevDistrict = cleanInputSlot(slots?.district);
       const prevThana = cleanInputSlot(slots?.thana);
+      const prevHospital = cleanInputSlot(slots?.hospital);
+      const prevMedicalReason = cleanInputSlot(slots?.medicalReason);
+      const prevContactPhone = cleanInputSlot(slots?.contactPhone);
 
       const returnedBloodGroup = cleanInputSlot(data.bloodGroup);
       const returnedDistrict = cleanInputSlot(data.district);
       const returnedThana = cleanInputSlot(data.thana);
+      const returnedHospital = cleanInputSlot(data.hospital);
+      const returnedMedicalReason = cleanInputSlot(data.medicalReason);
+      const returnedContactPhone = cleanInputSlot(data.contactPhone);
 
-      if (!returnedBloodGroup && prevBloodGroup) {
-        data.bloodGroup = prevBloodGroup;
-      }
-      if (!returnedDistrict && prevDistrict) {
-        data.district = prevDistrict;
-      }
-      if (!returnedThana && prevThana) {
-        data.thana = prevThana;
+      if (!returnedBloodGroup && prevBloodGroup) data.bloodGroup = prevBloodGroup;
+      if (!returnedDistrict && prevDistrict) data.district = prevDistrict;
+      if (!returnedThana && prevThana) data.thana = prevThana;
+      if (!returnedHospital && prevHospital) data.hospital = prevHospital;
+      if (!returnedMedicalReason && prevMedicalReason) data.medicalReason = prevMedicalReason;
+      if (!returnedContactPhone && prevContactPhone) data.contactPhone = prevContactPhone;
+
+      // Handle automatic auto-loaded user phone integration if in create_request mode
+      if (data.taskMode === 'create_request' && !data.contactPhone && currentUserPhone) {
+        data.contactPhone = currentUserPhone;
+        if (!data.replyText.includes(currentUserPhone)) {
+          data.replyText = `অবশ্যই, আমি আপনার একাউন্টের সচল ফোন নম্বরটি (${currentUserPhone}) সংযুক্ত করে নিয়েছি। ` + data.replyText;
+        }
       }
 
-      // If all three slots are filled, force actionTriggered to be true
+      // Standard trigger validation for search donor mode
       const finalBloodGroup = cleanInputSlot(data.bloodGroup);
       const finalDistrict = cleanInputSlot(data.district);
       const finalThana = cleanInputSlot(data.thana);
 
-      if (finalBloodGroup && finalDistrict && finalThana) {
+      if (data.taskMode === 'search_donors' && finalBloodGroup && finalDistrict && finalThana) {
         data.actionTriggered = true;
-        // Adjust response greeting slightly to reflect search launch
         data.replyText = data.replyText || "ধন্যবাদ, আমি আপনার দেওয়া গ্রুপ এবং এলাকা অনুযায়ী রক্তদাতা খুঁজে দিচ্ছি।";
+      }
+
+      // Standard trigger validation for request posting mode
+      if (data.taskMode === 'create_request' && finalBloodGroup && finalDistrict && finalThana && data.hospital && data.medicalReason && data.contactPhone) {
+        data.requestFormTriggered = true;
+        data.replyText = data.replyText || "ধন্যবাদ, আমি আপনার দেওয়া তথ্যগুলো দিয়ে রক্তের রিকোয়েস্ট তৈরি করে দিচ্ছি।";
       }
 
       res.json({ success: true, ...data });

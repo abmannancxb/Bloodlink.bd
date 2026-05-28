@@ -354,6 +354,7 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
+  const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
   const activeChatRef = useRef<Chat | null>(null);
   const profileScrollRef = useRef<HTMLDivElement | null>(null);
   const profileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -3831,11 +3832,18 @@ export default function App() {
           <motion.div key="request-form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
             <div className="max-w-4xl mx-auto pb-4">
               <RequestForm 
-                onCancel={() => setView('requests')} 
-                onSuccess={() => setView('requests')}
+                onCancel={() => {
+                  setAiPreloadedRequest(null);
+                  setView('requests');
+                }} 
+                onSuccess={() => {
+                  setAiPreloadedRequest(null);
+                  setView('requests');
+                }}
                 user={user}
                 notifyAdmins={notifyAdmins}
                 settings={settings}
+                aiRequestData={aiPreloadedRequest}
               />
             </div>
           </motion.div>
@@ -4510,11 +4518,15 @@ export default function App() {
           if (thana) setFilterThana(thana);
           addToast("এআই সহকারী", `রক্তদাতা বা রক্তের গ্রুপ খুঁজছি: ${bloodGroup || ''} (${district || ''}, ${thana || ''})`, 'info');
         }}
-        onOpenRequestForm={() => {
+        onOpenRequestForm={(preloadedData) => {
+          if (preloadedData) {
+            setAiPreloadedRequest(preloadedData);
+          }
           if (user) setView('request-form');
           else handleLogin();
         }}
         currentUser={user}
+        allUsers={allUsers}
       />
 
       <nav className="fixed bottom-0 sm:bottom-4 left-0 sm:left-4 right-0 sm:right-4 max-w-lg sm:mx-auto h-16 bg-white/95 backdrop-blur-md sm:rounded-2xl border-t sm:border border-slate-200/50 px-3 flex justify-around items-center z-[100] shadow-[0_-10px_35px_rgba(15,23,42,0.03)] sm:shadow-[0_12px_40px_rgba(15,23,42,0.12)]">
@@ -9073,20 +9085,20 @@ function DonorCard({ donor, onMessage, onViewProfile, currentUserProfile, showTh
   );
 }
 
-function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings }: { onCancel: () => void, onSuccess: () => void, user: FirebaseUser, notifyAdmins: (title: string, body: string, link?: string) => Promise<void>, settings: SystemSettings | null }) {
+function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings, aiRequestData }: { onCancel: () => void, onSuccess: () => void, user: FirebaseUser, notifyAdmins: (title: string, body: string, link?: string) => Promise<void>, settings: SystemSettings | null, aiRequestData?: any }) {
   const placesLib = useMapsLibrary('places');
   const [formData, setFormData] = useState({
-    bloodGroup: '',
-    district: '',
-    thana: '',
-    hospital: '',
-    hospitalAddress: '',
+    bloodGroup: aiRequestData?.bloodGroup || '',
+    district: aiRequestData?.district || '',
+    thana: aiRequestData?.thana || '',
+    hospital: aiRequestData?.hospital || '',
+    hospitalAddress: aiRequestData?.hospitalAddress || aiRequestData?.hospital || '',
     lat: 0,
     lng: 0,
     unitsNeeded: 1,
     urgency: 'Normal' as 'Urgent' | 'Normal',
-    medicalReason: '',
-    contactPhone: ''
+    medicalReason: aiRequestData?.medicalReason || '',
+    contactPhone: aiRequestData?.contactPhone || user?.phoneNumber || ''
   });
   const [submitting, setSubmitting] = useState(false);
   const [hospitals, setHospitals] = useState<{name: string, address: string, lat: number, lng: number}[]>([]);

@@ -18,8 +18,9 @@ import {
 
 interface AIBloodAssistantProps {
   onSearchDonors: (bloodGroup: string, district: string, thana: string) => void;
-  onOpenRequestForm: () => void;
+  onOpenRequestForm: (preloadedData?: any) => void;
   currentUser: any;
+  allUsers?: any[];
 }
 
 interface Message {
@@ -33,12 +34,17 @@ interface Slots {
   bloodGroup: string | null;
   district: string | null;
   thana: string | null;
+  hospital: string | null;
+  medicalReason: string | null;
+  contactPhone: string | null;
+  taskMode: 'search_donors' | 'create_request' | 'donor_lookup' | 'idle';
 }
 
 export default function AIBloodAssistant({ 
   onSearchDonors, 
   onOpenRequestForm, 
-  currentUser 
+  currentUser,
+  allUsers = []
 }: AIBloodAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -51,7 +57,11 @@ export default function AIBloodAssistant({
   const [slots, setSlots] = useState<Slots>({
     bloodGroup: null,
     district: null,
-    thana: null
+    thana: null,
+    hospital: null,
+    medicalReason: null,
+    contactPhone: null,
+    taskMode: 'idle'
   });
 
   const recognitionRef = useRef<any>(null);
@@ -208,7 +218,11 @@ export default function AIBloodAssistant({
     setSlots({
       bloodGroup: null,
       district: null,
-      thana: null
+      thana: null,
+      hospital: null,
+      medicalReason: null,
+      contactPhone: null,
+      taskMode: 'idle'
     });
     const resetText = "আমি আমাদের আলোচনা পুনরায় প্রথম থেকে শুরু করছি। বলুন, আপনার কি সহযোগিতা লাগবে?";
     setMessages([
@@ -249,7 +263,9 @@ export default function AIBloodAssistant({
         body: JSON.stringify({
           message: textToSend,
           history: messages.map(m => ({ role: m.role, text: m.text })),
-          slots: slots
+          slots: slots,
+          currentUserPhone: currentUser?.phone || currentUser?.phoneNumber || '',
+          donors: allUsers
         })
       });
 
@@ -267,10 +283,14 @@ export default function AIBloodAssistant({
         };
         
         // Update Slots matching rules
-        const updatedSlots = {
+        const updatedSlots: Slots = {
           bloodGroup: cleanSlot(resData.bloodGroup) || slots.bloodGroup,
           district: cleanSlot(resData.district) || slots.district,
-          thana: cleanSlot(resData.thana) || slots.thana
+          thana: cleanSlot(resData.thana) || slots.thana,
+          hospital: cleanSlot(resData.hospital) || slots.hospital,
+          medicalReason: cleanSlot(resData.medicalReason) || slots.medicalReason,
+          contactPhone: cleanSlot(resData.contactPhone) || slots.contactPhone,
+          taskMode: resData.taskMode || slots.taskMode || 'idle'
         };
         setSlots(updatedSlots);
 
@@ -288,7 +308,7 @@ export default function AIBloodAssistant({
         speakText(assistantText);
 
         // Check if full search action is triggered
-        if (resData.actionTriggered && updatedSlots.bloodGroup) {
+        if (resData.actionTriggered && updatedSlots.bloodGroup && updatedSlots.taskMode === 'search_donors') {
           setTimeout(() => {
             onSearchDonors(
               updatedSlots.bloodGroup!, 
@@ -300,11 +320,18 @@ export default function AIBloodAssistant({
         }
 
         // Check if request form is triggered
-        if (resData.requestFormTriggered) {
+        if (resData.requestFormTriggered || (updatedSlots.taskMode === 'create_request' && updatedSlots.bloodGroup && updatedSlots.district && updatedSlots.thana && updatedSlots.hospital && updatedSlots.medicalReason)) {
           setTimeout(() => {
-            onOpenRequestForm();
+            onOpenRequestForm({
+              bloodGroup: updatedSlots.bloodGroup || '',
+              district: updatedSlots.district || '',
+              thana: updatedSlots.thana || '',
+              hospital: updatedSlots.hospital || '',
+              medicalReason: updatedSlots.medicalReason || '',
+              contactPhone: updatedSlots.contactPhone || ''
+            });
             handleCloseAssistant();
-          }, 3500);
+          }, 4000);
         }
 
       } else {
@@ -422,19 +449,50 @@ export default function AIBloodAssistant({
               </div>
 
               {/* Real-time parameters Slot Board */}
-              <div className="bg-slate-50 border-b border-slate-100 p-3 flex justify-around text-xs font-bold text-slate-600 gap-2">
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                  <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
-                  <span>রক্তের গ্রুপ: {slots.bloodGroup || 'জিজ্ঞেস করা হবে'}</span>
-                </div>
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>জেলা: {slots.district || 'জিজ্ঞেস করা হবে'}</span>
-                </div>
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                  <MapPin className="w-3.5 h-3.5" />
-                  <span>থানা: {slots.thana || 'জিজ্ঞেস করা হবে'}</span>
-                </div>
+              <div className="bg-slate-50 border-b border-slate-100 p-3 flex gap-2 text-[10px] font-bold text-slate-600 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
+                {slots.taskMode === 'create_request' ? (
+                  <>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
+                      <span>গ্রুপ: {slots.bloodGroup || 'প্রয়োজন'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      <span>জেলা: {slots.district || 'প্রয়োজন'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      <span>থানা: {slots.thana || 'প্রয়োজন'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.hospital ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <HelpCircle className="w-3.5 h-3.5 text-teal-500" />
+                      <span>হাসপাতাল: {slots.hospital || 'প্রয়োজন'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.medicalReason ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
+                      <span>সমস্যা: {slots.medicalReason || 'প্রয়োজন'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.contactPhone ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                      <span>নম্বর: {slots.contactPhone || 'প্রয়োজন'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
+                      <span>রক্তের গ্রুপ: {slots.bloodGroup || 'জিজ্ঞেস করা হবে'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      <span>জেলা: {slots.district || 'জিজ্ঞেস করা হবে'}</span>
+                    </div>
+                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                      <span>থানা: {slots.thana || 'জিজ্ঞেস করা হবে'}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Voice Pulse Status Bar */}
@@ -521,18 +579,45 @@ export default function AIBloodAssistant({
               </div>
 
               {/* Slot completeness visual notification */}
-              {slots.bloodGroup && (
+              {slots.taskMode === 'create_request' && slots.bloodGroup && slots.district && slots.thana && slots.hospital && slots.medicalReason && (
+                <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between text-xs text-emerald-800 font-bold">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                    <span>প্রয়োজনীয় সব বিবরণ পেয়েছি! রক্তের রিকোয়েস্ট ফর্মটি সম্পূর্ণ করুন।</span>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      onOpenRequestForm({
+                        bloodGroup: slots.bloodGroup || '',
+                        district: slots.district || '',
+                        thana: slots.thana || '',
+                        hospital: slots.hospital || '',
+                        medicalReason: slots.medicalReason || '',
+                        contactPhone: slots.contactPhone || ''
+                      });
+                      handleCloseAssistant();
+                    }}
+                    className="bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] hover:bg-emerald-700 transition cursor-pointer shrink-0"
+                  >
+                    ফর্ম খুলুন
+                  </button>
+                </div>
+              )}
+
+              {slots.taskMode !== 'create_request' && slots.bloodGroup && (
                 <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between text-xs text-emerald-800 font-bold">
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600 fill-emerald-100" />
                     <span>প্রয়োজনীয় বিবরণ পেয়েছি! আমাদের ডাটাবেস থেকে অটো ও সরাসরি চেক করা হচ্ছে।</span>
                   </div>
                   <button 
+                    type="button"
                     onClick={() => {
                       onSearchDonors(slots.bloodGroup!, slots.district || '', slots.thana || '');
                       handleCloseAssistant();
                     }}
-                    className="bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] hover:bg-emerald-700 transition"
+                    className="bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] hover:bg-emerald-700 transition cursor-pointer shrink-0"
                   >
                     সার্চ দিন
                   </button>
