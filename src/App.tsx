@@ -606,8 +606,8 @@ export default function App() {
       let urlKey = view === 'feed' ? 'community' : view === 'requests' ? 'home' : view;
       let pathName = `/${urlKey}`;
       let searchStr = '';
-      let pageTitle = 'BloodLink Bangladesh | Find Urgent Blood Donors & Post Blood Needs';
-      let pageDesc = 'BloodLink Bangladesh connects blood donors and recipients across all districts of Bangladesh. Find voluntary blood donors for emergency blood needs instantly.';
+      let pageTitle = 'BloodLink Bangladesh | AI Blood Donation Platform';
+      let pageDesc = 'BloodLink Bangladesh is an AI-powered blood donation platform connecting blood donors and patients instantly across Bangladesh.';
       
       if (view === 'feed' && selectedStoryId) {
         pathName = `/story/${selectedStoryId}`;

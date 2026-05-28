@@ -1,9 +1,25 @@
 import express from "express";
 import path from "path";
 import fs from "fs/promises";
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import firebaseConfig from "./firebase-applet-config.json" with { type: "json" };
 
-// Helper function to generate complete sitemap content
-function getSitemapXml(): string {
+// Initialize firebase-admin safely
+try {
+  if (admin.apps.length === 0) {
+    admin.initializeApp({
+      projectId: firebaseConfig.projectId,
+    });
+  }
+} catch (err: any) {
+  console.error("Error initializing firebase-admin in server.ts:", err.message);
+}
+
+const adminDb = getFirestore(firebaseConfig.firestoreDatabaseId || "(default)");
+
+// Helper function to generate complete sitemap content asynchronously
+async function getSitemapXml(): Promise<string> {
   const host = 'bloodlink.bd';
   const baseUrl = `https://${host}`;
 
@@ -40,6 +56,7 @@ function getSitemapXml(): string {
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
 
+  // 1. Static views base
   views.forEach(v => {
     xml += `  <url>\n`;
     xml += `    <loc>${baseUrl}${v.path}</loc>\n`;
@@ -49,6 +66,69 @@ function getSitemapXml(): string {
     xml += `  </url>\n`;
   });
 
+  // 2. Dynamic Posts: Fetch all stories from Firestore and append /story/:id
+  try {
+    const postsSnapshot = await adminDb.collection("posts").get();
+    if (!postsSnapshot.empty) {
+      postsSnapshot.forEach(docSnap => {
+        const postData = docSnap.data();
+        if (postData && !postData.isHidden) {
+          const postId = docSnap.id;
+          
+          let postLastMod = lastMod;
+          try {
+            if (postData.createdAt) {
+              let dateObj: Date | null = null;
+              if (typeof postData.createdAt.toDate === "function") {
+                dateObj = postData.createdAt.toDate();
+              } else if (postData.createdAt._seconds) {
+                dateObj = new Date(postData.createdAt._seconds * 1000);
+              } else if (typeof postData.createdAt === "string" || typeof postData.createdAt === "number") {
+                dateObj = new Date(postData.createdAt);
+              } else if (postData.createdAt instanceof Date) {
+                dateObj = postData.createdAt;
+              }
+              if (dateObj && !isNaN(dateObj.getTime())) {
+                postLastMod = dateObj.toISOString().split("T")[0];
+              }
+            }
+          } catch (e) {
+            // fallback gracefully
+          }
+
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/story/${postId}</loc>\n`;
+          xml += `    <lastmod>${postLastMod}</lastmod>\n`;
+          xml += `    <changefreq>weekly</changefreq>\n`;
+          xml += `    <priority>0.75</priority>\n`;
+          xml += `  </url>\n`;
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn("Could not retrieve active posts for sitemap generation:", err.message);
+  }
+
+  // 3. Dynamic Public Donor Profiles to index people searching for blood group matching
+  try {
+    const usersSnapshot = await adminDb.collection("users").get();
+    if (!usersSnapshot.empty) {
+      usersSnapshot.forEach(docSnap => {
+        const userData = docSnap.data();
+        if (userData && userData.uid) {
+          xml += `  <url>\n`;
+          xml += `    <loc>${baseUrl}/public-profile?uid=${userData.uid}</loc>\n`;
+          xml += `    <lastmod>${lastMod}</lastmod>\n`;
+          xml += `    <changefreq>weekly</changefreq>\n`;
+          xml += `    <priority>0.6</priority>\n`;
+          xml += `  </url>\n`;
+        }
+      });
+    }
+  } catch (err: any) {
+    console.warn("Could not retrieve active user profiles for sitemap generation:", err.message);
+  }
+
   xml += `</urlset>`;
   return xml;
 }
@@ -57,17 +137,21 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Dynamic Sitemap
-  app.get(["/sitemap.xml", "/sitemap"], (req, res) => {
-    const xml = getSitemapXml();
-    res.header("Content-Type", "application/xml; charset=utf-8");
-    res.send(xml);
+  // Dynamic Sitemap with direct Firestore integration
+  app.get(["/sitemap.xml", "/sitemap"], async (req, res) => {
+    try {
+      const xml = await getSitemapXml();
+      res.header("Content-Type", "application/xml; charset=utf-8");
+      res.send(xml);
+    } catch (err: any) {
+      res.status(500).send("Error generating dynamic sitemap");
+    }
   });
 
-  // Admin API endpoint to generate sitemap
+  // Admin API endpoint to generate static sitemap snapshot
   app.post("/api/admin/generate-sitemap", async (req, res) => {
     try {
-      const xml = getSitemapXml();
+      const xml = await getSitemapXml();
 
       let publicWritten = false;
       let distWritten = false;
