@@ -445,7 +445,7 @@ export default function AIBloodAssistant({
                 onClick={handleOpenAssistant}
                 className="h-14 px-5 bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white rounded-full flex items-center gap-3 shadow-[0_12px_45px_rgba(220,38,38,0.45)] border-2 border-white/40 cursor-pointer select-none relative z-10 hover:scale-[1.06] hover:border-white active:scale-95 transition-all text-center"
                 style={{ touchAction: 'manipulation' }}
-                title="রক্তবন্ধু AI — আপনার এআই রক্তদাতা সাহায্যকারী"
+                title="রক্তবন্ধু AI সহকারী — আপনার এআই রক্তদাতা সাহায্যকারী"
                 id="ai-blood-assistant-floating-btn"
               >
                 {/* Micro Animated Pulse Avatar Dot/Icon */}
@@ -456,7 +456,7 @@ export default function AIBloodAssistant({
                 
                 <div className="flex flex-col text-left pr-1.5">
                   <span className="text-[12.5px] font-black uppercase tracking-wide text-white leading-tight flex items-center gap-1">
-                    রক্তবন্ধু AI <span className="text-[8px] bg-white text-red-600 font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 tracking-normal translate-y-[-0.5px]">LIVE</span>
+                    রক্তবন্ধু AI সহকারী <span className="text-[8px] bg-white text-red-600 font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 tracking-normal translate-y-[-0.5px]">LIVE</span>
                   </span>
                   <span className="text-[8.5px] font-bold text-red-100/90 tracking-widest uppercase leading-none mt-0.5">
                     কথা বলুন (Voice Helper)
@@ -503,7 +503,7 @@ export default function AIBloodAssistant({
                     <Droplet className="w-5 h-5 text-white fill-white animate-pulse" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider">রক্তবন্ধু AI</h3>
+                    <h3 className="text-sm font-black uppercase tracking-wider">রক্তবন্ধু AI সহকারী</h3>
                     <p className="text-[10px] text-red-100 font-medium">রক্তদাতা খুঁজুন এবং রক্তের রিকোয়েস্ট তৈরি করুন</p>
                   </div>
                 </div>
@@ -539,7 +539,7 @@ export default function AIBloodAssistant({
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
                   </span>
-                  রক্তবন্ধু AI ফর্ম তথ্য ট্র্যাকার
+                  রক্তবন্ধু AI সহকারী ফর্ম তথ্য ট্র্যাকার
                 </span>
                 <button
                   type="button"

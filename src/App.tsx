@@ -166,6 +166,10 @@ import {
   Info,
   Minus,
   Settings,
+  Pencil,
+  Trophy,
+  BarChart3,
+  MoreVertical,
   Share2,
   Copy,
   Award,
@@ -815,6 +819,8 @@ export default function App() {
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
   const [incomingCall, setIncomingCall] = useState<VoiceCall | null>(null);
   const [feedLimit, setFeedLimit] = useState(10);
+  const [joinedGroups, setJoinedGroups] = useState<string[]>(['Youth Donors BD']);
+  const [showCommunitySearchInsideFeed, setShowCommunitySearchInsideFeed] = useState(false);
   const [communityTab, setCommunityTab] = useState<'discover' | 'following' | 'verified'>('discover');
   const [communitySearch, setCommunitySearch] = useState('');
   const [activeTag, setActiveTag] = useState('');
@@ -3198,7 +3204,9 @@ export default function App() {
                       >
                         View All <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
                       </button>
-                               {/* 2. Top Analytics Metrics Strip */}
+                    </div>
+
+                    {/* 2. Top Analytics Metrics Strip */}
                     <div className="grid grid-cols-4 gap-2">
                       {/* Metric 1: Active Donor Count (All Bangladesh) */}
                       <div className="bg-white border border-slate-100/80 rounded-2xl p-2.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.015)] hover:border-red-100 transition-all select-none">
@@ -3243,7 +3251,7 @@ export default function App() {
                         <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 block h-5 leading-none">Districts Cover</p>
                         <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-emerald-50 text-[7.5px] text-emerald-600 rounded-full font-black uppercase tracking-wider leading-none">All BD Coverage</span>
                       </div>
-                    </div>           </div>
+                    </div>
 
                     {/* 3. Interactive MapView Card with Legend & Filter */}
                     <div className="relative bg-white border border-slate-100/90 rounded-[32px] p-2.5 shadow-lg shadow-slate-200/20 overflow-hidden flex flex-col pointer-events-auto">
@@ -3271,8 +3279,8 @@ export default function App() {
                       {/* Actual Interactive Google Map Frame with controlled height */}
                       <div className="h-[390px] w-full rounded-[26px] overflow-hidden relative z-10 border border-slate-100">
                         <MapView 
-                          requests={requests} 
-                          donors={activeDonors} 
+                          requests={requests.filter(r => !filterBloodGroup || r.bloodGroup === filterBloodGroup)} 
+                          donors={activeDonors.filter(d => !filterBloodGroup || d.bloodGroup === filterBloodGroup)} 
                           allUsers={allUsers}
                           apiKey={effectiveApiKey} 
                           mapId={effectiveMapId}
@@ -5492,21 +5500,21 @@ export default function App() {
         />
 
         {/* Special Middle Sparkle AI Button (Half inside the menu, half sticking up above) */}
-        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-5 h-20 pointer-events-auto select-none z-10">
+        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-10 h-20 pointer-events-auto select-none z-10">
           <button
             type="button"
             onClick={() => setIsAiAssistantOpen(true)}
-            className="w-14 h-14 bg-gradient-to-tr from-red-650 via-rose-550 to-rose-700 text-white rounded-full flex flex-col items-center justify-center shadow-[0_12px_28px_rgba(15,23,42,0.18)] border-4 border-white cursor-pointer select-none relative z-10 hover:scale-105 active:scale-95 transition-all duration-300"
+            className="w-17 h-17 bg-red-600 hover:bg-red-700 text-white rounded-full flex flex-col items-center justify-center shadow-[0_12px_32px_rgba(220,38,38,0.45)] border-4 border-white cursor-pointer select-none relative z-10 hover:scale-105 active:scale-95 transition-all duration-300"
             style={{ touchAction: 'manipulation' }}
-            title="রক্তবন্ধু AI — আপনার এআই রক্তদাতা সাহায্যকারী"
+            title="রক্তবন্ধু AI সহকারী — আপনার এআই রক্তদাতা সাহায্যকারী"
           >
-            <Sparkles className="w-5 h-5 text-white stroke-[2.5]" />
-            <span className="text-[8.5px] font-black uppercase tracking-wider text-red-50 -mt-0.5 leading-none">
-              AI সহচর
+            <Sparkles className="w-6.5 h-6.5 text-white stroke-[2.5]" />
+            <span className="text-[8.5px] font-black uppercase tracking-wider text-red-50 mt-0.5 leading-none">
+              AI সহকারী
             </span>
             
             {/* Live blinking radar badge on the button */}
-            <span className="absolute -bottom-1 px-2.5 py-0.5 bg-[#0e1726] text-white border border-slate-700 rounded-full flex items-center gap-1 scale-90 shadow-lg z-20">
+            <span className="absolute -bottom-1 px-2.5 py-0.5 bg-[#0e1726] text-white border border-slate-705 rounded-full flex items-center gap-1 scale-90 shadow-lg z-20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
               <span className="text-[6.5px] font-black tracking-widest leading-none">LIVE</span>
             </span>
@@ -16030,8 +16038,6 @@ function MapView({
               }}
             >
               <div className="flex flex-col items-center cursor-pointer transform hover:scale-110 transition-transform">
-                {/* Visual indicator of thana name */}
-                <span className="text-[8px] font-black text-slate-700 bg-white/95 backdrop-blur-sm px-1.5 py-0.5 rounded-md border border-slate-200 shadow-sm mb-1 uppercase tracking-wider">{t.thana}</span>
                 <div className="flex gap-1 items-center">
                   {showRequests && (
                     <div className={`flex items-center gap-1 px-1.5 h-[24px] rounded-full border border-white shadow-md text-white font-black text-[9px] transition-all shrink-0 ${t.urgencyCount > 0 ? 'bg-red-600 animate-pulse' : 'bg-slate-900'}`}>
@@ -16040,7 +16046,15 @@ function MapView({
                     </div>
                   )}
                   {showDonors && (
-                    <div className="flex items-center gap-1 px-1.5 h-[24px] rounded-full border border-white shadow-md text-white font-black text-[9px] bg-blue-600 shrink-0">
+                    <div className={`flex items-center gap-1 px-1.5 h-[24px] rounded-full border border-white shadow-md text-white font-black text-[9px] shrink-0 transition-all ${
+                      t.donorsCount <= 3 
+                        ? 'bg-[#10b981] shadow-[0_4px_12px_rgba(16,185,129,0.35)]' 
+                        : t.donorsCount <= 10 
+                        ? 'bg-[#06b6d4] shadow-[0_4px_12px_rgba(6,182,212,0.35)]' 
+                        : t.donorsCount <= 25 
+                        ? 'bg-[#2563eb] shadow-[0_4px_12px_rgba(37,99,235,0.35)]' 
+                        : 'bg-[#8b5cf6] shadow-[0_4px_12px_rgba(139,92,246,0.35)]'
+                    }`}>
                       <Users className="w-2.5 h-2.5" />
                       {t.donorsCount}
                     </div>
@@ -16084,9 +16098,12 @@ function MapView({
               <div className="w-px h-3 bg-slate-200"></div>
             )}
             {settings?.showDonorsOnMap !== false && (
-              <div className="flex items-center gap-1.5">
-                <div className="p-1 bg-blue-600 rounded-lg">
-                  <Users className="w-2.5 h-2.5 text-white" />
+              <div className="flex items-center gap-2 pr-0.5">
+                <div className="flex -space-x-1 items-center">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#10b981] border border-white shadow-sm" title="1-3 Donors" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#06b6d4] border border-white shadow-sm" title="4-10 Donors" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#2563eb] border border-white shadow-sm" title="11-25 Donors" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#8b5cf6] border border-white shadow-sm" title="26+ Donors" />
                 </div>
                 <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Donors</span>
               </div>
