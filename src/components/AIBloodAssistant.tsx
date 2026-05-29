@@ -63,6 +63,10 @@ export default function AIBloodAssistant({
   const [isThinking, setIsThinking] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [autoPilotMic, setAutoPilotMic] = useState<boolean>(() => {
+    return localStorage.getItem('auto_pilot_mic') !== 'false';
+  });
+  const [showSlotBoard, setShowSlotBoard] = useState(false);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [slots, setSlots] = useState<Slots>({
@@ -152,15 +156,15 @@ export default function AIBloodAssistant({
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      // Automatically resume listening if assistant is still open
-      if (isOpen) {
+      // Automatically resume listening if assistant is still open and autopilot is true
+      if (isOpen && autoPilotMic) {
         startListening();
       }
     };
 
     utterance.onerror = () => {
       setIsSpeaking(false);
-      if (isOpen) {
+      if (isOpen && autoPilotMic) {
         startListening();
       }
     };
@@ -436,10 +440,6 @@ export default function AIBloodAssistant({
             className="fixed z-[110] bottom-24 right-4 sm:right-6 select-none"
           >
             <div className="relative group">
-              {/* Premium pulsating glowing ring borders with gradients */}
-              <div className="absolute -inset-1 bg-gradient-to-r from-red-600 via-rose-500 to-orange-500 rounded-full blur-xl opacity-75 group-hover:opacity-100 transition duration-500 animate-pulse" />
-              <div className="absolute -inset-2.5 bg-gradient-to-r from-red-500 to-rose-600 rounded-full blur-2xl opacity-40 group-hover:opacity-60 transition duration-700 animate-pulse" style={{ animationDelay: '0.2s' }} />
-              
               <button
                 type="button"
                 onClick={handleOpenAssistant}
@@ -451,7 +451,7 @@ export default function AIBloodAssistant({
                 {/* Micro Animated Pulse Avatar Dot/Icon */}
                 <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center relative shadow-inner shrink-0">
                   <span className="absolute -inset-1 bg-white/30 rounded-full animate-ping opacity-60" />
-                  <Sparkles className="w-4 h-4 text-white stroke-[2.5]" />
+                  <Droplet className="w-4 h-4 text-white fill-white stroke-[2]" />
                 </div>
                 
                 <div className="flex flex-col text-left pr-1.5">
@@ -500,7 +500,7 @@ export default function AIBloodAssistant({
               <div className="bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="bg-white/15 p-2 rounded-xl">
-                    <Sparkles className="w-5 h-5 text-white animate-spin" style={{ animationDuration: '4s' }} />
+                    <Droplet className="w-5 h-5 text-white fill-white animate-pulse" />
                   </div>
                   <div>
                     <h3 className="text-sm font-black uppercase tracking-wider">রক্তবন্ধু AI</h3>
@@ -532,102 +532,142 @@ export default function AIBloodAssistant({
                 </div>
               </div>
 
-              {/* Real-time parameters Slot Board */}
-              <div className="bg-slate-50 border-b border-slate-100 p-3 flex gap-2 text-[10px] font-bold text-slate-600 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
-                {slots.taskMode === 'create_request' ? (
-                  <>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
-                      <span>গ্রুপ: {slots.bloodGroup || 'প্রয়োজন'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>জেলা: {slots.district || 'প্রয়োজন'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>থানা: {slots.thana || 'প্রয়োজন'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.hospital ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <HelpCircle className="w-3.5 h-3.5 text-teal-500" />
-                      <span>হাসপাতাল: {slots.hospital || 'প্রয়োজন'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.medicalReason ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
-                      <span>সমস্যা: {slots.medicalReason || 'প্রয়োজন'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.contactPhone ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
-                      <span>নম্বর: {slots.contactPhone || 'প্রয়োজন'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
-                      <span>রক্তের গ্রুপ: {slots.bloodGroup || 'জিজ্ঞেস করা হবে'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>জেলা: {slots.district || 'জিজ্ঞেস করা হবে'}</span>
-                    </div>
-                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>থানা: {slots.thana || 'জিজ্ঞেস করা হবে'}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Voice Pulse Status Bar */}
-              <div className="bg-slate-50/50 px-4 py-2.5 flex items-center justify-between text-xs border-b border-slate-100">
-                <div className="flex items-center gap-2">
-                  {isSpeaking && (
-                    <span className="flex gap-1 items-center">
-                      <span className="h-2 w-2 rounded-full bg-red-600 animate-ping" />
-                      <span className="text-red-700 font-extrabold animate-pulse">আমি বলছি...</span>
-                    </span>
-                  )}
-                  {isListening && (
-                    <span className="flex gap-1 items-center">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                      <span className="text-emerald-700 font-extrabold animate-pulse">মাইক্রোফোন অন (বলুন)...</span>
-                    </span>
-                  )}
-                  {isThinking && (
-                    <span className="flex gap-1 items-center">
-                      <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping" />
-                      <span className="text-blue-700 font-extrabold animate-pulse">তথ্য বিশ্লেষণ করছি...</span>
-                    </span>
-                  )}
-                  {!isSpeaking && !isListening && !isThinking && (
-                    <span className="text-slate-400 font-semibold">নিশ্চুপ (মাইক্রোফোন অফ)</span>
-                  )}
-                </div>
-
-                {/* Microphone Toggle Control */}
+              {/* Collapsible Info/Slot Tracker — Hidden by default ("উপরের প্রশ্ন গুলো হাইড থাকবে") */}
+              <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-bold">
+                <span className="flex items-center gap-1.5">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                  </span>
+                  রক্তবন্ধু AI ফর্ম তথ্য ট্র্যাকার
+                </span>
                 <button
                   type="button"
-                  onClick={isListening ? stopListening : startListening}
-                  disabled={isSpeaking || isThinking}
-                  className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 border transition-all ${
-                    isListening 
-                      ? 'bg-red-500 text-white border-red-500 hover:bg-red-600' 
-                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 disabled:opacity-50'
-                  }`}
+                  onClick={() => setShowSlotBoard(!showSlotBoard)}
+                  className="bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-[10px] text-red-600 font-black cursor-pointer transition select-none flex items-center gap-1 shrink-0"
                 >
-                  {isListening ? (
+                  {showSlotBoard ? "প্রশ্নসমূহ হাইড করুন" : "প্রশ্নসমূহ দেখুন"}
+                </button>
+              </div>
+
+              {showSlotBoard && (
+                <div className="bg-slate-50 border-b border-slate-100 p-3 flex gap-2 text-[10px] font-bold text-slate-600 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
+                  {slots.taskMode === 'create_request' ? (
                     <>
-                      <MicOff className="w-3 h-3 text-white" />
-                      <span>বন্ধ করুন</span>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
+                        <span>গ্রুপ: {slots.bloodGroup || 'প্রয়োজন'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                        <span>জেলা: {slots.district || 'প্রয়োজন'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                        <span>থানা: {slots.thana || 'প্রয়োজন'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.hospital ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <HelpCircle className="w-3.5 h-3.5 text-teal-500" />
+                        <span>হাসপাতাল: {slots.hospital || 'প্রয়োজন'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.medicalReason ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
+                        <span>সমস্যা: {slots.medicalReason || 'প্রয়োজন'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.contactPhone ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>নম্বর: {slots.contactPhone || 'প্রয়োজন'}</span>
+                      </div>
                     </>
                   ) : (
                     <>
-                      <Mic className="w-3 h-3 text-slate-500 animate-pulse" />
-                      <span>কথা বলুন</span>
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
+                        <span>রক্তের গ্রুপ: {slots.bloodGroup || 'জিজ্ঞেস করা হবে'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                        <span>জেলা: {slots.district || 'জিজ্ঞেস করা হবে'}</span>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
+                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                        <span>থানা: {slots.thana || 'জিজ্ঞেস করা হবে'}</span>
+                      </div>
                     </>
                   )}
-                </button>
+                </div>
+              )}
+
+              {/* Voice Pulse Status Bar with Autopilot microphone toggle */}
+              <div className="bg-slate-50/50 px-4 py-2.5 flex items-center justify-between text-[11px] border-b border-slate-100 gap-2 shrink-0">
+                <div className="flex items-center gap-2 overflow-hidden">
+                  {isSpeaking && (
+                    <span className="flex gap-1.5 items-center">
+                      <span className="h-2 w-2 rounded-full bg-red-600 animate-ping shrink-0" />
+                      <span className="text-red-700 font-extrabold animate-pulse truncate">আমি বলছি...</span>
+                    </span>
+                  )}
+                  {isListening && (
+                    <span className="flex gap-1.5 items-center">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                      <span className="text-emerald-700 font-extrabold animate-pulse truncate">মাইক্রোফোন অন...</span>
+                    </span>
+                  )}
+                  {isThinking && (
+                    <span className="flex gap-1.5 items-center">
+                      <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping shrink-0" />
+                      <span className="text-blue-700 font-extrabold animate-pulse truncate">বিশ্লেষণ করছি...</span>
+                    </span>
+                  )}
+                  {!isSpeaking && !isListening && !isThinking && (
+                    <span className="text-slate-400 font-bold truncate">নিশ্চুপ (মাইক অফ)</span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {/* Autopilot Mic Mode Toggle switch */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextVal = !autoPilotMic;
+                      setAutoPilotMic(nextVal);
+                      localStorage.setItem('auto_pilot_mic', String(nextVal));
+                    }}
+                    className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all ${
+                      autoPilotMic 
+                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
+                        : 'bg-white text-slate-500 border-slate-200'
+                    }`}
+                    title="অটো পাইলট মাইক অন থাকলে উত্তর দেওয়ার পরই মাইক নিজে থেকেই চালু হয়ে যাবে।"
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${autoPilotMic ? 'bg-rose-600 animate-pulse' : 'bg-slate-300'}`} />
+                    <span>অটো পাইলট: {autoPilotMic ? "অন" : "অফ"}</span>
+                  </button>
+
+                  {/* Microphone Manual Toggle Control */}
+                  <button
+                    type="button"
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={isSpeaking || isThinking}
+                    className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all ${
+                      isListening 
+                        ? 'bg-red-500 text-white border-red-500 hover:bg-red-600 shadow-sm' 
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 disabled:opacity-50 cursor-pointer'
+                    }`}
+                  >
+                    {isListening ? (
+                      <>
+                        <MicOff className="w-2.5 h-2.5 text-white" />
+                        <span>বন্ধ করুন</span>
+                      </>
+                    ) : (
+                      <>
+                        <Mic className="w-2.5 h-2.5 text-slate-500 animate-pulse" />
+                        <span>কথা বলুন</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Chat Messages Log */}
