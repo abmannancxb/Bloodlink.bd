@@ -821,6 +821,7 @@ export default function App() {
   const [feedLimit, setFeedLimit] = useState(10);
   const [joinedGroups, setJoinedGroups] = useState<string[]>(['Youth Donors BD']);
   const [showCommunitySearchInsideFeed, setShowCommunitySearchInsideFeed] = useState(false);
+  const [urgentIndex, setUrgentIndex] = useState(0);
   const [communityTab, setCommunityTab] = useState<'discover' | 'following' | 'verified'>('discover');
   const [communitySearch, setCommunitySearch] = useState('');
   const [activeTag, setActiveTag] = useState('');
@@ -4467,309 +4468,542 @@ export default function App() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="h-full overflow-y-auto pt-20 pb-20 p-4"
+              className="h-full overflow-y-auto pt-20 pb-20 p-4 bg-slate-50/50"
             >
-              <div className="max-w-4xl mx-auto pb-8">
-                {/* Community Header Card */}
-                <div className="mb-6 bg-gradient-to-br from-slate-900 via-slate-950 to-rose-950 rounded-[2.5rem] p-6 md:p-8 text-white relative overflow-hidden shadow-xl border border-white/5">
-                  <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1.5px, transparent 0)', backgroundSize: '24px 24px' }} />
-                  <div className="absolute -right-20 -bottom-20 w-80 h-80 bg-rose-500/10 rounded-full blur-3xl animate-pulse" />
-                  
-                  <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-                    <div className="space-y-2">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[10px] font-bold uppercase tracking-wider text-rose-300">
-                        <Flame className="w-3.5 h-3.5 animate-bounce text-rose-400" />
-                        <span>Connected Lifesavers</span>
-                      </div>
-                      <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Community Hub</h1>
-                      <p className="text-xs text-slate-350 max-w-sm leading-relaxed">
-                        Read emergency outcomes, share volunteer motivation, and see direct outcomes of blood donor drives inside Bangladesh.
-                      </p>
-                    </div>
-
+              <div className="max-w-2xl mx-auto pb-8">
+                {/* Community Header Card & Slogan matching screenshot */}
+                <div className="flex items-center justify-between mb-6 pt-2">
+                  <div>
+                    <h1 className="text-3xl font-black text-slate-800 tracking-tight">Community</h1>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Together we can save more lives ❤️</p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => user ? setView('post-opinion') : handleLogin()}
-                      className="bg-rose-600 hover:bg-rose-500 text-white px-6 py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-rose-950/40 cursor-pointer text-xs uppercase tracking-wider shrink-0"
+                      onClick={() => setShowCommunitySearchInsideFeed(!showCommunitySearchInsideFeed)}
+                      className={`p-2.5 rounded-full transition-all cursor-pointer ${showCommunitySearchInsideFeed ? 'bg-rose-50 text-[#ff1744]' : 'text-slate-600 hover:bg-slate-100'}`}
+                      title="Search Community"
                     >
-                      <Plus className="w-4 h-4" /> Share Your Story
+                      <Search className="w-5.2 h-5.2" />
+                    </button>
+                    <button 
+                      onClick={() => setView('notifications')}
+                      className="relative p-2.5 text-slate-605 hover:bg-slate-100 rounded-full transition-all cursor-pointer"
+                      title="Notifications"
+                    >
+                      <Bell className="w-5.2 h-5.2 text-slate-700" />
+                      <span className="absolute top-1.5 right-1.5 w-4.5 h-4.5 bg-red-650 text-[9px] font-black text-white bg-red-600 flex items-center justify-center rounded-full border border-white">3</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Who to Follow Discovery Section */}
-                {suggestedUsers.length > 0 && (
-                  <div className="mb-8 bg-slate-50 border border-slate-100 rounded-[2rem] p-5">
-                    <div className="flex items-center gap-2 mb-4 px-1">
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <h3 className="font-bold text-slate-800 text-sm tracking-tight">Active Bangladesh Lifesavers</h3>
-                    </div>
-                    <div className="flex gap-4 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2 snap-x">
-                      {suggestedUsers.map(suggestedUser => {
-                        const isFollowing = suggestedUser.followers?.includes(user?.uid || '');
-                        return (
-                          <div 
-                            key={suggestedUser.uid}
-                            className="flex-shrink-0 w-48 bg-white border border-slate-200/60 rounded-3xl p-4 shadow-sm hover:shadow-md transition-all snap-start flex flex-col items-center text-center relative overflow-hidden group"
-                          >
-                            <button 
-                              onClick={() => onViewProfile(suggestedUser.uid)}
-                              className="relative mb-3 group"
-                            >
-                              <img 
-                                src={suggestedUser.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(suggestedUser.displayName)}&background=random`} 
-                                alt={suggestedUser.displayName}
-                                className="w-16 h-16 rounded-[1.25rem] object-cover ring-4 ring-slate-100 group-hover:ring-rose-100 transition-all border border-slate-100"
-                              />
-                              {suggestedUser.isVerified && (
-                                <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 shadow-sm border border-slate-100">
-                                  <BadgeCheck className="w-4.5 h-4.5 text-blue-500 fill-white" />
-                                </div>
-                              )}
-                            </button>
-                            <h4 className="font-extrabold text-slate-800 text-xs line-clamp-1 mb-1 hover:text-rose-600 transition-colors cursor-pointer" onClick={() => onViewProfile(suggestedUser.uid)}>{suggestedUser.displayName}</h4>
-                            <p className="text-[9px] font-bold text-slate-550 mb-3 block">
-                              📍 {suggestedUser.thana || 'Dhaka'}
-                            </p>
-                            
-                            {user && (
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  try {
-                                    await updateDoc(doc(db, 'users', suggestedUser.uid), {
-                                      followers: isFollowing ? arrayRemove(user.uid) : arrayUnion(user.uid)
-                                    });
-                                    addToast(isFollowing ? "Unfollowed" : "Following", isFollowing ? `You are no longer following ${suggestedUser.displayName}.` : `You are now following ${suggestedUser.displayName}.`, 'success');
-                                  } catch (err) {
-                                    console.error("Follow failed:", err);
-                                    addToast("Error", "Action failed.", "error");
-                                  }
-                                }}
-                                className={`w-full py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${isFollowing ? 'bg-slate-100 text-slate-650 hover:bg-slate-200' : 'bg-slate-900 text-white hover:bg-slate-800 shadow-md'}`}
-                              >
-                                {isFollowing ? (
-                                  <Check className="w-3 h-3 text-slate-500" />
-                                ) : (
-                                  <UserPlus className="w-3 h-3" />
-                                )}
-                                {isFollowing ? 'Following' : 'Follow'}
-                              </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ultimate Search + Filter Bar Card */}
-                <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 mb-6 space-y-4">
-                  {/* Search input group */}
-                  <div className="relative">
-                    <Search className="absolute left-4 top-3.5 w-4 h-4 text-slate-400" />
+                {/* Inline Search Bar Section */}
+                {showCommunitySearchInsideFeed && (
+                  <div className="mb-6 relative transition-all animate-in slide-in-from-top duration-300">
+                    <Search className="absolute left-4 top-3.5 w-4.5 h-4.5 text-slate-400" />
                     <input 
                       type="text"
                       placeholder="Search stories by content, volunteer name or location..."
                       value={communitySearch}
                       onChange={(e) => setCommunitySearch(e.target.value)}
-                      className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all text-slate-800"
+                      className="w-full pl-11 pr-12 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all text-slate-800"
                     />
                     {communitySearch && (
                       <button 
                         onClick={() => setCommunitySearch('')}
-                        className="absolute right-4 top-3 text-[10px] bg-slate-200/80 hover:bg-slate-250 text-slate-600 px-2 py-1 rounded-md transition-colors"
+                        className="absolute right-4 top-3 text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2 py-1 rounded-md transition-colors"
                       >
                         Clear
                       </button>
                     )}
                   </div>
+                )}
 
-                  {/* Hash Tags Quick Selector Row */}
-                  <div className="space-y-1.5">
-                    <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest pl-1">Filter by Popular Tags</p>
-                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                      {['#Emergency', '#LifeSaver', '#ThankYou', '#BloodDrive', '#Tips', '#CampAlert', '#FirstTimeDonation'].map(tag => {
-                        const isTagActive = activeTag === tag;
-                        return (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => setActiveTag(isTagActive ? '' : tag)}
-                            className={`shrink-0 px-3 py-1.5 rounded-xl border text-[10px] font-bold tracking-wider transition-all ${isTagActive ? 'bg-rose-50 border-rose-200 text-rose-700 font-extrabold ring-2 ring-rose-500/10' : 'bg-slate-50 border-slate-100 text-slate-550 hover:bg-slate-100 hover:border-slate-200'}`}
-                          >
-                            <span className="opacity-75">#</span> {tag.replace('#', '')}
-                          </button>
-                        );
-                      })}
-                      {activeTag && (
-                        <button 
-                          onClick={() => setActiveTag('')}
-                          className="shrink-0 px-2.5 py-1.5 rounded-xl bg-slate-900 text-white text-[10px] font-bold flex items-center gap-1 filter hover:bg-slate-800 active:scale-95"
-                        >
-                          Clear Tag <X className="w-3 h-3" />
-                        </button>
-                      )}
+                {/* What's on your mind? Box */}
+                <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.015)] mb-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="relative cursor-pointer shrink-0" onClick={() => user ? setView('profile') : handleLogin()}>
+                      <img 
+                        src={user?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.displayName || 'User')}&background=random`} 
+                        alt="User"
+                        className="w-10 h-10 rounded-full object-cover border border-slate-100"
+                      />
+                      <div className="absolute -bottom-1 -right-1 bg-red-500 text-white w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white text-[10px] font-black shadow-sm">
+                        <Plus className="w-2.5 h-2.5 stroke-[3]" />
+                      </div>
                     </div>
+                    <div 
+                      onClick={() => user ? setView('post-opinion') : handleLogin()}
+                      className="flex-1 bg-slate-50 hover:bg-slate-100/70 border border-slate-100/50 rounded-2xl py-3 px-4 text-xs font-semibold text-slate-400 cursor-pointer transition-colors"
+                    >
+                      What's on your mind?
+                    </div>
+                    <button 
+                      onClick={() => user ? setView('post-opinion') : handleLogin()}
+                      className="flex items-center gap-1.5 bg-[#ffebee] hover:bg-[#ffcdd2] text-[#ff1744] px-4.5 py-2.5 rounded-2xl font-black text-xs transition-all cursor-pointer shadow-sm active:scale-95 shrink-0"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                      <span>Post</span>
+                    </button>
                   </div>
-
-                  {/* Dynamic Tabs switcher */}
-                  <div className="flex bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
-                    <button
-                      onClick={() => setCommunityTab('discover')}
-                      className={`flex-1 py-2.5 text-center text-slate-650 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all ${communityTab === 'discover' ? 'bg-white text-rose-700 shadow-sm font-extrabold' : 'hover:text-slate-900 border-transparent bg-transparent'}`}
-                    >
-                      All Stories
+                  
+                  {/* Photo, Request, Achievement, Poll row */}
+                  <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100/60 text-center">
+                    <button onClick={() => user ? setView('post-opinion') : handleLogin()} className="flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 rounded-xl transition-all text-slate-650 font-bold text-[10.5px] cursor-pointer">
+                      <Image className="w-4 h-4 text-violet-500 fill-violet-50" />
+                      Photo
                     </button>
-                    <button
-                      onClick={() => setCommunityTab('following')}
-                      className={`flex-1 py-2.5 text-center text-slate-650 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all ${communityTab === 'following' ? 'bg-white text-rose-700 shadow-sm font-extrabold' : 'hover:text-slate-900 border-transparent bg-transparent'}`}
-                    >
-                      Following Feed
+                    <button onClick={() => setView('request-form')} className="flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 rounded-xl transition-all text-slate-650 font-bold text-[10.5px] cursor-pointer">
+                      <Droplet className="w-4 h-4 text-rose-500 fill-rose-50" />
+                      Request
                     </button>
-                    <button
-                      onClick={() => setCommunityTab('verified')}
-                      className={`flex-1 py-1 px-1 py-2.5 text-center text-slate-650 rounded-xl font-bold text-[10px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${communityTab === 'verified' ? 'bg-white text-rose-700 shadow-sm font-extrabold' : 'hover:text-slate-900 border-transparent bg-transparent'}`}
-                    >
-                      <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-white" /> Verified Authors
+                    <button onClick={() => addToast("Unlock Badges", "Help others in Bangladesh to earn beautiful custom donor badges and awards!", "info")} className="flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 rounded-xl transition-all text-slate-650 font-bold text-[10.5px] cursor-pointer">
+                      <Trophy className="w-4 h-4 text-amber-500" />
+                      Achievement
+                    </button>
+                    <button onClick={() => addToast("Poll Feature", "Interactive polling is coming soon inside volunteer subgroups!", "info")} className="flex items-center justify-center gap-1.5 py-2 hover:bg-slate-50 rounded-xl transition-all text-slate-650 font-bold text-[10.5px] cursor-pointer">
+                      <BarChart3 className="w-4 h-4 text-emerald-500" />
+                      Poll
                     </button>
                   </div>
                 </div>
-                       {/* Stream feeds container */}
-                <div className="space-y-4">
-                  {selectedStoryId && (
-                    <div className="bg-rose-50 border border-slate-200 p-6 rounded-[2rem] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm animate-in fade-in duration-300">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-rose-100 rounded-2xl flex items-center justify-center shrink-0">
-                          <Flame className="w-6 h-6 text-rose-600 animate-pulse" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-black text-rose-950 uppercase tracking-wider">Direct Shared Story Link</p>
-                          <p className="text-[11px] text-rose-700 font-semibold max-w-md">You are viewing a directly linked community experience. Explore or search for more below!</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          setSelectedStoryId(null);
-                          window.history.replaceState(null, '', '/community');
-                        }}
-                        className="py-2.5 px-4 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-xl text-[10px] uppercase tracking-wider transition-all self-start sm:self-auto cursor-pointer shadow-md"
+
+                {/* Popular Tags List Swiper */}
+                <div className="mb-6 overflow-x-auto no-scrollbar flex gap-2 pb-1">
+                  {['All', '#Emergency', '#LifeSaver', '#ThankYou', '#BloodDrive', '#Tips'].map(tag => {
+                    const isTagActive = tag === 'All' ? (!activeTag) : (activeTag === tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setActiveTag(tag === 'All' ? '' : tag)}
+                        className={`shrink-0 px-4 py-1.5 rounded-full text-[10.5px] font-bold tracking-wider transition-all cursor-pointer ${isTagActive ? 'bg-rose-600 text-white shadow-sm' : 'bg-white hover:bg-slate-100 border border-slate-200 text-slate-600'}`}
                       >
-                        Show All Stories
+                        {tag}
                       </button>
-                    </div>
-                  )}
+                    );
+                  })}
+                </div>
 
-                  {/* Dynamic Filtering Code */}
-                  {(() => {
-                    let filtered = posts.filter(post => {
-                      // If this is the direct post we came to read, always keep it first and bypass filter!
-                      if (selectedStoryId && post.id === selectedStoryId) {
+                {/* Community Feed block */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Community Feed</h3>
+                    <button 
+                      onClick={() => {
+                        setCommunitySearch('');
+                        setActiveTag('');
+                        setCommunityTab('discover');
+                        addToast("Showing All Stories", "Reset search filters.", "success");
+                      }}
+                      className="text-[11px] font-black text-[#ff1744] hover:underline cursor-pointer"
+                    >
+                      See All
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {(() => {
+                      let filtered = posts.filter(post => {
+                        if (selectedStoryId && post.id === selectedStoryId) return true;
+                        if (communityTab === 'following') {
+                          if (!user) return false;
+                          const author = allUsers.find(u => u.uid === post.authorUid);
+                          const isFollowing = author?.followers?.includes(user.uid) || post.authorUid === user.uid;
+                          if (!isFollowing) return false;
+                        } else if (communityTab === 'verified') {
+                          const author = allUsers.find(u => u.uid === post.authorUid);
+                          if (!author?.isVerified) return false;
+                        }
+                        if (activeTag) {
+                          const t = activeTag.toLowerCase();
+                          if (!post.content?.toLowerCase().includes(t)) return false;
+                        }
+                        if (communitySearch.trim()) {
+                          const searchLower = communitySearch.toLowerCase();
+                          const author = allUsers.find(u => u.uid === post.authorUid);
+                          const contentMatch = post.content?.toLowerCase().includes(searchLower);
+                          const authorMatch = author?.displayName?.toLowerCase().includes(searchLower) || author?.thana?.toLowerCase().includes(searchLower) || author?.district?.toLowerCase().includes(searchLower);
+                          if (!contentMatch && !authorMatch) return false;
+                        }
                         return true;
-                      }
-
-                      // Tab Check
-                      if (communityTab === 'following') {
-                        if (!user) return false;
-                        const author = allUsers.find(u => u.uid === post.authorUid);
-                        const isFollowing = author?.followers?.includes(user.uid) || post.authorUid === user.uid;
-                        if (!isFollowing) return false;
-                      } else if (communityTab === 'verified') {
-                        const author = allUsers.find(u => u.uid === post.authorUid);
-                        if (!author?.isVerified) return false;
-                      }
-
-                      // Active Hash Tag Check
-                      if (activeTag) {
-                        const t = activeTag.toLowerCase();
-                        if (!post.content?.toLowerCase().includes(t)) return false;
-                      }
-
-                      // Search Term Check
-                      if (communitySearch.trim()) {
-                        const searchLower = communitySearch.toLowerCase();
-                        const author = allUsers.find(u => u.uid === post.authorUid);
-                        const contentMatch = post.content?.toLowerCase().includes(searchLower);
-                        const authorMatch = author?.displayName?.toLowerCase().includes(searchLower) || author?.thana?.toLowerCase().includes(searchLower) || author?.district?.toLowerCase().includes(searchLower);
-                        if (!contentMatch && !authorMatch) return false;
-                      }
-
-                      return true;
-                    });
-
-                    // Sort so that the target directPost is always at index 0!
-                    if (selectedStoryId) {
-                      filtered = [...filtered].sort((a, b) => {
-                        if (a.id === selectedStoryId) return -1;
-                        if (b.id === selectedStoryId) return 1;
-                        return 0; // maintain default order for other posts
                       });
+
+                      if (selectedStoryId) {
+                        filtered = [...filtered].sort((a, b) => {
+                          if (a.id === selectedStoryId) return -1;
+                          if (b.id === selectedStoryId) return 1;
+                          return 0;
+                        });
+                      }
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="bg-white rounded-3xl p-10 text-center border border-dashed border-slate-200">
+                             <Tag className="w-8 h-8 text-slate-350 mx-auto mb-2" />
+                             <p className="text-xs text-slate-500 font-bold">No community stories found</p>
+                             <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">Try resetting tag filters or search queries.</p>
+                          </div>
+                        );
+                      }
+
+                      return filtered.slice(0, feedLimit).map(post => {
+                        const authorProfile = allUsers.find(u => u.uid === post.authorUid);
+                        const isAuthor = user?.uid === post.authorUid;
+                        
+                        // Parse local dynamic dates elegantly
+                        let relativeTimeStr = 'Just now';
+                        if (post.createdAt) {
+                          const postDate = post.createdAt.toDate ? post.createdAt.toDate() : new Date(post.createdAt);
+                          const diffMs = Date.now() - postDate.getTime();
+                          const diffMin = Math.floor(diffMs / 60000);
+                          const diffHr = Math.floor(diffMin / 60);
+                          const diffDay = Math.floor(diffHr / 24);
+                          if (diffMin < 1) relativeTimeStr = 'Just now';
+                          else if (diffMin < 60) relativeTimeStr = `${diffMin}m ago`;
+                          else if (diffHr < 24) relativeTimeStr = `${diffHr}h ago`;
+                          else if (diffDay === 1) relativeTimeStr = 'Yesterday';
+                          else relativeTimeStr = `${diffDay}d ago`;
+                        }
+
+                        const isDonationRelated = post.content?.toLowerCase().includes('donat') || post.content?.toLowerCase().includes('blood') || post.content?.toLowerCase().includes('#donateblood');
+
+                        return (
+                          <div 
+                            key={post.id}
+                            className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.015)] hover:shadow-md transition-shadow relative overflow-hidden"
+                          >
+                            <div className="flex gap-3 items-start mb-4">
+                              <button onClick={() => onViewProfile(post.authorUid)} className="relative hover:opacity-90 transition-opacity shrink-0">
+                                <img 
+                                  src={post.authorPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(post.authorName)}&background=random`} 
+                                  alt={post.authorName} 
+                                  className="w-11 h-11 rounded-full object-cover border border-slate-100"
+                                />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button onClick={() => onViewProfile(post.authorUid)} className="hover:text-[#ff1744] transition-colors">
+                                    <h4 className="font-extrabold text-slate-900 text-sm flex items-center gap-1 truncate">
+                                      {post.authorName}
+                                      {authorProfile?.isVerified && <BadgeCheck className="w-4 h-4 text-blue-500 fill-white shrink-0" />}
+                                    </h4>
+                                  </button>
+                                  {/* Top Donor Stamp */}
+                                  {((authorProfile?.donationCount || 0) > 0 || isAuthor) && (
+                                    <span className="bg-[#ffebee] text-[#ff1744] text-[8.5px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider scale-[0.95]" style={{ transformOrigin: 'left center' }}>
+                                      Top Donor
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] font-bold text-slate-500 mt-0.5">
+                                  Donated {post.authorBloodGroup || authorProfile?.bloodGroup || 'O+'} blood
+                                </p>
+                                <p className="text-[10px] text-slate-400 mt-1">
+                                  {relativeTimeStr} • {authorProfile?.thana || authorProfile?.district || 'Cox\'s Bazar'}
+                                </p>
+                              </div>
+                              
+                              {/* Option deletion or report triggers */}
+                              <div className="relative shrink-0">
+                                <button 
+                                  onClick={async () => {
+                                    if (isAuthor || profile?.role === 'admin') {
+                                      const confirm = await askConfirm("Delete Post", "Do you want to delete this shared story permanent?", "Delete");
+                                      if (confirm) {
+                                        try {
+                                          await deleteDoc(doc(db, 'posts', post.id));
+                                          addToast("Post Deleted", "Post removed successfully.", "success");
+                                        } catch(err) {
+                                          console.error(err);
+                                        }
+                                      }
+                                    } else {
+                                      const reason = window.prompt("Enter report reason:");
+                                      if (reason && reason.trim()) {
+                                        try {
+                                          await addDoc(collection(db, 'reports'), {
+                                            targetId: post.id,
+                                            targetType: 'post',
+                                            targetContent: post.content,
+                                            reportedBy: user?.uid || 'guest',
+                                            reportedByName: user?.displayName || 'Guest User',
+                                            reason,
+                                            status: 'pending',
+                                            createdAt: serverTimestamp()
+                                          });
+                                          addToast("Report Submitted", "Thank you, admins will review this post.", "success");
+                                        } catch(err) {}
+                                      }
+                                    }
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-full hover:bg-slate-50 transition-colors"
+                                  title="Options"
+                                >
+                                  <MoreVertical className="w-4.5 h-4.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Post structure with certificate badge layout on the right */}
+                            <div className="flex gap-4 items-start justify-between flex-col md:flex-row mb-4">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-slate-700 text-xs md:text-sm leading-relaxed whitespace-pre-wrap">
+                                  {post.content && post.content.split(/(\s+)/).map((part, idx) => {
+                                    if (part.startsWith('#')) {
+                                      return <span key={idx} className="text-[#ff1744] font-extrabold">{part}</span>;
+                                    }
+                                    return part;
+                                  })}
+                                </p>
+                                {post.imageUrl && (
+                                  <div className="mt-3 rounded-2xl overflow-hidden border border-slate-50">
+                                    <img src={post.imageUrl} alt="post visual" className="w-full h-auto max-h-72 object-cover" />
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Just Donated beautiful preview card from screenshot */}
+                              {isDonationRelated && (
+                                <div className="shrink-0 w-[96px] h-[96px] bg-[#fff5f5] border border-dashed border-red-200 rounded-2xl flex flex-col items-center justify-center text-center p-2 shadow-[0_4px_12px_rgba(255,23,68,0.04)] relative overflow-hidden group hover:scale-105 transition-all self-center md:self-start">
+                                  <div className="absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-red-300 rounded-tl m-1" />
+                                  <div className="absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-red-300 rounded-tr m-1" />
+                                  <div className="absolute bottom-0 left-0 w-2.5 h-2.5 border-b border-l border-red-300 rounded-bl m-1" />
+                                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 border-b border-r border-red-300 rounded-br m-1" />
+                                  <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-xs mb-1 border border-red-50">
+                                    <Droplet className="w-4.5 h-4.5 text-[#ff1744] fill-[#ff1744] animate-pulse" />
+                                  </div>
+                                  <p className="text-[9px] font-black text-[#ff1744] uppercase tracking-wider leading-none">Just</p>
+                                  <p className="text-[9px] font-black text-[#ff1744] uppercase tracking-wider leading-none mt-0.5">Donated</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Engagement icons with interactive support */}
+                            <div className="flex items-center gap-6 pt-3.5 border-t border-slate-50 mt-1">
+                              <button 
+                                onClick={async () => {
+                                  if (!user) {
+                                    addToast("Login Required", "Please log in to like posts.", "info");
+                                    return;
+                                  }
+                                  const currentLikes = post.likes || [];
+                                  let newLikes = [...currentLikes];
+                                  if (newLikes.includes(user.uid)) {
+                                    newLikes = newLikes.filter(id => id !== user.uid);
+                                  } else {
+                                    newLikes.push(user.uid);
+                                  }
+                                  try {
+                                    await updateDoc(doc(db, 'posts', post.id), { likes: newLikes });
+                                  } catch(err) {}
+                                }}
+                                className={`flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer ${user && post.likes?.includes(user.uid) ? 'text-red-500 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                              >
+                                <Heart className={`w-4 h-4 ${user && post.likes?.includes(user.uid) ? 'fill-[#ff1744] text-[#ff1744]' : ''}`} />
+                                <span>{post.likes?.length || 0}</span>
+                              </button>
+
+                              <button 
+                                onClick={() => addToast("Comments Area", "Coming to your selected community story soon!", "info")}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                                <span>{post.commentCount || 0}</span>
+                              </button>
+
+                              <button 
+                                onClick={() => {
+                                  const link = `https://ais-dev-j6s4wawvjtj4jg2qohdrm4-732358520046.europe-west2.run.app/story/${post.id}`;
+                                  navigator.clipboard.writeText(link).then(() => {
+                                    addToast("Link Copied", "Share link has been copied successfully.", "success");
+                                  });
+                                }}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-rose-600 transition-colors ml-auto cursor-pointer"
+                              >
+                                <Share2 className="w-4 h-4" />
+                                <span>Share</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Urgent Blood Requests scrolling panel exactly matching design */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Urgent Blood Requests</h3>
+                    <button 
+                      onClick={() => setView('requests')}
+                      className="text-[11px] font-black text-[#ff1744] hover:underline cursor-pointer animate-pulse"
+                    >
+                      See All
+                    </button>
+                  </div>
+
+                  {(() => {
+                    const list = requests.filter(r => r.status === 'Pending').sort((a,b) => (b.urgency === 'Urgent' ? 1 : -1));
+                    if (list.length === 0) {
+                      return (
+                        <div className="bg-[#fff5f5]/30 rounded-3xl p-8 text-center border border-dashed border-red-100">
+                          <p className="text-xs text-rose-500 font-bold">No active pending blood requests listed currently</p>
+                          <p className="text-[10px] text-slate-400 mt-1">Check back soon or create your own blood request.</p>
+                        </div>
+                      );
                     }
 
-                    if (filtered.length === 0) {
-                      return (
-                        <div className="bg-white rounded-[2.5rem] p-12 text-center border border-dashed border-slate-200 shadow-sm">
-                          <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Tag className="w-7 h-7 text-slate-350" />
+                    const activeRequest = list[urgentIndex % list.length];
+                    return (
+                      <div>
+                        <div className="bg-[#fff5f5] rounded-3xl p-5 border border-red-100/60 shadow-[0_4px_12px_rgba(255,23,68,0.015)] relative overflow-hidden flex items-center justify-between gap-4 transition-all hover:border-red-200">
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            {/* Giant Blood Group Stamp */}
+                            <div className="w-14 h-14 bg-white border border-red-100 rounded-2xl flex items-center justify-center text-[#ff1744] font-black text-xl shrink-0 shadow-sm">
+                              {activeRequest.bloodGroup}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-extrabold text-[#95001a] text-sm tracking-tight truncate">{activeRequest.bloodGroup} Blood Needed</h4>
+                              <p className="text-[11px] text-slate-650 font-bold flex items-center gap-1 mt-1 leading-none">
+                                <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> 
+                                <span className="truncate max-w-[150px] md:max-w-[200px]">{activeRequest.hospital || activeRequest.thana}</span>
+                              </p>
+                              <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wider">
+                                {activeRequest.unitsNeeded} Units • Emergency
+                              </p>
+                            </div>
                           </div>
-                          <h3 className="font-bold text-slate-800 text-base mb-1">No matching story outcomes</h3>
-                          <p className="text-slate-400 text-xs max-w-[280px] mx-auto mb-4 leading-relaxed">
-                            No posts fit your current search filter terms. Try resetting filters or tags to preview everything.
-                          </p>
-                          {(communitySearch || activeTag || communityTab !== 'discover') && (
+                          
+                          <div className="flex flex-col items-end justify-between self-stretch shrink-0 gap-3">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-red-100 text-[8.5px] font-black uppercase tracking-widest text-[#ff1744] animate-pulse">
+                              <span className="w-1 h-1 rounded-full bg-[#ff1744]" /> Urgent
+                            </span>
                             <button 
                               onClick={() => {
-                                setCommunitySearch('');
-                                setActiveTag('');
-                                setCommunityTab('discover');
+                                setMatchingDonorsRequest(activeRequest);
+                                addToast("Donation Matching", `Listing compatible donors near ${activeRequest.thana}.`, "success");
                               }}
-                              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-[10px] uppercase tracking-wider transition-all cursor-pointer"
+                              className="px-4 py-2 bg-[#ff1744] hover:bg-red-600 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl shadow-md shadow-red-200 transition-all cursor-pointer active:scale-95"
                             >
-                              Reset filters
+                              View Details
                             </button>
-                          )}
+                          </div>
                         </div>
-                      );
-                    }
 
-                    return filtered.slice(0, feedLimit).map(post => {
-                      const isTarget = post.id === selectedStoryId;
+                        {/* Slide Dots support for pagination */}
+                        {list.length > 1 && (
+                          <div className="flex justify-center gap-2 mt-4 mb-6">
+                            {list.slice(0, 5).map((_, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => setUrgentIndex(idx)}
+                                className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${urgentIndex === idx ? 'w-5 bg-[#ff1744] shadow-sm shadow-red-100' : 'w-2 bg-slate-300 hover:bg-slate-400'}`}
+                                title={`Slide ${idx + 1}`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Achievements component from sshot */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Achievements</h3>
+                    <button 
+                      onClick={() => addToast("Badges Showcase", "Active life-saving certifications display dynamically.", "info")}
+                      className="text-[11px] font-black text-[#ff1744] hover:underline cursor-pointer"
+                    >
+                      See All
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_2px_12px_rgba(0,0,0,0.015)] flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500 shadow-inner shrink-0">
+                        <Trophy className="w-6 h-6 text-amber-500" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-slate-800 text-sm">Gold Donor</h4>
+                        <p className="text-xs text-slate-400 font-bold mt-0.5">Completed {profile?.donationCount && profile.donationCount > 0 ? profile.donationCount : 10} donations</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => addToast("Profile Achievements", "Congratulations for being an active lifecycle contributor!", "success")}
+                      className="px-4 py-2 bg-[#fff5f5] text-[#ff1744] font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+                    >
+                      View All Badges
+                    </button>
+                  </div>
+                </div>
+
+                {/* Popular Volunteer Subgroups with join/leaved interaction */}
+                <div className="mb-12">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-extrabold text-slate-800 tracking-tight">Popular Groups</h3>
+                    <button 
+                      onClick={() => addToast("Support Groups", "Help keep Bangladesh active. Contact student representatives.", "info")}
+                      className="text-[11px] font-black text-[#ff1744] hover:underline cursor-pointer"
+                    >
+                      See All
+                    </button>
+                  </div>
+
+                  <div className="flex gap-4 overflow-x-auto no-scrollbar pb-3 snap-x">
+                    {[
+                      { name: "Cox's Bazar Blood Donors", count: "1.2K Members", icon: "blood" },
+                      { name: "Help Others Bangladesh", count: "890 Members", icon: "heart" },
+                      { name: "Youth Donors BD", count: "1.5K Members", icon: "groups" },
+                      { name: "Emergency Donor Group", count: "2.1K Members", icon: "shield" }
+                    ].map(gp => {
+                      const isJoined = joinedGroups.includes(gp.name);
                       return (
                         <div 
-                          key={post.id} 
-                          className={`transition-all duration-300 hover:translate-y-[-1px] ${
-                            isTarget ? 'ring-2 ring-rose-500 ring-offset-2 rounded-[2.5rem] shadow-xl shadow-rose-100 bg-rose-50/5 p-1' : ''
-                          }`}
+                          key={gp.name}
+                          className="shrink-0 w-36 bg-white border border-slate-100 rounded-2xl p-4 flex flex-col items-center text-center shadow-[0_2px_12px_rgba(0,0,0,0.015)] snap-start group"
                         >
-                          <PostCard 
-                            post={post} 
-                            user={user} 
-                            profile={profile} 
-                            allUsers={allUsers}
-                            onViewProfile={(uid) => onViewProfile(uid)}
-                            askConfirm={askConfirm}
-                            addToast={addToast}
-                            notifyAdmins={notifyAdmins}
-                          />
+                          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3 text-[#ff1744] bg-[#fff5f5] shadow-xs">
+                            {gp.icon === 'blood' && <Droplet className="w-5.2 h-5.2 fill-[#ff1744] text-[#ff1744]" />}
+                            {gp.icon === 'heart' && <Heart className="w-5.2 h-5.2 fill-[#ff1744] text-[#ff1744]" />}
+                            {gp.icon === 'groups' && <Users className="w-5.2 h-5.2 text-[#ff1744]" />}
+                            {gp.icon === 'shield' && <Shield className="w-5.2 h-5.2 text-[#ff1744]" />}
+                          </div>
+                          
+                          <h4 className="font-extrabold text-slate-800 text-[10.5px] leading-tight mb-1 line-clamp-2 h-7">
+                            {gp.name}
+                          </h4>
+                          <p className="text-[9px] font-bold text-slate-400 mb-4 uppercase tracking-wider">
+                            {gp.count}
+                          </p>
+                          
+                          <button
+                            onClick={() => {
+                              if (isJoined) {
+                                setJoinedGroups(prev => prev.filter(g => g !== gp.name));
+                                addToast("Group Left", `You have successfully left ${gp.name}.`, "info");
+                              } else {
+                                setJoinedGroups(prev => [...prev, gp.name]);
+                                addToast("Group Joined", `Welcome to ${gp.name}! You are now inside.`, "success");
+                              }
+                            }}
+                            className={`w-full py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider transition-all border cursor-pointer ${
+                              isJoined 
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
+                                : 'text-[#ff1744] border-red-200 hover:bg-rose-50/50 bg-white'
+                            }`}
+                          >
+                            {isJoined ? 'Joined' : 'Join'}
+                          </button>
                         </div>
                       );
-                    });
-                  })()}
-
-                  {posts.length >= feedLimit && (
-                    <div ref={feedEndRef} className="py-12 text-center">
-                      <div className="inline-block w-8 h-8 border-4 border-rose-100 border-t-rose-600 rounded-full animate-spin mb-4"></div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loading more stories...</p>
-                    </div>
-                  )}
-
-                  {posts.length === 0 && (
-                    <div className="text-center py-12 text-slate-400">
-                      <Droplets className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                      <p>No opinions shared yet. Be the first!</p>
-                    </div>
-                  )}
-                  <SeoFooter setView={setView} />
+                    })}
+                  </div>
                 </div>
+
+                <SeoFooter setView={setView} />
               </div>
             </motion.div>
           )}
