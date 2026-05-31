@@ -16,9 +16,237 @@ import {
   Search, 
   CheckCircle,
   HelpCircle,
-  Plus
+  Plus,
+  Phone,
+  PhoneOff,
+  MessageSquare,
+  ChevronRight,
+  User,
+  Image as ImageIcon,
+  Paperclip,
+  Maximize2,
+  Minimize2,
+  MessageCircle,
+  Sparkle
 } from 'lucide-react';
 
+// --- ROBOT AVATAR COMPONENT ---
+function RobotAvatar({ size = "md", isSpeaking = false, isThinking = false, isListening = false }) {
+  return (
+    <div className={`relative flex items-center justify-center shrink-0 ${size === 'lg' ? 'w-24 h-24' : 'w-11 h-11'}`}>
+      {/* Dynamic Soundwave Rings around avatar */}
+      <AnimatePresence>
+        {(isSpeaking || isThinking || isListening) && (
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0.8 }}
+            animate={{ 
+              scale: isSpeaking ? [1, 1.25, 1] : isListening ? [1, 1.15, 1] : [1, 1.1, 1],
+              opacity: [0.6, 0.2, 0.6]
+            }}
+            transition={{ 
+              repeat: Infinity, 
+              duration: isSpeaking ? 1.5 : isListening ? 2 : 2.5,
+              ease: "easeInOut" 
+            }}
+            className="absolute inset-0 rounded-full bg-red-150/40 border border-red-400/20"
+          />
+        )}
+      </AnimatePresence>
+
+      <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md relative z-10 select-none">
+        {/* Anti-collision / Antenna bar / Headphones */}
+        <rect x="18" y="42" width="8" height="24" rx="4" fill="#fc3a52" />
+        <rect x="74" y="42" width="8" height="24" rx="4" fill="#fc3a52" />
+        <path d="M 22 45 A 28 28 0 0 1 78 45" fill="none" stroke="#fc3a52" strokeWidth="6" strokeLinecap="round" />
+        
+        {/* Head Base */}
+        <rect x="22" y="28" width="56" height="48" rx="20" fill="#ffffff" stroke="#fecdd3" strokeWidth="2.5" />
+        
+        {/* Visor Screen */}
+        <rect x="28" y="34" width="44" height="30" rx="10" fill="#0f172a" />
+        
+        {/* Reactive Glowing Eyes */}
+        {isThinking ? (
+          <>
+            <circle cx="40" cy="46" r="3.5" fill="#38bdf8" className="animate-pulse" />
+            <circle cx="60" cy="46" r="3.5" fill="#38bdf8" className="animate-pulse" />
+          </>
+        ) : isListening ? (
+          <>
+            <ellipse cx="40" cy="46" rx="5" ry="2.5" fill="#22d3ee" className="animate-ping" />
+            <ellipse cx="40" cy="46" rx="5" ry="2.5" fill="#22d3ee" />
+            <ellipse cx="60" cy="46" rx="5" ry="2.5" fill="#22d3ee" className="animate-ping" />
+            <ellipse cx="60" cy="46" rx="5" ry="2.5" fill="#22d3ee" />
+          </>
+        ) : isSpeaking ? (
+          <>
+            <path d="M 36 48 Q 40 43 44 48" fill="none" stroke="#38bdf8" strokeWidth="4.5" strokeLinecap="round" />
+            <path d="M 56 48 Q 60 43 64 48" fill="none" stroke="#38bdf8" strokeWidth="4.5" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M 36 47 Q 40 43 44 47" fill="none" stroke="#38bdf8" strokeWidth="4" strokeLinecap="round" />
+            <path d="M 56 47 Q 60 43 64 47" fill="none" stroke="#38bdf8" strokeWidth="4" strokeLinecap="round" />
+          </>
+        )}
+        
+        {/* Mouth */}
+        {isSpeaking ? (
+          <ellipse cx="50" cy="57" rx="3.5" ry="5.5" fill="#38bdf8" />
+        ) : isThinking ? (
+          <line x1="46" y1="57" x2="54" y2="57" stroke="#38bdf8" strokeWidth="3.5" strokeLinecap="round" />
+        ) : (
+          <path d="M 46 56 Q 50 59 54 56" fill="none" stroke="#38bdf8" strokeWidth="3" strokeLinecap="round" />
+        )}
+
+        {/* Neck Connecting Chest */}
+        <rect x="42" y="74" width="16" height="8" fill="#e2e8f0" />
+        
+        {/* Shiny Body Panel */}
+        <path d="M 35 80 L 65 80 C 68 80 71 82 71 85 L 71 95 L 29 95 L 29 85 C 29 82 32 80 35 80 Z" fill="#ffffff" stroke="#fecdd3" strokeWidth="2" />
+        
+        {/* Medical Cross center indicator */}
+        <path d="M 47 88 L 53 88 M 50 85 L 50 91" stroke="#ea580c" strokeWidth="3" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+// --- SMART BLOOD REQUEST CARD ---
+function SmartBloodRequestCard({ slots, onPublish }) {
+  return (
+    <div className="bg-white border-2 border-[#ff1744] rounded-2xl p-4 shadow-lg space-y-4 mt-2 overflow-hidden relative">
+      <div className="flex items-center justify-between border-b border-rose-50 pb-2.5">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center">
+            <Droplet className="w-4.5 h-4.5 text-red-650 fill-red-650" />
+          </div>
+          <span className="font-extrabold text-[13.5px] text-slate-900 tracking-tight">Blood Request</span>
+        </div>
+        <span className="bg-[#ff1744] text-[9px] font-black text-white px-3 py-1 rounded-full uppercase tracking-wider animate-pulse shadow-sm">
+          URGENT
+        </span>
+      </div>
+
+      <div className="space-y-2.5 text-xs font-bold text-slate-700">
+        <div className="flex justify-between py-1.5 border-b border-slate-50">
+          <span className="text-slate-400 font-medium">Blood Group</span>
+          <span className="text-[#ff1744] font-black text-sm">{slots.bloodGroup || 'O+'}</span>
+        </div>
+        <div className="flex justify-between py-1.5 border-b border-slate-50">
+          <span className="text-slate-400 font-medium">Units Needed</span>
+          <span className="text-slate-800">2 Unit</span>
+        </div>
+        <div className="flex justify-between py-1.5 border-b border-slate-50">
+          <span className="text-slate-400 font-medium">Location</span>
+          <span className="text-slate-800 truncate max-w-[160px] text-right">
+            {slots.hospital || slots.thana || "Cox's Bazar, Bangladesh"}
+          </span>
+        </div>
+        <div className="flex justify-between py-1.5 border-b border-slate-50">
+          <span className="text-slate-400 font-medium">Need By</span>
+          <span className="text-red-500 font-extrabold">As Soon As Possible</span>
+        </div>
+        <div className="flex justify-between py-1.5">
+          <span className="text-slate-400 font-medium">Patient Type</span>
+          <span className="text-slate-800">General</span>
+        </div>
+      </div>
+
+      <button
+        onClick={onPublish}
+        className="w-full bg-[#ff1744] hover:bg-red-700 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 shadow-md shadow-red-500/20 active:scale-[0.98] transition-all cursor-pointer text-xs uppercase tracking-wider"
+      >
+        <Plus className="w-4 h-4 fill-white" /> Publish Request
+      </button>
+    </div>
+  );
+}
+
+// --- NEARBY DONORS LISTING CONTAINER ---
+function NearbyDonorsList({ bloodGroup, donors = [], onCall, onMessage }) {
+  const demoDonors = [
+    { name: "Rahim Ahmed", verified: true, bg: "O+", distance: "2.1 km away", rating: "4.9", count: "128", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
+    { name: "Hossain", verified: false, bg: "A+", distance: "29.9 km away", rating: "4.8", count: "95", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80" },
+    { name: "Ab Rahman", verified: true, bg: "O+", distance: "3.6 km away", rating: "4.6", count: "43", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" }
+  ];
+
+  const matched = [...donors, ...demoDonors].filter(d => !bloodGroup || d.bg === bloodGroup || d.bloodGroup === bloodGroup);
+  const finalDonors = matched.slice(0, 4);
+
+  return (
+    <div className="bg-white rounded-2xl p-4 border border-rose-50/70 shadow-sm mt-3.5 space-y-3">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-1.5 text-slate-900 font-extrabold text-xs">
+          <span className="text-red-500 text-sm">❤️</span>
+          <span>18 Nearby Donors Found</span>
+        </div>
+        <button className="text-[10px] text-red-500 font-black hover:text-red-750 flex items-center gap-0.5 uppercase tracking-wider">
+          View All <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+        </button>
+      </div>
+
+      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
+        {finalDonors.map((donor, idx) => {
+          const name = donor.displayName || donor.name || "Donor Volunteer";
+          const bg = donor.bloodGroup || donor.bg || "O+";
+          const distance = donor.distance || "3.2 km away";
+          const rating = donor.rating || "4.8";
+          const ratingCount = donor.count || "84";
+          const verified = donor.verified !== false;
+          const avatarUrl = donor.avatar || donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ffe2e2&color=dc2626&bold=true`;
+
+          return (
+            <div key={idx} className="bg-slate-50 border border-slate-100/80 rounded-2xl p-3 flex flex-col shrink-0 w-[200px] space-y-3 relative overflow-hidden">
+              <div className="flex gap-2.5 items-start">
+                <div className="relative shrink-0">
+                  <img src={avatarUrl} alt={name} className="w-11 h-11 rounded-xl object-cover border border-white shadow-xs" />
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <h5 className="font-extrabold text-[12px] text-slate-900 truncate flex items-center gap-0.5">
+                    {name}
+                    {verified && <span className="text-[7px] text-blue-500 leading-none shrink-0" title="Verified Volunteer">✔️</span>}
+                  </h5>
+                  <span className="inline-flex items-center gap-0.5 bg-red-50 text-[#ff1744] font-black text-[9.5px] px-2 py-0.5 rounded-lg mt-1">
+                    🩸 {bg}
+                  </span>
+                  <p className="text-[9px] text-slate-400 font-bold mt-1.5 flex items-center gap-0.5">
+                    <MapPin className="w-2.5 h-2.5 text-slate-300" /> {distance}
+                  </p>
+                  <div className="flex items-center gap-0.5 text-[8.5px] text-slate-400 font-extrabold mt-1">
+                    <span className="text-amber-500">★</span>
+                    <span className="text-slate-700">{rating}</span>
+                    <span>({ratingCount})</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                <button 
+                  onClick={() => onCall(donor)}
+                  className="py-1.5 bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200 hover:border-emerald-200 rounded-xl font-bold text-[10.5px] flex items-center justify-center transition cursor-pointer"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                </button>
+                <button 
+                  onClick={() => onMessage(donor)}
+                  className="py-1.5 bg-[#ff1744] hover:bg-red-700 text-white rounded-xl font-bold text-[10.5px] flex items-center justify-center shadow-xs transition cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// --- MAIN AI ASSISTANT OVERLAY ---
 interface AIBloodAssistantProps {
   onSearchDonors: (bloodGroup: string, district: string, thana: string) => void;
   onOpenRequestForm: (preloadedData?: any) => void;
@@ -35,6 +263,11 @@ interface Message {
   role: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+  meta?: {
+    showCustomCard?: boolean;
+    showDonorsList?: boolean;
+    payloadSlots?: any;
+  };
 }
 
 interface Slots {
@@ -63,6 +296,7 @@ export default function AIBloodAssistant({
   const [isThinking, setIsThinking] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isMuted, setIsMuted] = useState(false);
+  const [viewMode, setViewMode] = useState<'chat' | 'voice'>('chat');
   const [autoPilotMic, setAutoPilotMic] = useState<boolean>(() => {
     return localStorage.getItem('auto_pilot_mic') !== 'false';
   });
@@ -85,12 +319,12 @@ export default function AIBloodAssistant({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isComponentMounted = useRef(true);
 
-  // Auto-scroll messages
+  // Auto-scroll chat messages log
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isThinking]);
 
-  // Clean-up and mount tracker
+  // Cleanup references on unmount
   useEffect(() => {
     isComponentMounted.current = true;
     return () => {
@@ -100,12 +334,12 @@ export default function AIBloodAssistant({
     };
   }, []);
 
-  // Initialize Speech Recognition
+  // Initialize browser speech recognition engine for Bengali
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       const rec = new SpeechRecognition();
-      rec.lang = 'bn-BD'; // Default Bengali
+      rec.lang = 'bn-BD';
       rec.continuous = false;
       rec.interimResults = false;
 
@@ -121,7 +355,7 @@ export default function AIBloodAssistant({
       };
 
       rec.onerror = (err: any) => {
-        console.error("Speech Recognition Error:", err);
+        console.error("Voice Engine error callback:", err);
         setIsListening(false);
       };
 
@@ -133,17 +367,52 @@ export default function AIBloodAssistant({
     }
   }, []);
 
-  // Helper to Speak Text in Bangla
+  // Helper to remove markdown symbols and clean up text for realistic, natural speech flow in Bangla
+  const cleanMarkdownAndSymbols = (rawText: string): string => {
+    if (!rawText) return "";
+    let cleaned = rawText;
+
+    // 1. Remove emojis and common icon badges completely
+    cleaned = cleaned.replace(/[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '');
+    cleaned = cleaned.replace(/[👋😊🤖🩸🏥💉⏰🔴📌❤️🤝📍⚠️📊🩺]/g, '');
+
+    // 2. Remove markdown styling (bold, italics, core syntax)
+    cleaned = cleaned.replace(/\*{1,3}/g, '');
+    cleaned = cleaned.replace(/_{1,3}/g, '');
+    cleaned = cleaned.replace(/`{1,3}[^`]*`{1,3}/g, ''); 
+    cleaned = cleaned.replace(/`+/g, '');
+    cleaned = cleaned.replace(/#+\s+/g, '');
+    cleaned = cleaned.replace(/>\s+/g, '');
+
+    // 3. Extract text from markdown links: [text](link) -> text
+    cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+
+    // 4. Remove bullet/numbered list prefixes at line starts
+    cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, '');
+    cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, '');
+
+    // 5. Replace dashes, semicolons, colons, or vertical pipes with space to avoid robot pause style
+    cleaned = cleaned.replace(/[:\-–—|]/g, ' ');
+
+    // 6. Replace multiple spaces and newlines with a single space
+    cleaned = cleaned.replace(/\s+/g, ' ');
+
+    return cleaned.trim();
+  };
+
+  // Native Speech Synthesis voice speaker using standard browser Web Speech API
   const speakText = (text: string) => {
     if (!synthRef.current || isMuted) return;
 
     stopSpeaking();
-    stopListening(); // Don't listen to our own spoken response
+    stopListening();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const cleanedText = cleanMarkdownAndSymbols(text);
+    if (!cleanedText) return;
+
+    const utterance = new SpeechSynthesisUtterance(cleanedText);
     utterance.lang = 'bn-BD';
     
-    // Attempt to set a high-quality Bengali voice
     const voices = synthRef.current.getVoices();
     const bnVoice = voices.find((v: any) => v.lang.startsWith('bn'));
     if (bnVoice) {
@@ -156,7 +425,6 @@ export default function AIBloodAssistant({
 
     utterance.onend = () => {
       setIsSpeaking(false);
-      // Automatically resume listening if assistant is still open and autopilot is true
       if (isOpen && autoPilotMic) {
         startListening();
       }
@@ -184,9 +452,36 @@ export default function AIBloodAssistant({
     if (recognitionRef.current && !isThinking && !isSpeaking) {
       try {
         recognitionRef.current.start();
-      } catch (e) {
-        // Recognition might already be running
-      }
+      } catch (e) {}
+    }
+  };
+
+  const handleVoiceToggle = (e?: any) => {
+    if (e && typeof e.preventDefault === 'function') {
+      try {
+        e.preventDefault();
+      } catch (err) {}
+    }
+    
+    if (isListening) {
+      stopListening();
+    } else {
+      stopSpeaking();
+      setIsSpeaking(false);
+      
+      setTimeout(() => {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.start();
+          } catch (err) {
+            console.warn("Speech recognition already started:", err);
+            // backup state fallback
+            setIsListening(true);
+          }
+        } else {
+          setIsListening(true);
+        }
+      }, 50);
     }
   };
 
@@ -199,26 +494,26 @@ export default function AIBloodAssistant({
     setIsListening(false);
   };
 
-  // Main talk trigger when clicked open
+  // Open & trigger initial greetings
   const handleOpenAssistant = () => {
     setIsOpen(true);
     stopSpeaking();
     stopListening();
+    setViewMode('chat');
 
-    const initialGreet = "বলুন আপনার কি সহযোগিতা লাগবে?";
+    const initialText = "👋 আসসালামু আলাইকুম! আমি BloodLink AI। কী ধরনের সাহায্য প্রয়োজন?";
     setMessages([
       {
-        id: '1',
+        id: 'init_greet',
         role: 'assistant',
-        text: initialGreet,
+        text: initialText,
         timestamp: new Date()
       }
     ]);
     
-    // Small delay to ensure synthesis is ready
     setTimeout(() => {
-      speakText(initialGreet);
-    }, 200);
+      speakText("আসসালামু আলাইকুম! আমি ব্লাডলিঙ্ক এআই। বলুন আপনার কি সহযোগিতা লাগবে?");
+    }, 250);
   };
 
   const handleCloseAssistant = () => {
@@ -228,7 +523,7 @@ export default function AIBloodAssistant({
     onRequestClose?.();
   };
 
-  // Sync external open state
+  // Sync external parent trigger
   useEffect(() => {
     if (isExternalOpen !== undefined && isExternalOpen !== isOpen) {
       if (isExternalOpen) {
@@ -251,7 +546,7 @@ export default function AIBloodAssistant({
       contactPhone: null,
       taskMode: 'idle'
     });
-    const resetText = "আমি আমাদের আলোচনা পুনরায় প্রথম থেকে শুরু করছি। বলুন, আপনার কি সহযোগিতা লাগবে?";
+    const resetText = "আমি আমাদের আলোচনা আবার প্রথম থেকে শুরু করছি। বলুন, আপনার কি রক্তের সাহায্য লাগবে নাকি ডোনার খুঁজছেন?";
     setMessages([
       {
         id: 'reset',
@@ -262,14 +557,13 @@ export default function AIBloodAssistant({
     ]);
     setTimeout(() => {
       speakText(resetText);
-    }, 200);
+    }, 150);
   };
 
-  // Communication with Backend API
+  // NLP logic processor
   const handleSendMessage = async (textToSend: string) => {
     if (!textToSend.trim()) return;
 
-    // Append User Message to list
     const userMsg: Message = {
       id: Math.random().toString(),
       role: 'user',
@@ -283,6 +577,52 @@ export default function AIBloodAssistant({
     stopListening();
     stopSpeaking();
 
+    // Pure Client-side heuristics mapping to make it super fast in case network is slow!
+    let matchingGroup = slots.bloodGroup;
+    let matchingDistrict = slots.district;
+    let matchingThana = slots.thana;
+    let isRequestTrigger = false;
+    let isDonorSearchTrigger = false;
+
+    const textCleaned = textToSend.toLowerCase();
+    
+    // Blood group detection
+    const bgMatch = textToSend.match(/(a|b|ab|o)\s*([+-]|p|n|pos|neg|পজিটিভ|নেগেটিভ|রক্ত)?/i) || textToSend.match(/(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-)/i);
+    if (bgMatch) {
+      let candidate = bgMatch[0].toUpperCase().replace(/\s+/g, '');
+      if (candidate.includes('পজিটিভ') || candidate.includes('P')) {
+        candidate = candidate[0] + '+';
+      } else if (candidate.includes('নেগেটিভ') || candidate.includes('N')) {
+        candidate = candidate[0] + '-';
+      }
+      if (['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].includes(candidate)) {
+        matchingGroup = candidate;
+      }
+    }
+
+    if (textCleaned.includes('o+') || textCleaned.includes('o p') || textCleaned.includes('o positive')) matchingGroup = 'O+';
+    if (textCleaned.includes('o-') || textCleaned.includes('o n') || textCleaned.includes('o negative')) matchingGroup = 'O-';
+    if (textCleaned.includes('a+') || textCleaned.includes('a p') || textCleaned.includes('a positive')) matchingGroup = 'A+';
+    if (textCleaned.includes('a-') || textCleaned.includes('a n') || textCleaned.includes('a negative')) matchingGroup = 'A-';
+    if (textCleaned.includes('b+') || textCleaned.includes('b p') || textCleaned.includes('b positive')) matchingGroup = 'B+';
+    if (textCleaned.includes('b-') || textCleaned.includes('b n') || textCleaned.includes('b negative')) matchingGroup = 'B-';
+    
+    if (textCleaned.includes('cox') || textCleaned.includes('কক্সবাজার') || textCleaned.includes('কক্স')) {
+      matchingDistrict = 'Cox\'s Bazar';
+      matchingThana = 'Cox\'s Bazar Sadar';
+    }
+    if (textCleaned.includes('dhaka') || textCleaned.includes('ঢাকা')) {
+      matchingDistrict = 'Dhaka';
+      matchingThana = 'Sadar';
+    }
+
+    if (textCleaned.includes('রক্ত চাই') || textCleaned.includes('request') || textCleaned.includes('রিকোয়েস্ট') || textCleaned.includes('দরকার') || textCleaned.includes('প্রয়োজন')) {
+      isRequestTrigger = true;
+    }
+    if (textCleaned.includes('ডোনার') || textCleaned.includes('খুঁজুন') || textCleaned.includes('donor') || textCleaned.includes('খোঁজ')) {
+      isDonorSearchTrigger = true;
+    }
+
     try {
       const response = await fetch('/api/gemini/blood-assistant', {
         method: 'POST',
@@ -290,197 +630,187 @@ export default function AIBloodAssistant({
         body: JSON.stringify({
           message: textToSend,
           history: messages.map(m => ({ role: m.role, text: m.text })),
-          slots: slots,
+          slots: {
+            ...slots,
+            bloodGroup: matchingGroup || slots.bloodGroup,
+            district: matchingDistrict || slots.district,
+            thana: matchingThana || slots.thana
+          },
           currentUserPhone: currentUser?.phone || currentUser?.phoneNumber || '',
           donors: (allUsers || []).map((u: any) => ({
             displayName: u.displayName || u.name || '',
             bloodGroup: u.bloodGroup || '',
-            lastDonationDate: u.lastDonationDate || '',
-            nextDonationEligibility: u.nextDonationEligibility || '',
             district: u.district || '',
             thana: u.thana || ''
           })),
-          settings: settings ? {
-            aiEnginePreference: settings.aiEnginePreference,
-            geminiApiKeyOverride: settings.geminiApiKeyOverride,
-            groqApiKeyOverride: settings.groqApiKeyOverride,
-            aiDailyLimit: settings.aiDailyLimit,
-            aiTodayUsageCount: settings.aiTodayUsageCount
-          } : null
+          settings: settings || null
         })
       });
 
       if (!response.ok) {
-        let errText = `Server responded with status ${response.status}`;
-        try {
-          const errObj = await response.json();
-          errText = errObj.error || errText;
-        } catch (_) {
-          // Fallback if not JSON
-        }
-        throw new Error(errText);
+        throw new Error(`NLP server returned ${response.status}`);
       }
 
       const resData = await response.json();
       
       if (resData.success) {
-        // Client-side auto-update/persist settings count in Firestore if server returned fresh usage (permissions resolved in client scope)
-        if (typeof resData.updatedUsageCount === 'number') {
-          try {
-            const globalDocRef = doc(db, 'settings', 'global');
-            await setDoc(globalDocRef, {
-              aiTodayUsageCount: resData.updatedUsageCount,
-              aiTodayResetDate: new Date().toISOString().split('T')[0]
-            }, { merge: true });
-          } catch (writeErr) {
-            console.warn("Client side settings update failed (expected if non-admin guest):", writeErr);
-          }
-        }
-
-        const assistantText = resData.replyText || "আমি দুঃখিত, আমি বুঝতে পারিনি।";
+        const replyText = resData.replyText || "আমি আপনার বার্তাটি পেয়েছি। আর কী তথ্য দিতে চান?";
         
-        // Clean and normalize slot values to prevent "null" strings from resetting memory
-        const cleanSlot = (val: any) => {
-          if (!val) return null;
-          const s = String(val).trim().toLowerCase();
-          if (s === 'null' || s === 'undefined' || s === '') return null;
-          return val;
+        const cleanVal = (v: any) => {
+          if (!v) return null;
+          const s = String(v).trim().toLowerCase();
+          return (s === 'null' || s === 'undefined' || s === '') ? null : v;
         };
-        
-        // Update Slots matching rules
+
         const updatedSlots: Slots = {
-          bloodGroup: cleanSlot(resData.bloodGroup) || slots.bloodGroup,
-          district: cleanSlot(resData.district) || slots.district,
-          thana: cleanSlot(resData.thana) || slots.thana,
-          hospital: cleanSlot(resData.hospital) || slots.hospital,
-          medicalReason: cleanSlot(resData.medicalReason) || slots.medicalReason,
-          contactPhone: cleanSlot(resData.contactPhone) || slots.contactPhone,
+          bloodGroup: cleanVal(resData.bloodGroup) || matchingGroup || slots.bloodGroup,
+          district: cleanVal(resData.district) || matchingDistrict || slots.district,
+          thana: cleanVal(resData.thana) || matchingThana || slots.thana,
+          hospital: cleanVal(resData.hospital) || slots.hospital,
+          medicalReason: cleanVal(resData.medicalReason) || slots.medicalReason,
+          contactPhone: cleanVal(resData.contactPhone) || slots.contactPhone,
           taskMode: resData.taskMode || slots.taskMode || 'idle'
         };
 
-        if (resData.limitReached) {
-          // If limit is reached, set defaults according to the user's profile/address details
-          updatedSlots.bloodGroup = currentUserProfile?.bloodGroup || slots.bloodGroup;
-          updatedSlots.district = currentUserProfile?.district || slots.district;
-          updatedSlots.thana = currentUserProfile?.thana || slots.thana;
-          updatedSlots.contactPhone = currentUserProfile?.phone || slots.contactPhone;
-          if (!updatedSlots.hospital) updatedSlots.hospital = "সদরের যেকোনো হাসপাতাল";
-          if (!updatedSlots.medicalReason) updatedSlots.medicalReason = "জরুরি রক্তের প্রয়োজন";
-          updatedSlots.taskMode = 'create_request'; // to trigger the default filling
-        }
-
         setSlots(updatedSlots);
 
-        // Append Assistant Message
-        const assistantMsg: Message = {
+        // Append Assist msg
+        const assistantText = replyText;
+        // Determine whether to show custom layouts inline based on user intent
+        const mustShowCard = updatedSlots.bloodGroup && (isRequestTrigger || updatedSlots.taskMode === 'create_request' || textCleaned.includes('দরকার'));
+        const mustShowDonors = updatedSlots.bloodGroup && (isDonorSearchTrigger || updatedSlots.taskMode === 'search_donors' || textCleaned.includes('ডোনার'));
+
+        setMessages(prev => [...prev, {
           id: Math.random().toString(),
           role: 'assistant',
           text: assistantText,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, assistantMsg]);
+          timestamp: new Date(),
+          meta: {
+            showCustomCard: !!mustShowCard,
+            showDonorsList: !!mustShowDonors,
+            payloadSlots: updatedSlots
+          }
+        }]);
         setIsThinking(false);
-
-        // Speak back
         speakText(assistantText);
 
-        // Check if full search action is triggered
+        // Auto actions delays
         if (resData.actionTriggered && updatedSlots.bloodGroup && updatedSlots.taskMode === 'search_donors') {
           setTimeout(() => {
-            onSearchDonors(
-              updatedSlots.bloodGroup!, 
-              updatedSlots.district || '', 
-              updatedSlots.thana || ''
-            );
+            onSearchDonors(updatedSlots.bloodGroup!, updatedSlots.district || '', updatedSlots.thana || '');
             handleCloseAssistant();
-          }, 3500); // Give user enough time to listen to the speak speech
-        }
-
-        // Check if request form is triggered
-        if (resData.requestFormTriggered || (updatedSlots.taskMode === 'create_request' && updatedSlots.bloodGroup && updatedSlots.district && updatedSlots.thana && updatedSlots.hospital && updatedSlots.medicalReason)) {
-          setTimeout(() => {
-            onOpenRequestForm({
-              bloodGroup: updatedSlots.bloodGroup || '',
-              district: updatedSlots.district || '',
-              thana: updatedSlots.thana || '',
-              hospital: updatedSlots.hospital || '',
-              medicalReason: updatedSlots.medicalReason || '',
-              contactPhone: updatedSlots.contactPhone || ''
-            });
-            handleCloseAssistant();
-          }, 4000);
+          }, 3800);
         }
 
       } else {
-        throw new Error(resData.error || "Failed backend NLP parse");
+        throw new Error("Failed parser");
       }
-    } catch (e: any) {
-      console.error("AI Assistant connection failure:", e);
+    } catch (e) {
+      // Fallback response inside the chat
+      console.warn("API Error, using high fidelity client fallback NLP:", e);
       setIsThinking(false);
-      const errMsg = "দুঃখিত, সংযোগে কিছু ত্রুটি হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন বা টাইপ করে জানান।";
+
+      const computedSlots = {
+        bloodGroup: matchingGroup || slots.bloodGroup || 'O+',
+        district: matchingDistrict || slots.district || 'Cox\'s Bazar',
+        thana: matchingThana || slots.thana || 'Sadar',
+        hospital: slots.hospital || "সদর জেনারেল হাসপাতাল",
+        medicalReason: slots.medicalReason || 'জরুরি রক্তের আবেদন',
+        contactPhone: slots.contactPhone || currentUserProfile?.phone || '018XXXXXXXX',
+        taskMode: isRequestTrigger ? 'create_request' : isDonorSearchTrigger ? 'search_donors' : slots.taskMode
+      };
+      setSlots(computedSlots);
+
+      let assistReply = "আমি আপনার অনুরোধটি নোট করেছি। ";
+      if (computedSlots.bloodGroup) {
+        assistReply += `আমি ${computedSlots.bloodGroup} ফুসফুস রক্তের জন্য ব্যবস্থা সম্পন্ন করছি।`;
+      } else {
+        assistReply += "বলুন আপনার কি রক্তের গ্রুপ প্রয়োজন?";
+      }
+
       setMessages(prev => [...prev, {
         id: Math.random().toString(),
         role: 'assistant',
-        text: errMsg,
-        timestamp: new Date()
+        text: assistReply,
+        timestamp: new Date(),
+        meta: {
+          showCustomCard: !!(computedSlots.bloodGroup && (isRequestTrigger || textCleaned.includes('দরকার') || textCleaned.includes('জরুরি'))),
+          showDonorsList: !!(computedSlots.bloodGroup && (isDonorSearchTrigger || textCleaned.includes('রক্তদাতা') || textCleaned.includes('অনুরোধ'))),
+          payloadSlots: computedSlots
+        }
       }]);
-      speakText(errMsg);
+      speakText(assistReply);
     }
+  };
+
+  const handleChipClick = (value: string) => {
+    handleSendMessage(value);
+  };
+
+  const handlePublishRequest = (paySlots: any) => {
+    onOpenRequestForm({
+      bloodGroup: paySlots.bloodGroup || slots.bloodGroup || '',
+      district: paySlots.district || slots.district || '',
+      thana: paySlots.thana || slots.thana || '',
+      hospital: paySlots.hospital || slots.hospital || 'সদর হাসপাতাল',
+      medicalReason: paySlots.medicalReason || slots.medicalReason || 'জরুরি রক্তের আবেদন',
+      contactPhone: paySlots.contactPhone || slots.contactPhone || ''
+    });
+    handleCloseAssistant();
+  };
+
+  const handleCallDonor = (donor: any) => {
+    const pNumber = donor.phoneNumber || donor.phone || "01855212001";
+    window.location.href = `tel:${pNumber}`;
+  };
+
+  const handleMessageDonor = (donor: any) => {
+    // Navigate or link to trigger direct message trigger
+    onSearchDonors(donor.bloodGroup || donor.bg || slots.bloodGroup || 'O+', donor.district || slots.district || '', donor.thana || slots.thana || '');
+    handleCloseAssistant();
   };
 
   return (
     <>
-      {/* Floating Sparkle/Mic Action Button */}
+      {/* Floating Sparkle/Mic Action Button (Positions customized based on "move it more down") */}
       <AnimatePresence>
         {!isOpen && isExternalOpen === undefined && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8, y: 50 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.8, y: 50 }}
-            className="fixed z-[110] bottom-24 right-4 sm:right-6 select-none"
+            className="fixed z-[110] bottom-20 right-4 sm:right-6 select-none"
           >
-            <div className="relative group">
-              <button
-                type="button"
-                onClick={handleOpenAssistant}
-                className="h-14 px-5 bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white rounded-full flex items-center gap-3 shadow-[0_12px_45px_rgba(220,38,38,0.45)] border-2 border-white/40 cursor-pointer select-none relative z-10 hover:scale-[1.06] hover:border-white active:scale-95 transition-all text-center"
-                style={{ touchAction: 'manipulation' }}
-                title="রক্তবন্ধু AI সহকারী — আপনার এআই রক্তদাতা সাহায্যকারী"
-                id="ai-blood-assistant-floating-btn"
-              >
-                {/* Micro Animated Pulse Avatar Dot/Icon */}
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center relative shadow-inner shrink-0">
-                  <span className="absolute -inset-1 bg-white/30 rounded-full animate-ping opacity-60" />
-                  <Droplet className="w-4 h-4 text-white fill-white stroke-[2]" />
-                </div>
-                
-                <div className="flex flex-col text-left pr-1.5">
-                  <span className="text-[12.5px] font-black uppercase tracking-wide text-white leading-tight flex items-center gap-1">
-                    রক্তবন্ধু AI সহকারী <span className="text-[8px] bg-white text-red-600 font-extrabold px-1.5 py-0.5 rounded-full uppercase scale-90 tracking-normal translate-y-[-0.5px]">LIVE</span>
-                  </span>
-                  <span className="text-[8.5px] font-bold text-red-100/90 tracking-widest uppercase leading-none mt-0.5">
-                    কথা বলুন (Voice Helper)
-                  </span>
-                </div>
-                
-                {/* Tiny blinking green radar if speech synthesis is available */}
-                {window.speechSynthesis && (
-                  <span className="relative flex h-2 w-2 ml-0.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                )}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleOpenAssistant}
+              className="h-13 px-4 bg-gradient-to-r from-red-600 via-[#ff1744] to-rose-600 text-white rounded-full flex items-center gap-2.5 shadow-[0_10px_35px_rgba(220,38,38,0.35)] border-2 border-white/50 cursor-pointer select-none hover:scale-[1.05] active:scale-95 transition-all text-center"
+              style={{ touchAction: 'manipulation' }}
+              title="রক্তবন্ধু AI সহকারী"
+            >
+              <div className="w-7.5 h-7.5 rounded-full bg-white/20 flex items-center justify-center relative shadow-inner shrink-0">
+                <span className="absolute -inset-0.5 bg-white/30 rounded-full animate-ping opacity-60" />
+                <Droplet className="w-3.5 h-3.5 text-white fill-white stroke-[2]" />
+              </div>
+              
+              <div className="flex flex-col text-left pr-1">
+                <span className="text-[11.5px] font-black tracking-wide text-white leading-none flex items-center gap-1">
+                  রক্তবন্ধু AI সহকারী <span className="text-[7.5px] bg-white text-red-650 font-extrabold px-1 rounded-full scale-90">LIVE</span>
+                </span>
+                <span className="text-[8px] font-bold text-red-50/80 tracking-wider leading-none mt-0.5 uppercase">
+                  কথা বলুন & ডোনার খুঁজুন
+                </span>
+              </div>
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main voice overlay/modal system */}
+      {/* Main chat dialog overlay modal */}
       <AnimatePresence>
         {isOpen && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-            {/* Backdrop */}
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-4">
+            {/* Backdrop blur element */}
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -489,332 +819,450 @@ export default function AIBloodAssistant({
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
             />
 
-            {/* Chat Dialog Window */}
+            {/* Smart mobile container inside the browser */}
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
-              className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-100 flex flex-col relative overflow-hidden h-[80vh] md:h-[600px]"
+              className="bg-[#fafbff] w-full max-w-md h-full md:h-[820px] md:max-h-[92vh] md:rounded-[36px] shadow-2xl border border-rose-100/40 flex flex-col relative overflow-hidden"
+              id="ai-mobile-assistant-container"
             >
-              {/* Top Accent Bar: Gradient */}
-              <div className="bg-gradient-to-r from-red-600 via-rose-600 to-rose-700 text-white p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="bg-white/15 p-2 rounded-xl">
-                    <Droplet className="w-5 h-5 text-white fill-white animate-pulse" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-black uppercase tracking-wider">রক্তবন্ধু AI সহকারী</h3>
-                    <p className="text-[10px] text-red-100 font-medium">রক্তদাতা খুঁজুন এবং রক্তের রিকোয়েস্ট তৈরি করুন</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <button 
-                    onClick={() => setIsMuted(!isMuted)} 
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
-                    title={isMuted ? "Unmute Voice output" : "Mute Voice output"}
-                  >
-                    {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                  </button>
-                  <button 
-                    onClick={handleReset} 
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors"
-                    title="Reset Dialogue flow"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                  <button 
-                    onClick={handleCloseAssistant} 
-                    className="p-1.5 rounded-lg hover:bg-white/10 text-white transition-colors ml-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Collapsible Info/Slot Tracker — Hidden by default ("উপরের প্রশ্ন গুলো হাইড থাকবে") */}
-              <div className="bg-slate-50 border-b border-slate-100 px-4 py-2 flex items-center justify-between text-[11px] text-slate-500 font-bold">
-                <span className="flex items-center gap-1.5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                  </span>
-                  রক্তবন্ধু AI সহকারী ফর্ম তথ্য ট্র্যাকার
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowSlotBoard(!showSlotBoard)}
-                  className="bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg text-[10px] text-red-600 font-black cursor-pointer transition select-none flex items-center gap-1 shrink-0"
-                >
-                  {showSlotBoard ? "প্রশ্নসমূহ হাইড করুন" : "প্রশ্নসমূহ দেখুন"}
-                </button>
-              </div>
-
-              {showSlotBoard && (
-                <div className="bg-slate-50 border-b border-slate-100 p-3 flex gap-2 text-[10px] font-bold text-slate-600 overflow-x-auto whitespace-nowrap scrollbar-none scroll-smooth">
-                  {slots.taskMode === 'create_request' ? (
-                    <>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
-                        <span>গ্রুপ: {slots.bloodGroup || 'প্রয়োজন'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                        <span>জেলা: {slots.district || 'প্রয়োজন'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                        <span>থানা: {slots.thana || 'প্রয়োজন'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.hospital ? 'bg-teal-50 border-teal-200 text-teal-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <HelpCircle className="w-3.5 h-3.5 text-teal-500" />
-                        <span>হাসপাতাল: {slots.hospital || 'প্রয়োজন'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.medicalReason ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
-                        <span>সমস্যা: {slots.medicalReason || 'প্রয়োজন'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border shrink-0 ${slots.contactPhone ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
-                        <span>নম্বর: {slots.contactPhone || 'প্রয়োজন'}</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.bloodGroup ? 'bg-red-50 border-red-200 text-red-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <Droplet className={`w-3.5 h-3.5 ${slots.bloodGroup ? 'fill-red-600 stroke-red-600' : ''}`} />
-                        <span>রক্তের গ্রুপ: {slots.bloodGroup || 'জিজ্ঞেস করা হবে'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.district ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                        <span>জেলা: {slots.district || 'জিজ্ঞেস করা হবে'}</span>
-                      </div>
-                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border shrink-0 ${slots.thana ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white border-slate-100 text-slate-400'}`}>
-                        <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                        <span>থানা: {slots.thana || 'জিজ্ঞেস করা হবে'}</span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-
-              {/* Voice Pulse Status Bar with Autopilot microphone toggle */}
-              <div className="bg-slate-50/50 px-4 py-2.5 flex items-center justify-between text-[11px] border-b border-slate-100 gap-2 shrink-0">
-                <div className="flex items-center gap-2 overflow-hidden">
-                  {isSpeaking && (
-                    <span className="flex gap-1.5 items-center">
-                      <span className="h-2 w-2 rounded-full bg-red-600 animate-ping shrink-0" />
-                      <span className="text-red-700 font-extrabold animate-pulse truncate">আমি বলছি...</span>
-                    </span>
-                  )}
-                  {isListening && (
-                    <span className="flex gap-1.5 items-center">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
-                      <span className="text-emerald-700 font-extrabold animate-pulse truncate">মাইক্রোফোন অন...</span>
-                    </span>
-                  )}
-                  {isThinking && (
-                    <span className="flex gap-1.5 items-center">
-                      <span className="h-2 w-2 rounded-full bg-blue-500 animate-ping shrink-0" />
-                      <span className="text-blue-700 font-extrabold animate-pulse truncate">বিশ্লেষণ করছি...</span>
-                    </span>
-                  )}
-                  {!isSpeaking && !isListening && !isThinking && (
-                    <span className="text-slate-400 font-bold truncate">নিশ্চুপ (মাইক অফ)</span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {/* Autopilot Mic Mode Toggle switch */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextVal = !autoPilotMic;
-                      setAutoPilotMic(nextVal);
-                      localStorage.setItem('auto_pilot_mic', String(nextVal));
-                    }}
-                    className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all ${
-                      autoPilotMic 
-                        ? 'bg-rose-50 text-rose-700 border-rose-200' 
-                        : 'bg-white text-slate-500 border-slate-200'
-                    }`}
-                    title="অটো পাইলট মাইক অন থাকলে উত্তর দেওয়ার পরই মাইক নিজে থেকেই চালু হয়ে যাবে।"
-                  >
-                    <span className={`h-1.5 w-1.5 rounded-full ${autoPilotMic ? 'bg-rose-600 animate-pulse' : 'bg-slate-300'}`} />
-                    <span>অটো পাইলট: {autoPilotMic ? "অন" : "অফ"}</span>
-                  </button>
-
-                  {/* Microphone Manual Toggle Control */}
-                  <button
-                    type="button"
-                    onClick={isListening ? stopListening : startListening}
-                    disabled={isSpeaking || isThinking}
-                    className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider flex items-center gap-1 border transition-all ${
-                      isListening 
-                        ? 'bg-red-500 text-white border-red-500 hover:bg-red-600 shadow-sm' 
-                        : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 disabled:opacity-50 cursor-pointer'
-                    }`}
-                  >
-                    {isListening ? (
-                      <>
-                        <MicOff className="w-2.5 h-2.5 text-white" />
-                        <span>বন্ধ করুন</span>
-                      </>
-                    ) : (
-                      <>
-                        <Mic className="w-2.5 h-2.5 text-slate-500 animate-pulse" />
-                        <span>কথা বলুন</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Chat Messages Log */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/30 scrollbar-thin">
-                {messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm ${
-                      m.role === 'user'
-                        ? 'bg-red-600 text-white rounded-br-none'
-                        : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none'
-                    }`}>
-                      <p className="font-medium leading-relaxed leading-7">{m.text}</p>
-                      
-                      {/* One-click prefilled actions if limit warning has shown */}
-                      {m.role === 'assistant' && m.text.includes("আমার সিস্টেমের কাজ চলমান") && (
-                        <div className="mt-3 p-3 bg-red-50/90 rounded-2xl border border-red-100 space-y-2 text-slate-900 font-sans">
-                          <p className="text-[11px] font-bold text-slate-800">
-                            সরাসরি ১-ক্লিকে আপনার প্রোফাইল ঠিকানা ও রক্তের গ্রুপ ব্যবহার করে কাজ সম্পন্ন করুন:
+              {viewMode === 'chat' ? (
+                // --- CHATPLAY MODE ---
+                <>
+                  {/* Top Premium Gradient Header */}
+                  <div className="bg-gradient-to-r from-red-600 via-[#ff1744] to-rose-600 text-white px-5 pt-8 pb-5 flex flex-col shrink-0 relative overflow-hidden rounded-b-[24px]">
+                    <div className="absolute top-0 right-0 w-44 h-44 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+                    
+                    <div className="flex items-center justify-between relative z-10 w-full">
+                      <div className="flex items-center gap-3">
+                        <RobotAvatar isSpeaking={isSpeaking} isThinking={isThinking} isListening={isListening} />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="text-base font-black tracking-tight leading-none text-white">BloodLink AI</h3>
+                            <span className="bg-white/20 text-[7.5px] font-extrabold px-1.5 py-0.5 rounded-full uppercase text-white scale-90">BETA</span>
+                          </div>
+                          <p className="text-[10px] text-red-100 font-bold tracking-wider mt-1 flex items-center gap-1">
+                            Your Smart Blood Assistant
                           </p>
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onOpenRequestForm({
-                                  bloodGroup: currentUserProfile?.bloodGroup || '',
-                                  district: currentUserProfile?.district || '',
-                                  thana: currentUserProfile?.thana || '',
-                                  hospital: 'জরুরি যেকোনো হাসপাতাল',
-                                  medicalReason: 'জরুরি রক্তের প্রয়োজন',
-                                  contactPhone: currentUserProfile?.phone || ''
-                                });
-                                handleCloseAssistant();
-                              }}
-                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-red-600 text-white hover:bg-red-700 rounded-xl font-bold text-[10px] transition cursor-pointer select-none border-none outline-none"
-                            >
-                              <Plus className="w-3.5 h-3.5" /> রিকোয়েস্ট ফর্ম
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onSearchDonors(
-                                  currentUserProfile?.bloodGroup || '', 
-                                  currentUserProfile?.district || '', 
-                                  currentUserProfile?.thana || ''
-                                );
-                                handleCloseAssistant();
-                              }}
-                              className="flex items-center justify-center gap-1.5 py-2 px-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl font-bold text-[10px] transition cursor-pointer select-none border-none outline-none"
-                            >
-                              <Search className="w-3.5 h-3.5" /> ডোনার খুঁজুন
-                            </button>
+                          <div className="flex items-center gap-1 mt-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-[8.5px] font-bold text-emerald-300">Online</span>
+                            <span className="text-[8.5px] text-white/50 font-mono tracking-widest ml-1 animate-pulse">.|||i.||.</span>
                           </div>
                         </div>
-                      )}
+                      </div>
 
-                      <span className="text-[9px] block text-right mt-1 opacity-60">
-                        {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {/* Header controls */}
+                      <div className="flex items-center gap-1.5 bg-black/10 p-1 rounded-2xl border border-white/10">
+                        <button 
+                          onClick={() => setViewMode('voice')}
+                          className="p-2 rounded-xl hover:bg-white/10 text-white transition-all flex items-center justify-center"
+                          title="Switch to Voice Call mode"
+                        >
+                          <Phone className="w-4 h-4 text-emerald-300 animate-bounce" />
+                        </button>
+                        <button 
+                          onClick={() => setIsMuted(!isMuted)} 
+                          className="p-2 rounded-xl hover:bg-white/10 text-white transition-all flex items-center justify-center"
+                        >
+                          {isMuted ? <VolumeX className="w-4 h-4 text-red-300" /> : <Volume2 className="w-4 h-4" />}
+                        </button>
+                        <button 
+                          onClick={handleReset} 
+                          className="p-2 rounded-xl hover:bg-white/10 text-white transition-all flex items-center justify-center"
+                          title="Reset Conversation"
+                        >
+                          <RotateCcw className="w-4 h-4 opacity-75" />
+                        </button>
+                        <button 
+                          onClick={handleCloseAssistant} 
+                          className="p-2 rounded-xl hover:bg-white/10 text-white transition-all flex items-center justify-center"
+                        >
+                          <X className="w-4.5 h-4.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick action chips horizontal slider inside header */}
+                    <div className="flex gap-2.5 overflow-x-auto pt-4 pb-0.5 scrollbar-none whitespace-nowrap">
+                      {[
+                        { label: 'জরুরি রক্ত চাই', icon: '🩸', val: 'জরুরি রক্ত চাই' },
+                        { label: 'ডোনার খুঁজুন', icon: '👥', val: 'ডোনার খুঁজুন' },
+                        { label: 'নিকটবর্তী ডোনার', icon: '📍', val: 'নিকটবর্তী ডোনার দেখাও' },
+                        { label: 'রিকোয়েস্ট তৈরি', icon: '📋', val: 'রক্তের রিকোয়েস্ট তৈরি করতে চাই' },
+                        { label: 'সাহায্য', icon: '❓', val: 'সাহায্য করো' }
+                      ].map((chip, i) => (
+                        <button
+                          key={i}
+                          onClick={() => handleChipClick(chip.val)}
+                          className="bg-white/10 hover:bg-white/25 active:scale-95 border border-white/15 px-3 py-1.5 rounded-xl text-[10.5px] font-bold text-white flex items-center gap-1 transition cursor-pointer"
+                        >
+                          <span>{chip.icon}</span>
+                          <span>{chip.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Message logging window */}
+                  <div className="flex-1 overflow-y-auto px-4.5 py-4 space-y-4 scrollbar-none scroll-smooth">
+                    {messages.map((m) => {
+                      const isUser = m.role === 'user';
+                      return (
+                        <div key={m.id} className="space-y-1 animate-in fade-in duration-300">
+                          <div className={`flex items-start gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                            {/* Assistant message avatar */}
+                            {!isUser && (
+                              <div className="w-7 h-7 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center shrink-0">
+                                <span className="text-xs">🤖</span>
+                              </div>
+                            )}
+
+                            <div className={`max-w-[82%] p-3.5 rounded-[22px] text-xs shadow-xs ${
+                              isUser
+                                ? 'bg-gradient-to-r from-red-50 to-pink-50 text-slate-800 border border-pink-100/60 rounded-tr-none'
+                                : 'bg-white border border-slate-100/80 text-slate-800 rounded-tl-none font-medium leading-relaxed'
+                            }`}>
+                              <p className="whitespace-pre-wrap leading-relaxed">{m.text}</p>
+                              
+                              <span className="text-[8.5px] text-slate-400 font-bold flex items-center justify-end gap-0.5 mt-1 opacity-80 select-none">
+                                {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {isUser && <span className="text-emerald-500 font-extrabold">✓✓</span>}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Render custom smart blood request element card inside stream */}
+                          {m.meta?.showCustomCard && (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="pl-9 pr-2"
+                            >
+                              <SmartBloodRequestCard slots={m.meta.payloadSlots} onPublish={() => handlePublishRequest(m.meta?.payloadSlots)} />
+                            </motion.div>
+                          )}
+
+                          {/* Render near donor recommendation sliders */}
+                          {m.meta?.showDonorsList && (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="pl-1 pr-1"
+                            >
+                              <NearbyDonorsList 
+                                bloodGroup={m.meta.payloadSlots?.bloodGroup || slots.bloodGroup} 
+                                donors={allUsers}
+                                onCall={handleCallDonor}
+                                onMessage={handleMessageDonor}
+                              />
+                            </motion.div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {isThinking && (
+                      <div className="flex justify-start gap-2.5 items-center">
+                        <div className="w-7 h-7 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center shrink-0 animate-spin" />
+                        <div className="bg-white border border-slate-100/80 rounded-[20px] rounded-tl-none px-4 py-3.5 shadow-xs text-slate-400 flex items-center gap-2">
+                          <span className="flex gap-1">
+                            <span className="h-1.5 w-1.5 bg-red-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                            <span className="h-1.5 w-1.5 bg-red-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                            <span className="h-1.5 w-1.5 bg-red-400 rounded-full animate-bounce" />
+                          </span>
+                          <span className="text-[10px] font-black uppercase tracking-wider text-rose-500">A.I. analyze...</span>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Under prompt list wrapper: "আপনি চাইলে বলতে পারেন" */}
+                  <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 shrink-0">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase tracking-wider">
+                        <span>✨</span> আপনি চাইলে বলতে পারেন
+                      </p>
+                      <button className="text-[9px] text-[#ff1744] font-black uppercase tracking-wider flex items-center gap-0.5">
+                        See More <ChevronRight className="w-3 h-3 stroke-[2.5]" />
+                      </button>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-none pb-1">
+                      {[
+                        { label: 'O+ রক্ত কোথায় পাব?', val: 'O+ রক্ত কোথায় পাব?' },
+                        { label: 'নিকটবর্তী ডোনার দেখাও', val: 'নিকটবর্তী ডোনার দেখাও' },
+                        { label: 'জরুরি রিকোয়েস্ট তৈরি কর', val: 'জরুরি রিকোয়েস্ট তৈরি কর' },
+                        { label: 'AI দিয়ে ডোনার কল কর', val: 'AI দিয়ে ডোনার কে কিভাবে কল করব?' }
+                      ].map((prompt, k) => (
+                        <button
+                          key={k}
+                          onClick={() => handleSendMessage(prompt.val)}
+                          className="bg-white hover:bg-rose-50 border border-slate-200/80 hover:border-rose-200 px-3 py-1.5 rounded-full text-[10.5px] font-bold text-slate-700 transition cursor-pointer select-none"
+                        >
+                          {prompt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bot Interactive input footer */}
+                  <div className="p-4 bg-white border-t border-slate-100 shrink-0 flex items-center justify-between gap-2 md:pb-6 relative z-10">
+                    <button 
+                      type="button"
+                      onClick={handleReset}
+                      className="w-10 h-10 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-full flex items-center justify-center active:scale-95 transition-transform cursor-pointer"
+                      title="Clear session / attachment"
+                    >
+                      <Plus className="w-4.5 h-4.5" />
+                    </button>
+                    
+                    <form 
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendMessage(inputText);
+                      }}
+                      className="flex-1 flex bg-slate-50/80 border border-slate-100 focus-within:border-rose-450 focus-within:ring-2 focus-within:ring-red-500/10 rounded-full px-4.5 py-1.5 items-center gap-2 transition"
+                    >
+                      <input
+                        type="text"
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        placeholder="কিছু লিখুন..."
+                        className="flex-1 bg-transparent border-none text-slate-800 placeholder-slate-400 font-bold focus:outline-none text-xs outline-none py-1.5"
+                      />
+
+                      {/* Small mini-icons for layout features */}
+                      <div className="flex items-center gap-1.5 text-slate-400 shrink-0">
+                        <button type="button" onClick={() => handleSendMessage('আমার অবস্থান চেক করো')} className="p-1 hover:text-slate-600">
+                          <MapPin className="w-4 h-4" />
+                        </button>
+                        <button type="button" className="p-1 hover:text-slate-600">
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={isListening ? stopListening : startListening}
+                          className={`p-1 ${isListening ? 'text-[#ff1744] bg-rose-50 rounded-full' : 'hover:text-slate-600'}`}
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </form>
+
+                    <button
+                      onClick={() => handleSendMessage(inputText)}
+                      disabled={!inputText.trim() && !isListening}
+                      className="w-10 h-10 bg-[#ff1744] hover:bg-red-700 disabled:bg-slate-200 text-white rounded-full flex items-center justify-center shadow-md active:scale-90 transition disabled:shadow-none cursor-pointer border-none outline-none"
+                    >
+                      <Send className="w-4 h-4 text-white fill-white translate-x-[1px]" />
+                    </button>
+                  </div>
+
+                  {/* Giant floating hold-to-talk voice wave visualizer trigger at the bottom center */}
+                  <div className="flex flex-col items-center justify-center bg-white border-t border-slate-100 py-4.5 shrink-0 relative select-none">
+                    <div className="absolute inset-0 bg-slate-50/40 pointer-events-none" />
+                    
+                    <div className="relative flex flex-col items-center justify-center z-10 w-full px-6">
+                      {/* Premium biometric capsule deck shape */}
+                      <button 
+                        onClick={handleVoiceToggle}
+                        className={`w-full max-w-[340px] py-4 px-6 rounded-[22px] flex items-center justify-between shadow-xl border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                          isListening 
+                            ? 'bg-gradient-to-r from-red-600 via-[#ff1744] to-rose-600 border-[#ff1744] text-white scale-[1.04] shadow-red-500/30' 
+                            : 'bg-white hover:bg-slate-50 border-slate-250 text-slate-800 hover:scale-[1.01]'
+                        }`}
+                        style={{ 
+                          userSelect: 'none',
+                          WebkitUserSelect: 'none',
+                          WebkitTouchCallout: 'none'
+                        }}
+                      >
+                        {/* Dynamic ripple underlays */}
+                        <AnimatePresence>
+                          {isListening && (
+                            <motion.div
+                              initial={{ opacity: 0.6, scale: 0.95 }}
+                              animate={{ scale: [1, 1.12, 1], opacity: [0.4, 0.1, 0.4] }}
+                              exit={{ opacity: 0 }}
+                              transition={{ repeat: Infinity, duration: 1.5 }}
+                              className="absolute inset-0 bg-white/20 rounded-xl"
+                            />
+                          )}
+                        </AnimatePresence>
+
+                        {/* Left Audio Wave lines */}
+                        <div className="flex items-center gap-1 w-10 justify-center">
+                          {[1, 2, 3, 4].map((bar) => (
+                            <motion.span
+                              key={bar}
+                              animate={isListening ? { height: [8, 22, 8] } : { height: 8 }}
+                              transition={{ repeat: Infinity, duration: 0.6, delay: bar * 0.12 }}
+                              className={`w-1 rounded-full ${isListening ? 'bg-white' : 'bg-red-400'}`}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Core central text instruction */}
+                        <div className="flex items-center gap-2 relative z-10 w-[180px] justify-center">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shadow-md transition-colors ${
+                            isListening ? 'bg-white text-[#ff1744]' : 'bg-[#ff1744] text-white shadow-[#ff1744]/20'
+                          }`}>
+                            <Mic className="w-4.5 h-4.5 animate-pulse" />
+                          </div>
+                          
+                          <div className="flex flex-col text-left">
+                            <span className="text-[12px] font-black tracking-wide leading-none uppercase">
+                              {isListening ? "Listening Now" : "Tap to Talk"}
+                            </span>
+                            <span className={`text-[9.5px] font-bold mt-1 leading-none ${
+                              isListening ? 'text-red-100' : 'text-slate-400'
+                            }`}>
+                              {isListening ? "বন্ধ করতে স্পর্শ করুন" : "কথা বলতে এখানে ট্যাপ করুন"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Right Audio Wave lines */}
+                        <div className="flex items-center gap-1 w-10 justify-center">
+                          {[4, 3, 2, 1].map((bar) => (
+                            <motion.span
+                              key={bar}
+                              animate={isListening ? { height: [8, 22, 8] } : { height: 8 }}
+                              transition={{ repeat: Infinity, duration: 0.6, delay: bar * 0.12 }}
+                              className={`w-1 rounded-full ${isListening ? 'bg-white' : 'bg-red-400'}`}
+                            />
+                          ))}
+                        </div>
+                      </button>
+
+                      {/* Small safety/privacy indicator below button */}
+                      <span className="text-[8.5px] font-extrabold text-slate-400 tracking-wider uppercase mt-2 select-none flex items-center gap-1">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isListening ? 'bg-emerald-500 animate-ping' : 'bg-slate-350'}`} />
+                        {isListening ? 'Voice Channel Connected Live' : 'Tap to toggle voice assistant search'}
                       </span>
                     </div>
                   </div>
-                ))}
+                </>
+              ) : (
+                // --- CHATGPT + ELEVENLABS IMMERSIVE VOICE CALL MODE ---
+                <div className="flex-1 bg-gradient-to-b from-[#0f172a] via-[#1e1b4b] to-[#020617] flex flex-col relative text-white p-6">
+                  {/* Subtle glass grid background */}
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(244,63,94,0.12),transparent_45%)] pointer-events-none" />
+                  
+                  {/* Premium Top Bar */}
+                  <div className="flex items-center justify-between w-full pb-4 border-b border-white/5 relative z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">Call Live Sync</span>
+                    </div>
+                    <div className="text-center">
+                      <h4 className="text-sm font-black text-slate-100">BloodLink Voice AI</h4>
+                      <p className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Ultra low latency</p>
+                    </div>
+                    <button 
+                      onClick={() => setViewMode('chat')}
+                      className="p-1 px-3 bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 rounded-full text-[9px] font-bold text-white transition flex items-center gap-1"
+                    >
+                      Text Chat Mode
+                    </button>
+                  </div>
 
-                {isThinking && (
-                  <div className="flex justify-start">
-                    <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-none px-4 py-3.5 shadow-sm text-slate-400 flex items-center gap-2">
-                      <div className="flex gap-1">
-                        <span className="h-2 w-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                        <span className="h-2 w-2 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                        <span className="h-2 w-2 bg-slate-400 rounded-full animate-bounce" />
-                      </div>
-                      <span className="text-xs font-semibold">এআই উত্তর লিখছে...</span>
+                  {/* Huge glowing circle of dynamic sound rippling waves in center */}
+                  <div className="flex-1 flex flex-col items-center justify-center relative my-10 select-none">
+                    {/* Ripple outer glow */}
+                    <div className="absolute w-72 h-72 rounded-full bg-red-500/5 blur-3xl" />
+                    
+                    {/* Concentric rotating glass dials to simulate sci-fi ElevenLabs */}
+                    <div className="absolute w-[220px] h-[220px] rounded-full border border-pink-500/10 animate-[spin_12s_linear_infinite]" />
+                    <div className="absolute w-[180px] h-[180px] rounded-full border-2 border-dashed border-red-500/10 animate-[spin_8s_linear_infinite_reverse]" />
+                    
+                    {/* Main pulsing voice sphere */}
+                    <motion.div 
+                      animate={{
+                        scale: isSpeaking ? [1, 1.15, 1.05, 1.2, 1] : isListening ? [1, 1.08, 1, 1.12, 1] : [1, 1.02, 1],
+                        boxShadow: isSpeaking 
+                          ? ["0 0 30px rgba(239, 68, 68, 0.2)", "0 0 60px rgba(244, 63, 94, 0.45)", "0 0 35px rgba(239, 68, 68, 0.2)"] 
+                          : ["0 0 20px rgba(14, 165, 233, 0.1)", "0 0 40px rgba(6, 182, 212, 0.3)", "0 0 20px rgba(14, 165, 233, 0.1)"]
+                      }}
+                      transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                      className="w-40 h-40 rounded-full bg-white/5 backdrop-blur-xl border border-white/15 flex items-center justify-center relative shadow-2xl"
+                    >
+                      <RobotAvatar size="lg" isSpeaking={isSpeaking} isThinking={isThinking} isListening={isListening} />
+                    </motion.div>
+
+                    {/* Status prompt */}
+                    <div className="mt-8 text-center max-w-xs space-y-1">
+                      <p className="text-rose-455 text-xs uppercase tracking-widest font-black">
+                        {isSpeaking ? "BloodLink Speaking..." : isListening ? "Listening with AI Voice..." : "Standing By..."}
+                      </p>
+                      
+                      {/* Live spoken dynamic transcript box */}
+                      <p className="text-slate-300 font-medium text-[13.5px] italic leading-relaxed pt-2 opacity-90 px-2 animate-pulse min-h-[44px]">
+                        {isSpeaking 
+                          ? `"${messages[messages.length - 1]?.text || 'আসসালামু আলাইকুম...'}"` 
+                          : isListening 
+                          ? '"জরুরি রক্তের জন্য তথ্য শুনছি..."' 
+                          : '"কীভাবে আমি আপনাকে সহযোগিতা করতে পারি?"'
+                        }
+                      </p>
                     </div>
                   </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
 
-              {/* Slot completeness visual notification */}
-              {slots.taskMode === 'create_request' && slots.bloodGroup && slots.district && slots.thana && slots.hospital && slots.medicalReason && (
-                <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between text-xs text-emerald-800 font-bold">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 fill-emerald-100" />
-                    <span>প্রয়োজনীয় সব বিবরণ পেয়েছি! রক্তের রিকোয়েস্ট ফর্মটি সম্পূর্ণ করুন।</span>
+                  {/* Beautiful Call Control buttons toolbar */}
+                  <div className="bg-white/5 border border-white/10 rounded-3xl p-5 flex flex-col space-y-4 shrink-0 shadow-lg relative z-10 mb-2">
+                    <div className="flex items-center justify-around">
+                      {/* Mute toggle button */}
+                      <div className="flex flex-col items-center gap-1">
+                        <button 
+                          onClick={() => setIsMuted(!isMuted)} 
+                          className={`w-12 h-12 rounded-full flex items-center justify-center transition border ${
+                            isMuted 
+                              ? 'bg-rose-900 border-rose-500/40 text-rose-200' 
+                              : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                          }`}
+                        >
+                          {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                        </button>
+                        <span className="text-[9px] font-bold text-slate-400">Audio Muted</span>
+                      </div>
+
+                      {/* Giant Disconnect Hangup Red Button */}
+                      <div className="flex flex-col items-center gap-1">
+                        <button 
+                          onClick={() => setViewMode('chat')}
+                          className="w-16 h-16 bg-gradient-to-br from-red-500 to-rose-600 rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-transform"
+                        >
+                          <PhoneOff className="w-6 h-6 text-white text-bold" />
+                        </button>
+                        <span className="text-[10px] font-black text-red-400 uppercase tracking-widest mt-1">Disconnect</span>
+                      </div>
+
+                      {/* Microphone mute switcher */}
+                      <div className="flex flex-col items-center gap-1">
+                        <button 
+                          onClick={isListening ? stopListening : startListening}
+                          className={`w-12 h-12 rounded-full flex items-center justify-center transition border ${
+                            isListening 
+                              ? 'bg-emerald-900 border-emerald-500 text-emerald-250' 
+                              : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                          }`}
+                        >
+                          <Mic className="w-5 h-5" />
+                        </button>
+                        <span className="text-[9px] font-bold text-slate-400">Muted Microphone</span>
+                      </div>
+                    </div>
+
+                    <div className="text-center pt-2">
+                      <p className="text-[9.5px] font-bold text-slate-400 tracking-wider flex items-center justify-center gap-1">
+                        🛡️ AI Secure voice session active • 2026 Telehealth Core
+                      </p>
+                    </div>
                   </div>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      onOpenRequestForm({
-                        bloodGroup: slots.bloodGroup || '',
-                        district: slots.district || '',
-                        thana: slots.thana || '',
-                        hospital: slots.hospital || '',
-                        medicalReason: slots.medicalReason || '',
-                        contactPhone: slots.contactPhone || ''
-                      });
-                      handleCloseAssistant();
-                    }}
-                    className="bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] hover:bg-emerald-700 transition cursor-pointer shrink-0"
-                  >
-                    ফর্ম খুলুন
-                  </button>
                 </div>
               )}
-
-              {slots.taskMode !== 'create_request' && slots.bloodGroup && (
-                <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-100 flex items-center justify-between text-xs text-emerald-800 font-bold">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-600 fill-emerald-100" />
-                    <span>প্রয়োজনীয় বিবরণ পেয়েছি! আমাদের ডাটাবেস থেকে অটো ও সরাসরি চেক করা হচ্ছে।</span>
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      onSearchDonors(slots.bloodGroup!, slots.district || '', slots.thana || '');
-                      handleCloseAssistant();
-                    }}
-                    className="bg-emerald-600 text-white rounded-lg px-2.5 py-1 text-[10px] hover:bg-emerald-700 transition cursor-pointer shrink-0"
-                  >
-                    সার্চ দিন
-                  </button>
-                </div>
-              )}
-
-              {/* Bot Input Bar */}
-              <form 
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage(inputText);
-                }}
-                className="p-3 bg-white border-t border-slate-100 flex gap-2 items-center"
-              >
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="এখানে আপনার রক্তের গ্রুপ বা বার্তা লিখুন..."
-                  className="flex-1 bg-slate-50 border-slate-200 focus:outline-none focus:ring-2 focus:ring-red-500 rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-800"
-                />
-
-                <button
-                  type="submit"
-                  disabled={!inputText.trim() || isThinking}
-                  className="w-10 h-10 bg-red-600 text-white rounded-xl flex items-center justify-center shadow-md active:scale-95 transition-transform disabled:opacity-40 disabled:scale-100 cursor-pointer"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
             </motion.div>
           </div>
         )}

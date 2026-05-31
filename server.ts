@@ -648,6 +648,8 @@ Response JSON Schema:
     }
   });
 
+
+
   // Admin API endpoint to generate static sitemap snapshot
   app.post("/api/admin/generate-sitemap", async (req, res) => {
     try {

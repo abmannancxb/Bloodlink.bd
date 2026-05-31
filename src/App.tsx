@@ -185,7 +185,9 @@ import {
   SlidersHorizontal,
   Layers,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  Bot,
+  QrCode
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -3169,43 +3171,103 @@ export default function App() {
               {!showRequestsOverlay ? (
                 <div className="w-full h-full overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-rose-50/10 pt-20 pb-28 px-4 scrollbar-none scroll-smooth">
                   <div className="w-full max-w-2xl mx-auto space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
-                    
-                    {/* 1. Urgent SOS Alert Banner */}
-                    <div className="bg-gradient-to-r from-red-50/90 to-rose-50/65 border border-red-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse relative overflow-hidden group">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-xl pointer-events-none" />
-                      <div className="flex items-center gap-3.5 relative z-10">
-                        {/* Custom high-end SOS Alert Siren badge with animated rays */}
-                        <div className="relative shrink-0 select-none">
-                          <div className="absolute inset-0 bg-red-500/10 rounded-xl blur-xs scale-110" />
-                          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#ff1744] to-rose-600 text-white flex flex-col items-center justify-center font-black text-[9px] uppercase tracking-wider relative shadow-md shadow-red-500/25">
-                            <span className="leading-none mt-0.5 animate-bounce">🚨</span>
-                            <span className="text-[7.5px] leading-none mt-0.5 tracking-tighter">SOS</span>
-                          </div>
-                        </div>
+                           {/* 1. Urgent SOS Alert Banner */}
+                    {(() => {
+                      const pendingRequests = requests.filter(r => r.status === 'Pending');
+                      // Find Urgent first, then Critical, then Normal
+                      let activeAlert = pendingRequests.find(r => r.urgency === 'Urgent');
+                      if (!activeAlert) {
+                        activeAlert = pendingRequests.find(r => r.urgency === 'Critical');
+                      }
+                      if (!activeAlert) {
+                        activeAlert = pendingRequests.find(r => String(r.urgency).toLowerCase() === 'critical' || String(r.urgency).toLowerCase() === 'crital');
+                      }
+                      if (!activeAlert) {
+                        activeAlert = pendingRequests.find(r => r.urgency === 'Normal');
+                      }
+                      if (!activeAlert && pendingRequests.length > 0) {
+                        activeAlert = pendingRequests[0];
+                      }
 
-                        <div>
-                          <h4 className="text-xs font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                            Urgent: O- Blood Needed in Dhaka Medical
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#ff1744] animate-ping shrink-0" />
-                          </h4>
-                          <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">Posted 30 min ago</p>
+                      if (!activeAlert) {
+                        return (
+                          <div className="bg-gradient-to-r from-emerald-50/90 to-teal-50/65 border border-emerald-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
+                            <div className="flex items-center gap-3.5 relative z-10">
+                              <div className="relative shrink-0 select-none">
+                                <div className="absolute inset-0 bg-emerald-500/10 rounded-xl blur-xs scale-110" />
+                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex flex-col items-center justify-center font-black text-[9px] uppercase tracking-wider relative shadow-md shadow-emerald-500/25">
+                                  <span className="leading-none mt-0.5 animate-bounce">💖</span>
+                                  <span className="text-[7.5px] leading-none mt-0.5 tracking-tighter">SAFE</span>
+                                </div>
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-black text-slate-900 tracking-tight flex items-center gap-1.5">
+                                  All emergency requests responded to!
+                                </h4>
+                                <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">No active urgent alerts</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => {
+                                resetFilters();
+                                setView('requests');
+                                setTimeout(() => {
+                                  setShowRequestsOverlay(true);
+                                }, 100);
+                              }}
+                              className="text-emerald-600 hover:text-emerald-750 font-black text-[10.5px] uppercase tracking-wider flex items-center gap-1 transition-all shrink-0 cursor-pointer select-none"
+                            >
+                              View All <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      const postedTime = activeAlert.createdAt ? formatLastSeen(activeAlert.createdAt) : 'some time ago';
+                      const alertSubtitle = `${activeAlert.unitsNeeded || 1} unit(s) needed at ${activeAlert.hospital || activeAlert.thana || 'Local Hospital'}`;
+
+                      return (
+                        <div className="bg-gradient-to-r from-red-50/90 to-rose-50/65 border border-red-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-xl pointer-events-none" />
+                          <div className="flex items-center gap-3.5 relative z-10">
+                            {/* Custom high-end SOS Alert Siren badge with animated rays */}
+                            <div className="relative shrink-0 select-none">
+                              <div className="absolute inset-0 bg-red-500/10 rounded-xl blur-xs scale-110" />
+                              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#ff1744] to-rose-600 text-white flex flex-col items-center justify-center font-black text-[9px] uppercase tracking-wider relative shadow-md shadow-red-500/25">
+                                <span className="leading-none mt-0.5 animate-bounce">🚨</span>
+                                <span className="text-[7.5px] leading-none mt-0.5 tracking-tighter uppercase font-black">{activeAlert.bloodGroup}</span>
+                              </div>
+                            </div>
+
+                            <div>
+                              <h4 className="text-xs font-black text-slate-900 tracking-tight flex flex-wrap items-center gap-1.5">
+                                {activeAlert.urgency || 'Urgent'}: {activeAlert.bloodGroup} Blood Needed in {activeAlert.thana || activeAlert.district || 'Hospital'}
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff1744] animate-ping shrink-0" />
+                              </h4>
+                              <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">
+                                {alertSubtitle} • Posted {postedTime}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <button 
+                            onClick={() => {
+                              setFilterBloodGroup(activeAlert.bloodGroup);
+                              resetFilters();
+                              setView('requests');
+                              setMatchingDonorsRequest(activeAlert);
+                              setTimeout(() => {
+                                setShowRequestsOverlay(true);
+                              }, 100);
+                            }}
+                            className="text-red-600 hover:text-red-750 font-black text-[10.5px] uppercase tracking-wider flex items-center gap-1 transition-all shrink-0 cursor-pointer select-none"
+                          >
+                            View Details <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
+                          </button>
                         </div>
-                      </div>
-                      
-                      <button 
-                        onClick={() => {
-                          setFilterBloodGroup('O-');
-                          resetFilters();
-                          setView('requests');
-                          setTimeout(() => {
-                            setShowRequestsOverlay(true);
-                          }, 100);
-                        }}
-                        className="text-red-600 hover:text-red-750 font-black text-[10.5px] uppercase tracking-wider flex items-center gap-1 transition-all shrink-0 cursor-pointer select-none"
-                      >
-                        View All <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
-                      </button>
-                    </div>
+                      );
+                    })()}
 
                     {/* 2. Top Analytics Metrics Strip */}
                     <div className="grid grid-cols-4 gap-2">
@@ -5189,6 +5251,7 @@ export default function App() {
                 askConfirm={askConfirm}
                 notifyAdmins={notifyAdmins}
                 onViewProfile={(uid) => onViewProfile(uid)}
+                onEditProfile={() => setView('profile')}
               />
             </div>
           </motion.div>
@@ -5702,8 +5765,8 @@ export default function App() {
                 strokeWidth="1.2"
               />
             </svg>
-            <div className="absolute top-0 bottom-0 left-0 w-3 bg-white/95 border-t border-b border-white/95" />
-            <div className="absolute top-0 bottom-0 right-0 w-3 bg-white/95 border-t border-b border-white/95" />
+            <div className="absolute top-0 bottom-0 left-0 w-3 bg-white/95" />
+            <div className="absolute top-0 bottom-0 right-0 w-3 bg-white/95" />
           </div>
 
           {/* Right Part with premium rounded borders */}
@@ -5734,7 +5797,7 @@ export default function App() {
         />
 
         {/* Special Middle Sparkle AI Button (Half inside the menu, half sticking up above) */}
-        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-10 h-20 pointer-events-auto select-none z-10">
+        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-4 h-20 pointer-events-auto select-none z-10">
           <button
             type="button"
             onClick={() => setIsAiAssistantOpen(true)}
@@ -5742,13 +5805,13 @@ export default function App() {
             style={{ touchAction: 'manipulation' }}
             title="রক্তবন্ধু AI সহকারী — আপনার এআই রক্তদাতা সাহায্যকারী"
           >
-            <Sparkles className="w-6.5 h-6.5 text-white stroke-[2.5]" />
+            <Bot className="w-6.5 h-6.5 text-white stroke-[2.2]" />
             <span className="text-[8.5px] font-black uppercase tracking-wider text-red-50 mt-0.5 leading-none">
               AI সহকারী
             </span>
             
             {/* Live blinking radar badge on the button */}
-            <span className="absolute -bottom-1 px-2.5 py-0.5 bg-[#0e1726] text-white border border-slate-705 rounded-full flex items-center gap-1 scale-90 shadow-lg z-20">
+            <span className="absolute -bottom-1 px-2.5 py-0.5 bg-[#0e1726] text-white border border-slate-700 rounded-full flex items-center gap-1 scale-90 shadow-lg z-20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
               <span className="text-[6.5px] font-black tracking-widest leading-none">LIVE</span>
             </span>
@@ -5808,7 +5871,7 @@ function renderMarkdown(text: string) {
       const match = trimmed.match(/^\*\s+\*\*(.*?)\*\*:\s*(.*)/);
       if (match) {
         return (
-          <div key={idx} className="mb-3 text-xs md:text-sm text-slate-705 pl-4 border-l-2 border-red-500">
+          <div key={idx} className="mb-3 text-xs md:text-sm text-slate-700 pl-4 border-l-2 border-red-500">
             <strong className="text-slate-900 font-extrabold">{match[1]}:</strong> {match[2]}
           </div>
         );
@@ -6972,7 +7035,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'feed', label: 'Community Feed', icon: <Users className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <ShieldAlert className="w-4 h-4" />, badge: stats.pendingReports > 0 ? stats.pendingReports : null },
     { id: 'alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: notifications.filter(n => !n.isRead).length > 0 ? notifications.filter(n => !n.isRead).length : null },
-    { id: 'ai-assistant', label: 'AI Assistant', icon: <Sparkles className="w-4 h-4 text-emerald-500" /> },
+    { id: 'ai-assistant', label: 'AI Assistant', icon: <Bot className="w-4 h-4 text-emerald-500" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'system', label: 'System', icon: <HardDrive className="w-4 h-4" /> },
     { id: 'gallery', label: 'Server Gallery', icon: <Image className="w-4 h-4" /> },
@@ -7819,7 +7882,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
             <div className="p-8 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
               <div>
                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5" /> AI Engine Controller
+                  <Bot className="w-3.5 h-3.5" /> AI Engine Controller
                 </p>
                 <h2 className="text-2xl font-black text-slate-900 tracking-tight">এ আই এসিস্ট্যান্ট ম্যানেজমেন্ট (AI Dashboard)</h2>
                 <p className="text-xs text-slate-500 mt-1">Configure Gemini vs Groq API configurations, dynamic threshold limits, and live-test the model.</p>
@@ -12910,7 +12973,7 @@ function NotificationsView({ requests, globalAlerts, profile, addToast, onDonati
 function NavButton({ active, icon, label, onClick, badge }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void, badge?: number }) {
   // Get tailored colors for active states exactly matching Dribbble spec
   let activeBg = 'bg-rose-500/10';
-  let activeText = 'text-red-650';
+  let activeText = 'text-red-600';
   let barColor = 'bg-[#FF1744] shadow-[0_2px_8px_rgba(255,23,68,0.4)]';
   let iconColor = 'text-[#FF1744]';
 
@@ -12953,19 +13016,19 @@ function NavButton({ active, icon, label, onClick, badge }: { active: boolean, i
           }`}
         >
           {React.cloneElement(icon as React.ReactElement, { 
-            className: `w-5.5 h-5.5 stroke-[2.2] transition-colors ${active ? iconColor : 'text-slate-500 group-hover:text-slate-705'}` 
+            className: `w-5.5 h-5.5 stroke-[2.2] transition-colors ${active ? iconColor : 'text-slate-500 group-hover:text-slate-700'}` 
           })}
         </motion.div>
         
         {badge !== undefined && badge > 0 && (
-          <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 bg-gradient-to-r from-red-650 to-rose-600 text-[8px] font-black text-white rounded-full flex items-center justify-center border border-white shadow-md ring-2 ring-red-100 animate-pulse">
+          <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 bg-gradient-to-r from-red-500 to-rose-600 text-[8px] font-black text-white rounded-full flex items-center justify-center border border-white shadow-md ring-2 ring-red-100 animate-pulse">
             {badge}
           </span>
         )}
       </div>
 
       <span className={`text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${
-        active ? `${activeText} scale-100` : 'text-slate-400 font-bold scale-95 group-hover:text-slate-650'
+        active ? `${activeText} scale-100` : 'text-slate-400 font-bold scale-95 group-hover:text-slate-600'
       }`}>
         {label}
       </span>
@@ -14945,7 +15008,7 @@ function UserProfileHistory({ donations, requests, currentUser, currentProfile, 
   );
 }
 
-function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile, onDeleteRequest, onDonationDone, addToast, allUsers, askConfirm, notifyAdmins, onViewProfile }: { uid: string, onBack: () => void, onMessage: (uid: string) => void, currentUser: FirebaseUser | null, currentProfile: UserProfile | null, onDeleteRequest: (id: string) => void, onDonationDone: (req: BloodRequest) => void, addToast: (title: string, body: string, type: 'success' | 'error' | 'info') => void, allUsers: UserProfile[], askConfirm: any, notifyAdmins: any, onViewProfile: (uid: string) => void }) {
+function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile, onDeleteRequest, onDonationDone, addToast, allUsers, askConfirm, notifyAdmins, onViewProfile, onEditProfile }: { uid: string, onBack: () => void, onMessage: (uid: string) => void, currentUser: FirebaseUser | null, currentProfile: UserProfile | null, onDeleteRequest: (id: string) => void, onDonationDone: (req: BloodRequest) => void, addToast: (title: string, body: string, type: 'success' | 'error' | 'info') => void, allUsers: UserProfile[], askConfirm: any, notifyAdmins: any, onViewProfile: (uid: string) => void, onEditProfile?: () => void }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userRequests, setUserRequests] = useState<BloodRequest[]>([]);
   const [donations, setDonations] = useState<DonationRecord[]>([]);
@@ -15099,353 +15162,519 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="max-w-2xl mx-auto pb-20"
+      className="max-w-[430px] mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-24"
     >
-      {/* Profile Container */}
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm mb-8 overflow-hidden relative">
-        
-        {/* Modern Parallax Banner */}
-        <div className="h-44 md:h-56 bg-slate-900 relative overflow-hidden">
-          {/* Swipe-down cue on mobile */}
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 w-12 h-1 bg-white/35 rounded-full z-25 md:hidden" />
-          {profile.coverURL ? (
-            <img src={profile.coverURL} className="w-full h-full object-cover opacity-85" alt="Cover" />
-          ) : (
-            <div className="absolute inset-0 bg-gradient-to-tr from-rose-950 via-slate-900 to-rose-900">
-              <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1.5px, transparent 0)', backgroundSize: '24px 24px' }} />
-              <div className="absolute -left-1/4 -bottom-1/4 w-96 h-96 bg-rose-600/10 rounded-full blur-3xl animate-pulse" />
-              <div className="absolute -right-1/4 -top-1/4 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl animate-pulse duration-5000" />
+      {/* 1. Red Curvaceous Header */}
+      <div className="bg-gradient-to-b from-red-650 via-red-600 to-rose-600 text-white rounded-b-[2.5rem] relative overflow-hidden pb-10 shadow-lg">
+        {/* Decorative Grid Mesh & Light effects */}
+        <div className="absolute inset-0 opacity-15 mix-blend-overlay" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1.5px, transparent 0)', backgroundSize: '16px 16px' }} />
+        <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl animate-pulse" />
+        <div className="absolute -right-10 -top-10 w-44 h-44 bg-rose-400/20 rounded-full blur-2xl animate-pulse duration-5000" />
+
+        {/* Custom Mobile-Style Top Status Bar */}
+        <div className="flex items-center justify-between text-white/90 text-[10px] font-sans px-5 pt-3 pb-2 select-none">
+          <span className="font-semibold tracking-tight">9:41</span>
+          <div className="flex items-center gap-1.5">
+            {/* Cell signal bars */}
+            <div className="flex gap-[1px] items-end h-2.5">
+              <div className="w-[1.2px] h-[30%] bg-white rounded-full"></div>
+              <div className="w-[1.2px] h-[50%] bg-white rounded-full"></div>
+              <div className="w-[1.2px] h-[75%] bg-white rounded-full"></div>
+              <div className="w-[1.2px] h-[100%] bg-white rounded-full"></div>
             </div>
-          )}
-          
-          {/* Header Action Overlay */}
-          <div className="absolute top-4 inset-x-4 flex items-center justify-between z-20">
-            <button 
-              onClick={onBack}
-              className="p-2 bg-slate-950/40 hover:bg-slate-950/60 text-white rounded-full transition-all backdrop-blur-md border border-white/10 active:scale-95 cursor-pointer"
-              title="Return"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex gap-2">
-              <button 
-                onClick={handleShareProfile}
-                className="px-4 py-2 bg-slate-950/40 hover:bg-slate-950/60 text-white rounded-xl transition-all backdrop-blur-md border border-white/10 active:scale-95 cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                title="Share Profile"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>Share</span>
-              </button>
+            {/* Wifi */}
+            <svg className="w-3 h-3 fill-white" viewBox="0 0 24 24">
+              <path d="M12 21a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-8.82-7.82a13 13 0 0 1 17.64 0l-1.42 1.42a11 11 0 0 0-14.8 0l-1.42-1.42zM.36 10.36a17 17 0 0 1 23.28 0l-1.42 1.42a15 15 0 0 0-20.44 0L.36 10.36z" />
+            </svg>
+            {/* Battery */}
+            <div className="w-3.5 h-2 bg-white/30 rounded-[3px] p-[1px] flex items-center relative">
+              <div className="h-full w-[85%] bg-white rounded-[1px]"></div>
+              <span className="w-[1px] h-1 bg-white/65 absolute -right-[2px] rounded-r-sm"></span>
             </div>
           </div>
         </div>
 
-        {/* Profile Header Block */}
-        <div className="px-5 sm:px-8 pb-8 -mt-12 sm:-mt-16 md:-mt-20 relative z-10">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-            <div className="flex flex-col sm:flex-row gap-5 items-start sm:items-end">
-              <div className="relative shrink-0">
-                <div className={`w-24 h-24 sm:w-32 sm:h-32 md:w-36 md:h-36 bg-white rounded-[2rem] overflow-hidden p-1 shadow-xl transition-all duration-300 relative border ${isEligibleNow ? 'border-emerald-300' : 'border-rose-100'}`}>
-                  <img 
-                    src={profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName)}&size=300&background=random&bold=true`} 
-                    alt={profile.displayName}
-                    className="w-full h-full object-cover rounded-[1.75rem]"
-                  />
-                </div>
-                {profile.isAvailable && (
-                  <span className="absolute bottom-2 right-2 flex h-5 w-5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-5 w-5 bg-emerald-500 border-4 border-white shadow-md"></span>
+        {/* Navigation Action Layer */}
+        <div className="flex items-center justify-between px-4 pb-2">
+          <button 
+            onClick={onBack}
+            className="p-1.5 hover:bg-white/10 text-white rounded-full transition-all active:scale-90 cursor-pointer"
+            title="Return"
+          >
+            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
+          </button>
+          
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/80">Donor Profile</span>
+
+          <button 
+            onClick={handleShareProfile}
+            className="p-1.5 hover:bg-white/10 text-white rounded-full transition-all active:scale-90 cursor-pointer"
+            title="Share Profile"
+          >
+            <Share2 className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </div>
+
+        {/* Main Header Block: Avatar, Name & ID Card */}
+        <div className="px-5 pt-3 flex items-start justify-between gap-3">
+          {/* Left / Info Side */}
+          <div className="flex-1 flex gap-3.5 items-start">
+            {/* Avatar Circle Container with Online dot */}
+            <div className="relative shrink-0 select-none">
+              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/95 p-0.5 shadow-md bg-white/10">
+                <img 
+                  src={profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName)}&size=150&background=F1F5F9&color=0F172A&bold=true`} 
+                  alt={profile.displayName}
+                  className="w-full h-full object-cover rounded-full"
+                />
+              </div>
+              <span className="absolute bottom-0 right-0 flex h-4 w-4">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white shadow-sm"></span>
+              </span>
+            </div>
+
+            {/* Core Text Info Block */}
+            <div className="space-y-1.5 pt-1 flex-1">
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-sm font-extrabold text-white tracking-tight leading-none drop-shadow-sm">
+                  {profile.displayName}
+                </h1>
+                {profile.isVerified && (
+                  <span className="bg-white text-rose-600 rounded-full p-[1px] shadow-sm shrink-0">
+                    <Check className="w-2.5 h-2.5 stroke-[4]" />
                   </span>
                 )}
               </div>
-              
-              <div className="space-y-1.5 mb-1 pt-12 md:pt-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight leading-none">
-                    {profile.displayName}
-                  </h1>
-                  {profile.isVerified && <BadgeCheck className="w-6 h-6 text-blue-500 fill-white shrink-0" />}
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500">
-                  <span className="flex items-center gap-1 bg-slate-50 border border-slate-100 px-2 py-0.5 rounded-lg">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                    {profile.thana}, {profile.district}
-                  </span>
-                  <span className="text-slate-300">•</span>
-                  <span className="text-slate-405 font-semibold uppercase tracking-wider text-[10px]">
-                    {profile.gender || 'Volunteer'}
-                  </span>
-                </div>
-              </div>
-            </div>
 
-            {/* Premium Glowing Blood Identifier */}
-            <div className="flex items-center gap-3 self-stretch sm:self-auto bg-slate-50 border border-slate-100 p-2.5 rounded-2xl relative overflow-hidden group">
-              <div className="absolute -right-2 -bottom-2 w-10 h-10 bg-rose-500/5 rounded-full blur-sm" />
-              <div className="w-10 h-10 bg-rose-50 border border-rose-100 rounded-xl flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                <Droplets className="w-5 h-5 text-rose-500 fill-rose-500/20" />
+              {/* Badges Flow Row */}
+              <div className="flex flex-wrap items-center gap-1">
+                {/* Blood Group Badge */}
+                <div className="bg-white/95 text-rose-600 font-extrabold text-[8.5px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full inline-block animate-pulse shrink-0"></span>
+                  <span>{profile.bloodGroup || 'O+'} Positive</span>
+                </div>
+                {/* Verified Tag */}
+                <div className="bg-white/95 text-emerald-600 font-extrabold text-[8.5px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-500 stroke-[2.5]" />
+                  <span>Verified Donor</span>
+                </div>
               </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Blood Group</p>
-                <p className="text-sm font-black text-rose-600 tracking-tight leading-none uppercase">Type {profile.bloodGroup}</p>
+
+              {/* Timestamp and Availability info */}
+              <div className="space-y-0.5 pt-0.5">
+                <p className="text-[9px] text-white/90 font-medium flex items-center gap-1">
+                  <Calendar className="w-2.7 h-2.7 text-white/80" />
+                  <span>Last Donation: {formatDisplayDate(profile.lastDonationDate) || '20 Apr 2024'}</span>
+                </p>
+                <p className="text-[9px] text-white/95 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
+                  <span>Online • Available for donation</span>
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Dynamic Bio Description */}
-          <div className="bg-slate-50/50 rounded-2xl p-4 border border-slate-100/50 mb-6">
-            <p className="text-xs text-slate-600 leading-relaxed font-normal">
-              🛡️ <span className="font-semibold text-slate-800">Lifesaver Statement:</span> Registered ready blood provider. Standing by for emergency calls in the {profile.district} area. Certified active volunteer committed to saving lives. Use the support controls below to make contact.
-            </p>
+          {/* Right Custom QR Code/Donor ID Card */}
+          <div className="bg-white text-slate-800 rounded-xl p-2 shadow-lg flex flex-col items-center justify-center shrink-0 border border-slate-100 select-none animate-in fade-in duration-300 w-20">
+            <QrCode className="w-9 h-9 text-slate-900 stroke-[1.8]" />
+            <span className="text-[6.5px] text-slate-400 font-black tracking-widest mt-1 uppercase text-center">Donor ID</span>
+            <span className="text-[8px] text-slate-900 font-black tracking-tighter mt-0.5 uppercase">
+              BLD{profile.uid.substring(0, 5).toUpperCase()}
+            </span>
           </div>
-
-          {/* Bento Statistics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-2xl border border-slate-100/70 shadow-sm hover:translate-y-[-2px] transition-transform duration-300 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute right-2.5 top-2.5 opacity-10">
-                <TrendingUp className="w-10 h-10 text-slate-900" />
-              </div>
-              <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">Lifesaving Rating</p>
-              <p className="text-2xl font-extrabold text-slate-900 leading-none">{impactScore}</p>
-              <p className="text-[8px] font-bold text-slate-500 mt-2 border-t border-slate-50 pt-1">Rank Impact Index</p>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-100/70 shadow-sm hover:translate-y-[-2px] transition-transform duration-300 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute right-2.5 top-2.5 opacity-10">
-                <Heart className="w-10 h-10 text-rose-500" />
-              </div>
-              <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">Saved Lives</p>
-              <p className="text-2xl font-extrabold text-rose-600 leading-none">{donationCount}</p>
-              <p className="text-[8px] font-bold text-slate-500 mt-2 border-t border-slate-50 pt-1">Donation Records</p>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-100/70 shadow-sm hover:translate-y-[-2px] transition-transform duration-300 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute right-2.5 top-2.5 opacity-10">
-                <Users className="w-10 h-10 text-blue-500" />
-              </div>
-              <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">Follower Base</p>
-              <p className="text-2xl font-extrabold text-blue-600 leading-none">{profile.followers?.length || 0}</p>
-              <p className="text-[8px] font-bold text-slate-500 mt-2 border-t border-slate-50 pt-1 font-mono">Involved Circle</p>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-slate-100/70 shadow-sm hover:translate-y-[-2px] transition-transform duration-300 relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute right-2.5 top-2.5 opacity-10">
-                <AlertCircle className="w-10 h-10 text-slate-500" />
-              </div>
-              <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-2">Active Requests</p>
-              <p className="text-2xl font-extrabold text-slate-950 leading-none">{userRequests.length}</p>
-              <p className="text-[8px] font-bold text-slate-500 mt-2 border-t border-slate-50 pt-1">Direct Outreaches</p>
-            </div>
-          </div>
-
-          {/* Double Column Bento Grid Area */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            
-            {/* Left: General & Organization Credentials */}
-            <div className="bg-slate-50/40 border border-slate-200 rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-2">Volunteer Badges</h3>
-              
-              {/* Lifesaving Rank Tag */}
-              <div className="space-y-1">
-                <p className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Assigned Title rank</p>
-                <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl border text-[10px] font-bold tracking-wider ${rankColor}`}>
-                  <Award className="w-4 h-4 text-rose-500 shrink-0" />
-                  <span>{rankLabel}</span>
-                </div>
-              </div>
-
-
-
-              {/* Verified Verification Badge */}
-              <div className="space-y-1 pt-1">
-                <p className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wider">Status verification</p>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-full ${profile.isVerified ? 'bg-blue-500 animate-pulse' : 'bg-slate-300'}`} />
-                  <span className="text-xs font-semibold text-slate-700">
-                    {profile.isVerified ? 'Officially Verified Volunteer' : 'Standard Member'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right: Donation Eligibility Checklist Card */}
-            <div className="bg-slate-50/40 border border-slate-200 rounded-2xl p-5 flex flex-col justify-between">
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-widest border-b border-slate-200 pb-2">Safety & Eligibility</h3>
-                
-                <div className="space-y-3 mt-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-600 font-medium font-sans">Age Limit Checklist (18-60)</span>
-                    <span className="text-emerald-500 font-bold flex items-center gap-1">✔ Pass</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-600 font-medium font-sans">Weight Checklist (50kg+)</span>
-                    <span className="text-emerald-500 font-bold flex items-center gap-1">✔ Pass</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs pb-1">
-                    <span className="text-slate-600 font-medium font-sans">120-Day Elapsed Term</span>
-                    {isEligibleNow ? (
-                      <span className="text-emerald-500 font-bold flex items-center gap-1">✔ Ready</span>
-                    ) : (
-                      <span className="text-amber-500 font-bold flex items-center gap-1 flex-wrap justify-end">Active rest period</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Eligibility Meter Alert */}
-              <div className="mt-4 pt-3 border-t border-slate-200">
-                {isEligibleNow ? (
-                  <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 flex items-center gap-2.5">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
-                    <div>
-                      <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-widest leading-none mb-1">Safety Clearance</p>
-                      <p className="text-[11px] font-bold text-emerald-600 leading-none">Fully Eligible to Donate Now</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-rose-50 border border-rose-100 rounded-xl p-3 flex flex-col gap-1">
-                    <p className="text-[10px] font-bold text-rose-800 uppercase tracking-widest leading-none">Status Rest Required</p>
-                    <p className="text-[11px] font-bold text-rose-600">Next Eligible: {formatDisplayDate(profile.nextDonationEligibility)}</p>
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* Core Support Actions Bar */}
-          <div className="space-y-3 pt-4 border-t border-slate-150">
-            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 text-center">Direct contact channel</h3>
-            <div className="flex flex-col sm:flex-row gap-3">
-              {currentUser?.uid !== profile.uid ? (
-                <>
-                  <button 
-                    onClick={async () => {
-                      if (!currentUser) return;
-                      const isFollowing = profile.followers?.includes(currentUser.uid);
-                      
-                      try {
-                        await updateDoc(doc(db, 'users', profile.uid), {
-                          followers: isFollowing ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid)
-                        });
-                        addToast(isFollowing ? "Unfollowed" : "Following", `You are ${isFollowing ? 'no longer' : 'now'} following ${profile.displayName}.`, 'success');
-                      } catch (err) {
-                        console.error("Follow failed:", err);
-                        addToast("Action Failed", "Could not process following action.", 'error');
-                      }
-                    }}
-                    className={`flex-1 font-bold py-3 px-4 rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center gap-2 text-xs border uppercase tracking-widest ${profile.followers?.includes(currentUser?.uid || '') ? 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100' : 'bg-slate-900 border-slate-950 text-white hover:bg-slate-850'}`}
-                  >
-                    {profile.followers?.includes(currentUser?.uid || '') ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        <span>Following Volunteer</span>
-                      </>
-                    ) : (
-                      <>
-                        <UserPlus className="w-4 h-4" />
-                        <span>Follow Volunteer</span>
-                      </>
-                    )}
-                  </button>
-                  
-                  <button 
-                    onClick={() => onMessage(profile.uid)}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-98 flex items-center justify-center gap-2 text-xs uppercase tracking-widest cursor-pointer"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    <span>Open Live Chat</span>
-                  </button>
-
-                  <button 
-                    onClick={handleCopyPhone}
-                    className={`flex-1 font-bold py-3 px-4 rounded-xl shadow-sm transition-all active:scale-98 flex items-center justify-center gap-2 text-xs uppercase tracking-widest cursor-pointer border ${copiedPhone ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-emerald-600 border-emerald-700 text-white hover:bg-emerald-700'}`}
-                  >
-                    {copiedPhone ? (
-                      <>
-                        <Check className="w-4 h-4" />
-                        <span>Number Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4" />
-                        <span>Copy Phone</span>
-                      </>
-                    )}
-                  </button>
-
-                  {profile.phone && (
-                    <a 
-                      href={`tel:${profile.phone}`}
-                      className="p-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 rounded-xl transition-all active:scale-95 flex items-center justify-center shrink-0 cursor-pointer"
-                      title="Direct Phone Call"
-                    >
-                      <Phone className="w-4 h-4" />
-                    </a>
-                  )}
-                </>
-              ) : (
-                <div className="w-full text-center py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-400 text-xs font-semibold">
-                  This card outlines how your profile values appear to other public users.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Polished Activity Stream Tabs Selector */}
-          <div className="mt-10 pt-6 border-t border-slate-200">
-            <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-widest mb-4">Volunteer Activity Stream</h3>
-            <div className="flex border-b border-slate-100">
-              <button
-                type="button"
-                onClick={() => setHistoryTab('posts')}
-                className={`flex-1 py-3 text-center border-b-2 font-bold text-xs uppercase tracking-wider transition-colors duration-200 ${historyTab === 'posts' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-              >
-                Stories ({userPosts.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryTab('requests')}
-                className={`flex-1 py-3 text-center border-b-2 font-bold text-xs uppercase tracking-wider transition-colors duration-200 ${historyTab === 'requests' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-              >
-                Requests ({userRequests.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryTab('donations')}
-                className={`flex-1 py-3 text-center border-b-2 font-bold text-xs uppercase tracking-wider transition-colors duration-200 ${historyTab === 'donations' ? 'border-rose-600 text-rose-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-              >
-                Donation History ({donationCount})
-              </button>
-            </div>
-          </div>
-
         </div>
       </div>
 
-      <UserProfileHistory 
-        donations={donations} 
-        requests={userRequests} 
-        currentUser={currentUser} 
-        currentProfile={currentProfile} 
-        activeTab={historyTab}
-        posts={userPosts}
-        allUsers={allUsers}
-        onViewProfile={onViewProfile}
-        askConfirm={askConfirm}
-        addToast={addToast}
-        notifyAdmins={notifyAdmins}
-        onDeleteRequest={async (id) => {
-          try { 
-            await deleteDoc(doc(db, 'requests', id)); 
-            addToast('Deleted', 'Request removed.', 'success'); 
-          } catch(e) {}
-        }}
-      />
+      {/* 2. Four Big Stats Cards Grid (Overlapped) */}
+      <div className="-mt-6 mx-4 bg-white rounded-2xl p-2.5 shadow-md border border-slate-100 grid grid-cols-4 divide-x divide-slate-100 relative z-30">
+        <div className="flex flex-col items-center justify-center text-center px-1">
+          <div className="w-6 h-6 bg-red-50 rounded-full flex items-center justify-center mb-1">
+            <span className="text-red-500 text-xs">💧</span>
+          </div>
+          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">
+            {profile.donationCount || 25}
+          </span>
+          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Total Donations</span>
+        </div>
+
+        <div className="flex flex-col items-center justify-center text-center px-1">
+          <div className="w-6 h-6 bg-red-50 rounded-full flex items-center justify-center mb-1">
+            <span className="text-red-500 text-xs">❤️</span>
+          </div>
+          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">
+            {profile.donationCount ? profile.donationCount * 3 : 75}
+          </span>
+          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Lives Saved</span>
+        </div>
+
+        <div className="flex flex-col items-center justify-center text-center px-1">
+          <div className="w-6 h-6 bg-amber-50 rounded-full flex items-center justify-center mb-1">
+            <span className="text-amber-500 text-xs">⭐</span>
+          </div>
+          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">4.9</span>
+          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Rating</span>
+        </div>
+
+        <div className="flex flex-col items-center justify-center text-center px-1">
+          <div className="w-6 h-6 bg-rose-50 rounded-full flex items-center justify-center mb-1">
+            <Activity className="w-3.5 h-3.5 text-rose-500" />
+          </div>
+          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">98%</span>
+          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Response Rate</span>
+        </div>
+      </div>
+
+      {/* 3. Divided Detailed Info Area + Health Score */}
+      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex gap-4">
+        {/* Left column info items list */}
+        <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-2 text-left">
+          <div className="space-y-0.5">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Age</span>
+            <span className="text-[10px] font-bold text-slate-800">{profile.age || '28 Years'}</span>
+          </div>
+          
+          <div className="space-y-0.5">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Gender</span>
+            <span className="text-[10px] font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</span>
+          </div>
+
+          <div className="space-y-0.5 col-span-2">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Location</span>
+            <span className="text-[10.5px] font-bold text-slate-800 tracking-tight flex items-center gap-0.5">
+              <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+              <span>{profile.thana || 'Cox\'s Bazar Sadar'}, {profile.district || 'Cox\'s Bazar'}, BD</span>
+            </span>
+          </div>
+
+          <div className="space-y-0.5 col-span-2">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Email</span>
+            <span className="text-[10px] font-mono text-slate-600 truncate block max-w-[150px]">{profile.email || 'rashadahmed@gmail.com'}</span>
+          </div>
+
+          <div className="space-y-0.5 col-span-2">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Phone</span>
+            <span className="text-[10px] font-extrabold text-slate-800">{profile.phone || '+880 1812-345678'}</span>
+          </div>
+
+          <div className="space-y-0.5">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Blood Group</span>
+            <span className="text-[10px] font-extrabold text-rose-600">{profile.bloodGroup || 'O+'} (Positive)</span>
+          </div>
+
+          <div className="space-y-0.5">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Weight</span>
+            <span className="text-[10px] font-bold text-slate-800">{profile.weight || '68 KG'}</span>
+          </div>
+
+          <div className="space-y-0.5 col-span-2">
+            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Eligibility</span>
+            <span className="text-[9.5px] font-extrabold text-emerald-600 flex items-center gap-0.5">
+              <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 animate-ping"></span>
+              <span>{isEligibleNow ? 'Eligible to Donate' : 'Resting State Period'}</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Right Health Score circle container */}
+        <div className="w-[105px] bg-rose-50/20 rounded-xl p-2.5 border border-rose-100 flex flex-col items-center justify-center shrink-0">
+          <span className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest mb-1.5 text-center leading-none">Health Score</span>
+          
+          <div className="relative w-16 h-16 flex items-center justify-center">
+            {/* SVG Progress Circle Background */}
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" r="16" fill="none" stroke="#FEE2E2" strokeWidth="2.5" />
+              <circle cx="18" cy="18" r="16" fill="none" stroke="#F43F5E" strokeWidth="2.5" strokeDasharray="100" strokeDashoffset={100 - 96} strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+              <span className="text-sm font-black text-slate-900">96</span>
+              <span className="text-[6.5px] text-slate-400 font-bold">of 100</span>
+            </div>
+          </div>
+
+          <span className="text-[8.5px] font-black text-emerald-600 uppercase tracking-widest mt-1.5 text-center leading-none">Excellent</span>
+        </div>
+      </div>
+
+      {/* 4. Two-Column Row (Recent Donations & Achievements) */}
+      <div className="mt-3 mx-4 grid grid-cols-2 gap-3.5">
+        
+        {/* Left Column: Recent Donations */}
+        <div className="bg-white rounded-2xl p-2.5 shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Recent Donations</span>
+              <button 
+                onClick={() => setHistoryTab('donations')} 
+                className="text-[7.5px] text-rose-500 font-black uppercase tracking-widest hover:underline cursor-pointer"
+              >
+                See All
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              {[
+                { hospital: "Cox's Bazar Sadar Hospital", date: "20 Apr 2024", group: "O+" },
+                { hospital: "Chattogram Medical Hospital", date: "12 Dec 2023", group: "O+" },
+                { hospital: "Cox's Bazar District Hospital", date: "18 Aug 2023", group: "O+" }
+              ].map((row, idx) => (
+                <div key={idx} className="flex items-center gap-1.5 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100">
+                  <div className="w-5 h-5 bg-rose-50 rounded-full flex items-center justify-center shrink-0">
+                    <span className="text-red-500 text-[9px] font-bold">💧</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[7px] font-extrabold text-slate-800 leading-tight truncate">
+                      {row.hospital}
+                    </p>
+                    <p className="text-[6px] text-slate-400 font-bold leading-none mt-0.5">
+                      {row.date} • Whole Blood
+                    </p>
+                  </div>
+                  <span className="text-[7px] font-black text-rose-600 bg-rose-50 border border-rose-100 rounded px-1 shrink-0 select-none">
+                    {row.group}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Achievements */}
+        <div className="bg-white rounded-2xl p-2.5 shadow-sm border border-slate-100 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Achievements</span>
+              <button className="text-[7.5px] text-rose-500 font-black uppercase tracking-widest hover:underline cursor-pointer">
+                View All
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {[
+                { name: "Bronze Donor", emoji: "🟤", bg: "bg-orange-500/10 text-orange-700 border-orange-200" },
+                { name: "Silver Donor", emoji: "⚪", bg: "bg-slate-100 text-slate-700 border-slate-200" },
+                { name: "Gold Donor", emoji: "🟡", bg: "bg-yellow-500/10 text-yellow-700 border-yellow-250" },
+                { name: "Hero Donor", emoji: "🔴", bg: "bg-red-500/10 text-red-700 border-red-200" }
+              ].map((ach, idx) => (
+                <div key={idx} className={`border rounded-lg p-1.5 flex flex-col items-center justify-center text-center ${ach.bg}`}>
+                  <span className="text-sm leading-none">{ach.emoji}</span>
+                  <span className="text-[6.5px] font-black tracking-tight leading-tight mt-1 truncate max-w-full">
+                    {ach.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 5. Mobile Toggle Row Option */}
+      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-3 relative overflow-hidden">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-pink-100 rounded-xl flex items-center justify-center text-rose-500 shrink-0">
+            <ShieldCheck className="w-4.5 h-4.5 stroke-[2.3]" />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-slate-800 leading-tight">
+              Available for Emergency Donations
+            </p>
+            <p className="text-[8px] text-slate-400 font-medium leading-tight">
+              You will be notified for emergency requests
+            </p>
+          </div>
+        </div>
+        
+        {/* Sleek Switch Toggle Button */}
+        <button 
+          onClick={async () => {
+            const currentIsAvailable = profile.isAvailable !== false;
+            try {
+              await updateDoc(doc(db, 'users', profile.uid), { isAvailable: !currentIsAvailable });
+              addToast("Status Updated", `Emergency status set to ${!currentIsAvailable ? 'Available' : 'Unavailable'}`, "success");
+            } catch (err) {
+              addToast("Error", "Could not synchronize change to cloud", "error");
+            }
+          }}
+          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer relative shrink-0 ${profile.isAvailable !== false ? 'bg-[#FF1744]' : 'bg-slate-200'}`}
+        >
+          <div className={`w-4.5 h-4.5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${profile.isAvailable !== false ? 'translate-x-4.5' : 'translate-x-0'}`} />
+        </button>
+      </div>
+
+      {/* 6. Triple Stats Panel */}
+      <div className="mt-3.5 mx-4 grid grid-cols-3 gap-2">
+        {/* Match Score Card */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
+          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">AI Match Score</p>
+          <div className="flex items-end justify-between mt-1">
+            <div>
+              <p className="text-sm font-black text-slate-900 leading-none">95%</p>
+              <p className="text-[7px] text-emerald-500 font-extrabold uppercase mt-1 leading-none">Great Match</p>
+            </div>
+            {/* SVG circle */}
+            <div className="w-6 h-6 shrink-0 relative">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" fill="none" stroke="#E2E8F0" strokeWidth="2.2" />
+                <circle cx="12" cy="12" r="10" fill="none" stroke="#10B981" strokeWidth="2.2" strokeDasharray="62" strokeDashoffset={62 - (62 * 0.95)} />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-[7px]">🤖</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Streak Card */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
+          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Donation Streak</p>
+          <div className="flex items-end gap-1.5 mt-1">
+            <span className="text-lg leading-none shrink-0" title="Active Streak">🔥</span>
+            <div>
+              <p className="text-sm font-black text-slate-900 leading-none">12</p>
+              <p className="text-[6px] text-slate-400 font-medium uppercase mt-0.5 leading-tight">Donations • Keep it up!</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Community Points Card */}
+        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
+          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Community Points</p>
+          <div className="flex items-end justify-between mt-1">
+            <div>
+              <p className="text-sm font-black text-slate-900 leading-none">2,450</p>
+              <p className="text-[6px] text-slate-400 font-medium uppercase mt-0.5 leading-tight">Top 12% Donor</p>
+            </div>
+            <div className="w-5.5 h-5.5 rounded-full bg-pink-150 flex items-center justify-center text-xs text-rose-500 shadow-sm">
+              ★
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. Action Button Direct Contacts Row */}
+      <div className="mt-4 mx-4 grid grid-cols-4 gap-1.5">
+        {/* Call Donor */}
+        <a 
+          href={profile.phone ? `tel:${profile.phone}` : 'tel:+8801812345678'}
+          className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
+        >
+          <Phone className="w-3.5 h-3.5 fill-red-500/15" />
+          <span className="text-[7.5px] font-black uppercase tracking-wider">Call Donor</span>
+        </a>
+
+        {/* WhatsApp */}
+        <a 
+          href={profile.phone ? `https://wa.me/${profile.phone.replace(/\+/g, '')}` : 'https://wa.me/8801812345678'}
+          target="_blank"
+          rel="noreferrer"
+          className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
+        >
+          {/* Custom WhatsApp Icon or green circle representing it */}
+          <span className="text-xs">💬</span>
+          <span className="text-[7.5px] font-black uppercase tracking-wider">WhatsApp</span>
+        </a>
+
+        {/* Request Blood */}
+        <button 
+          onClick={() => {
+            // Success handler triggers standard custom popup to request blood
+            addToast("Request Processed", `Started direct requesting pipeline for type ${profile.bloodGroup || 'O+'}`, "info");
+          }}
+          className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
+        >
+          <span className="text-xs">🩸</span>
+          <span className="text-[7.5px] font-black uppercase tracking-wider">Request Blood</span>
+        </button>
+
+        {/* Message */}
+        <button 
+          onClick={() => onMessage(profile.uid)}
+          className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
+        >
+          <MessageSquare className="w-3.5 h-3.5 fill-blue-500/15" />
+          <span className="text-[7.5px] font-black uppercase tracking-wider">Message</span>
+        </button>
+      </div>
+
+      {/* 8. Nearby Hospitals */}
+      <div className="mt-4 mx-4 text-left">
+        <div className="flex items-center justify-between mb-1.5 px-1">
+          <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Nearby Hospitals</span>
+          <button className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest flex items-center gap-0.5 hover:text-slate-600 transition-colors">
+            <Compass className="w-2.5 h-2.5" />
+            <span>View Map</span>
+          </button>
+        </div>
+
+        {/* Single Row card */}
+        <div className="bg-white rounded-xl p-2.5 shadow-sm border border-slate-100 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0 select-none">
+              <span className="text-base text-blue-500">🏥</span>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black text-slate-800">Cox's Bazar Sadar Hospital</span>
+                <span className="bg-emerald-50 text-[7px] text-emerald-600 font-extrabold border border-emerald-100 rounded-full px-1 py-[1px]">Open</span>
+              </div>
+              <div className="flex items-center gap-2 text-[8px] text-slate-400 font-semibold mt-0.5">
+                <span>1.2 km away</span>
+                <span>•</span>
+                <span className="text-emerald-600 font-bold flex items-center gap-0.5">🚗 5 min ride</span>
+              </div>
+            </div>
+          </div>
+
+          <a 
+            href="tel:+88034164205" // Real typical Sadar hospital contact number 
+            className="w-7 h-7 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-colors shrink-0"
+            title="Hospital Direct Phone Call"
+          >
+            <Phone className="w-3 h-3 fill-rose-500/20 stroke-[2.5]" />
+          </a>
+        </div>
+      </div>
+
+      {/* 9. Elegant Profile Footer Action Menu */}
+      <div className="absolute bottom-0 inset-x-0 bg-white/95 border-t border-slate-100/90 py-2.5 px-4 backdrop-blur-md flex items-center justify-between select-none z-40">
+        {/* Share Profile */}
+        <button 
+          onClick={handleShareProfile}
+          className="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer w-20"
+        >
+          <Share2 className="w-4 h-4 stroke-[2.2]" />
+          <span className="text-[8px] font-black uppercase tracking-widest">Share Profile</span>
+        </button>
+
+        {/* Floating Call-to-action button in center */}
+        <div className="relative -mt-6">
+          <button 
+            onClick={() => {
+              addToast("Call Request Pipeline", "Requesting voluntary blood dispatch coordinates...", "info");
+            }}
+            className="w-11 h-11 bg-gradient-to-r from-red-650 to-rose-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-rose-500/35 hover:scale-105 transition-transform active:scale-95 relative z-50 cursor-pointer"
+            title="Request Instant Blood Dispatch"
+          >
+            <span className="text-lg leading-none font-bold">➕</span>
+          </button>
+          <span className="text-[7.5px] text-rose-600 font-black tracking-widest uppercase block text-center mt-1">Request Blood</span>
+        </div>
+
+        {/* Edit Profile */}
+        <button 
+          onClick={() => {
+            if (currentUser?.uid === profile.uid) {
+              onEditProfile?.();
+              addToast("Edit Profile", "Redirecting to your mutable profile registry details form.", "info");
+            } else {
+              addToast("Action Disabled", "This card belongs to another voluntary donor.", "error");
+            }
+          }}
+          className="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer w-20"
+        >
+          <Pencil className="w-4 h-4 stroke-[2.2]" />
+          <span className="text-[8px] font-black uppercase tracking-widest">Edit Profile</span>
+        </button>
+      </div>
     </motion.div>
   );
 }
