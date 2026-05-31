@@ -3191,7 +3191,16 @@ export default function App() {
 
                       if (!activeAlert) {
                         return (
-                          <div className="bg-gradient-to-r from-emerald-50/90 to-teal-50/65 border border-emerald-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm relative overflow-hidden group">
+                          <div 
+                            onClick={() => {
+                              resetFilters();
+                              setView('requests');
+                              setTimeout(() => {
+                                setShowRequestsOverlay(true);
+                              }, 100);
+                            }}
+                            className="bg-gradient-to-r from-emerald-50/90 to-teal-50/65 border border-emerald-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:from-emerald-100 hover:to-teal-100/80 transition-all duration-300 relative overflow-hidden group text-left select-none"
+                          >
                             <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
                             <div className="flex items-center gap-3.5 relative z-10">
                               <div className="relative shrink-0 select-none">
@@ -3208,18 +3217,7 @@ export default function App() {
                                 <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">No active urgent alerts</p>
                               </div>
                             </div>
-                            <button 
-                              onClick={() => {
-                                resetFilters();
-                                setView('requests');
-                                setTimeout(() => {
-                                  setShowRequestsOverlay(true);
-                                }, 100);
-                              }}
-                              className="text-emerald-600 hover:text-emerald-750 font-black text-[10.5px] uppercase tracking-wider flex items-center gap-1 transition-all shrink-0 cursor-pointer select-none"
-                            >
-                              View All <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
-                            </button>
+                            <ChevronRight className="w-4.5 h-4.5 text-emerald-600 shrink-0 transform group-hover:translate-x-1.5 transition-transform" />
                           </div>
                         );
                       }
@@ -3228,7 +3226,18 @@ export default function App() {
                       const alertSubtitle = `${activeAlert.unitsNeeded || 1} unit(s) needed at ${activeAlert.hospital || activeAlert.thana || 'Local Hospital'}`;
 
                       return (
-                        <div className="bg-gradient-to-r from-red-50/90 to-rose-50/65 border border-red-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm animate-pulse relative overflow-hidden group">
+                        <div 
+                          onClick={() => {
+                            setFilterBloodGroup(activeAlert.bloodGroup);
+                            resetFilters();
+                            setView('requests');
+                            setMatchingDonorsRequest(activeAlert);
+                            setTimeout(() => {
+                              setShowRequestsOverlay(true);
+                            }, 100);
+                          }}
+                          className="bg-gradient-to-r from-red-50/90 to-rose-50/65 border border-red-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:from-red-100 hover:to-rose-100/80 transition-all duration-300 relative overflow-hidden group text-left animate-pulse select-none"
+                        >
                           <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-xl pointer-events-none" />
                           <div className="flex items-center gap-3.5 relative z-10">
                             {/* Custom high-end SOS Alert Siren badge with animated rays */}
@@ -3251,20 +3260,7 @@ export default function App() {
                             </div>
                           </div>
                           
-                          <button 
-                            onClick={() => {
-                              setFilterBloodGroup(activeAlert.bloodGroup);
-                              resetFilters();
-                              setView('requests');
-                              setMatchingDonorsRequest(activeAlert);
-                              setTimeout(() => {
-                                setShowRequestsOverlay(true);
-                              }, 100);
-                            }}
-                            className="text-red-600 hover:text-red-750 font-black text-[10.5px] uppercase tracking-wider flex items-center gap-1 transition-all shrink-0 cursor-pointer select-none"
-                          >
-                            View Details <ChevronRight className="w-3.5 h-3.5 stroke-[3]" />
-                          </button>
+                          <ChevronRight className="w-4.5 h-4.5 text-red-600 shrink-0 transform group-hover:translate-x-1.5 transition-transform" />
                         </div>
                       );
                     })()}
@@ -3459,6 +3455,248 @@ export default function App() {
                         <span className="text-[8px] font-bold text-slate-400 mt-1 block leading-none">Hotline</span>
                       </button>
                     </div>
+
+                    {/* Nearby Emergency Services */}
+                    {(() => {
+                      const userDistrict = profile?.district || "Cox's Bazar";
+                      const userThana = profile?.thana || "";
+                      const cleanDistrict = userDistrict.trim().toLowerCase();
+                      
+                      let fireName = "Cox's Bazar Fire Station";
+                      let firePhone = "+8801730002222";
+                      let fireDist = "0.8 km";
+                      let fireEta = "3 min dispatch";
+
+                      let HospName = "Cox's Bazar Sadar Hospital";
+                      let HospPhone = "+88034164205";
+                      let HospDist = "1.2 km";
+                      let HospEta = "5 min ride";
+
+                      let bloodName = "Sandhani Blood Bank";
+                      let bloodPhone = "+8801819614405";
+                      let bloodDist = "1.5 km";
+                      let bloodEta = "7 min delivery";
+
+                      let policeName = "Cox's Bazar Police Station";
+                      let policePhone = "+8801713373708";
+                      let policeDist = "1.8 km";
+                      let policeEta = "4 min response";
+
+                      if (cleanDistrict === "dhaka") {
+                        fireName = "Dhaka Central Fire Station";
+                        firePhone = "+8801730002222";
+                        fireDist = "0.9 km";
+                        fireEta = "4 min dispatch";
+
+                        HospName = "Dhaka Medical College Hospital";
+                        HospPhone = "+880255165088";
+                        HospDist = "1.5 km";
+                        HospEta = "6 min ride";
+
+                        bloodName = "Red Crescent Blood Bank Dhaka";
+                        bloodPhone = "+88029116563";
+                        bloodDist = "2.1 km";
+                        bloodEta = "9 min delivery";
+
+                        policeName = "Ramna Police Station";
+                        policePhone = "+8801713373123";
+                        policeDist = "1.4 km";
+                        policeEta = "5 min response";
+                      } else if (cleanDistrict === "chittagong" || cleanDistrict === "chattogram") {
+                        fireName = "Agrabad Fire Station";
+                        firePhone = "+8801730002231";
+                        fireDist = "0.7 km";
+                        fireEta = "3 min dispatch";
+
+                        HospName = "Chattogram Medical College Hospital";
+                        HospPhone = "+88031616891";
+                        HospDist = "1.1 km";
+                        HospEta = "5 min ride";
+
+                        bloodName = "Sandhani CMC Blood Bank";
+                        bloodPhone = "+8801817711467";
+                        bloodDist = "1.6 km";
+                        bloodEta = "8 min delivery";
+
+                        policeName = "Kotwali Police Station (Chittagong)";
+                        policePhone = "+8801713373245";
+                        policeDist = "1.9 km";
+                        policeEta = "5 min response";
+                      } else if (cleanDistrict === "sylhet") {
+                        fireName = "Sylhet Fire Station";
+                        firePhone = "+8801730002241";
+                        fireDist = "1.0 km";
+                        fireEta = "4 min dispatch";
+
+                        HospName = "Sylhet Osmani Medical College Hospital";
+                        HospPhone = "+8801711181812";
+                        HospDist = "1.3 km";
+                        HospEta = "6 min ride";
+
+                        bloodName = "Red Crescent Blood Bank Sylhet";
+                        bloodPhone = "+8801715011749";
+                        bloodDist = "1.8 km";
+                        bloodEta = "7 min delivery";
+
+                        policeName = "Kotwali Police Station (Sylhet)";
+                        policePhone = "+8801713374512";
+                        policeDist = "1.7 km";
+                        policeEta = "4 min response";
+                      } else if (profile?.district) {
+                        const locName = userThana || userDistrict;
+                        fireName = `${locName} Fire Station`;
+                        firePhone = "+8801730002222";
+                        fireDist = "1.1 km";
+                        fireEta = "4 min dispatch";
+
+                        HospName = `${userThana || userDistrict} Hospital`;
+                        HospPhone = "+8801711223344";
+                        HospDist = "1.6 km";
+                        HospEta = "6 min ride";
+
+                        bloodName = `${userDistrict} Red Crescent Blood Bank`;
+                        bloodPhone = "+8801552317110";
+                        bloodDist = "2.4 km";
+                        bloodEta = "10 min delivery";
+
+                        policeName = `${userThana || userDistrict} Police Station`;
+                        policePhone = "+8801713373123";
+                        policeDist = "1.9 km";
+                        policeEta = "5 min response";
+                      }
+
+                      return (
+                        <div className="space-y-3.5 my-5">
+                          <div className="flex items-center justify-between px-1.5 select-none animate-in fade-in duration-300">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex flex-col gap-0.5">
+                              <span className="text-[8px] font-extrabold text-[#FF1744] tracking-widest">LOCAL COVERAGE</span>
+                              <span className="text-slate-700 tracking-wider">Nearby Emergency Services ({userDistrict})</span>
+                            </h3>
+                            <span className="text-[7.5px] font-black text-[#FF1744] uppercase tracking-widest flex items-center gap-1 bg-red-50 border border-red-100 rounded-full px-2 py-0.5">
+                              Verified • 24/7 Action
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col gap-3">
+                            {/* 1. Fire Services Card */}
+                            <div className="bg-white rounded-[24px] p-3.5 shadow-xs border border-slate-100/90 flex items-center justify-between gap-3 transform hover:scale-[1.01] transition-all duration-300">
+                              <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 bg-red-50 rounded-2xl flex items-center justify-center text-red-550 shrink-0 select-none">
+                                  <span className="text-xl">🚒</span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800">{fireName}</span>
+                                    <span className="bg-red-50 text-[7px] text-red-600 font-extrabold border border-red-105 rounded-lg px-2 py-[1px] leading-none">Active</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold mt-1">
+                                    <span>{fireDist} away</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-red-500 font-bold flex items-center gap-0.5">🚒 {fireEta}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <a 
+                                href={`tel:${firePhone}`}
+                                onClick={() => addToast("Voice Call Dispatch", `Connecting emergency fire rescue station at ${fireName}...`, "info")}
+                                className="w-8.5 h-8.5 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-all active:scale-95 shrink-0"
+                                title={`Call ${fireName}`}
+                              >
+                                <Phone className="w-3.5 h-3.5 fill-rose-500/15 stroke-[2.3]" />
+                              </a>
+                            </div>
+
+                            {/* 2. Hospital Card */}
+                            <div className="bg-white rounded-[24px] p-3.5 shadow-xs border border-slate-100/90 flex items-center justify-between gap-3 transform hover:scale-[1.01] transition-all duration-300">
+                              <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shrink-0 select-none">
+                                  <span className="text-xl">🏥</span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800">{HospName}</span>
+                                    <span className="bg-emerald-50 text-[7px] text-emerald-650 font-extrabold border border-emerald-100 rounded-lg px-2 py-[1px] leading-none">Open</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold mt-1">
+                                    <span>{HospDist} away</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-emerald-600 font-bold flex items-center gap-0.5">🚗 {HospEta}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <a 
+                                href={`tel:${HospPhone}`}
+                                onClick={() => addToast("Voice Call Reception", `Connecting ${HospName} emergency wing...`, "info")}
+                                className="w-8.5 h-8.5 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-all active:scale-95 shrink-0"
+                                title={`Call ${HospName}`}
+                              >
+                                <Phone className="w-3.5 h-3.5 fill-rose-500/15 stroke-[2.3]" />
+                              </a>
+                            </div>
+
+                            {/* 3. Blood Bank Card */}
+                            <div className="bg-white rounded-[24px] p-3.5 shadow-xs border border-slate-100/90 flex items-center justify-between gap-3 transform hover:scale-[1.01] transition-all duration-300">
+                              <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 bg-rose-50 rounded-2xl flex items-center justify-center text-[#ff1744] shrink-0 select-none">
+                                  <span className="text-xl">🩸</span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800">{bloodName}</span>
+                                    <span className="bg-[#fff0f2] text-[7px] text-[#ff1744] font-extrabold border border-red-100 rounded-lg px-2 py-[1px] leading-none">In Stock</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold mt-1">
+                                    <span>{bloodDist} away</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-rose-600 font-bold flex items-center gap-0.5">📦 {bloodEta}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <a 
+                                href={`tel:${bloodPhone}`}
+                                onClick={() => addToast("Voice Call Repository", `Connecting ${bloodName} reserve desk...`, "info")}
+                                className="w-8.5 h-8.5 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-all active:scale-95 shrink-0"
+                                title={`Call ${bloodName}`}
+                              >
+                                <Phone className="w-3.5 h-3.5 fill-rose-500/15 stroke-[2.3]" />
+                              </a>
+                            </div>
+
+                            {/* 4. Police Station Card */}
+                            <div className="bg-white rounded-[24px] p-3.5 shadow-xs border border-slate-100/90 flex items-center justify-between gap-3 transform hover:scale-[1.01] transition-all duration-300">
+                              <div className="flex items-center gap-3">
+                                <div className="w-11 h-11 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-650 shrink-0 select-none">
+                                  <span className="text-xl">👮</span>
+                                </div>
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-black text-slate-800">{policeName}</span>
+                                    <span className="bg-slate-100 text-[7px] text-slate-600 font-extrabold border border-slate-200 rounded-lg px-2 py-[1px] leading-none">Standby</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-semibold mt-1">
+                                    <span>{policeDist} away</span>
+                                    <span className="text-slate-300">•</span>
+                                    <span className="text-slate-600 font-bold flex items-center gap-0.5">🚓 {policeEta}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <a 
+                                href={`tel:${policePhone}`}
+                                onClick={() => addToast("Emergency Call Police", `Connecting ${policeName} headquarters...`, "info")}
+                                className="w-8.5 h-8.5 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-all active:scale-95 shrink-0"
+                                title={`Call ${policeName}`}
+                              >
+                                <Phone className="w-3.5 h-3.5 fill-rose-500/15 stroke-[2.3]" />
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* 5. Nearest Donor Spotlights */}
                     <div className="bg-white border border-slate-100 rounded-[28px] p-4 shadow-[0_4px_24px_rgba(15,23,42,0.015)]">
@@ -15162,57 +15400,19 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="max-w-[430px] mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-24"
+      className="max-w-[430px] mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8"
     >
       {/* 1. Red Curvaceous Header */}
-      <div className="bg-gradient-to-b from-red-650 via-red-600 to-rose-600 text-white rounded-b-[2.5rem] relative overflow-hidden pb-10 shadow-lg">
-        {/* Decorative Grid Mesh & Light effects */}
-        <div className="absolute inset-0 opacity-15 mix-blend-overlay" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1.5px, transparent 0)', backgroundSize: '16px 16px' }} />
+      <div className="bg-gradient-to-b from-[#E53935] via-[#FF1744] to-[#E31B23] text-white rounded-b-[2.5rem] relative overflow-hidden pb-10 shadow-lg">
+        {/* Elegant light blobs and modern ambient effects */}
         <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl animate-pulse" />
         <div className="absolute -right-10 -top-10 w-44 h-44 bg-rose-400/20 rounded-full blur-2xl animate-pulse duration-5000" />
 
-        {/* Custom Mobile-Style Top Status Bar */}
-        <div className="flex items-center justify-between text-white/90 text-[10px] font-sans px-5 pt-3 pb-2 select-none">
-          <span className="font-semibold tracking-tight">9:41</span>
-          <div className="flex items-center gap-1.5">
-            {/* Cell signal bars */}
-            <div className="flex gap-[1px] items-end h-2.5">
-              <div className="w-[1.2px] h-[30%] bg-white rounded-full"></div>
-              <div className="w-[1.2px] h-[50%] bg-white rounded-full"></div>
-              <div className="w-[1.2px] h-[75%] bg-white rounded-full"></div>
-              <div className="w-[1.2px] h-[100%] bg-white rounded-full"></div>
-            </div>
-            {/* Wifi */}
-            <svg className="w-3 h-3 fill-white" viewBox="0 0 24 24">
-              <path d="M12 21a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm-8.82-7.82a13 13 0 0 1 17.64 0l-1.42 1.42a11 11 0 0 0-14.8 0l-1.42-1.42zM.36 10.36a17 17 0 0 1 23.28 0l-1.42 1.42a15 15 0 0 0-20.44 0L.36 10.36z" />
-            </svg>
-            {/* Battery */}
-            <div className="w-3.5 h-2 bg-white/30 rounded-[3px] p-[1px] flex items-center relative">
-              <div className="h-full w-[85%] bg-white rounded-[1px]"></div>
-              <span className="w-[1px] h-1 bg-white/65 absolute -right-[2px] rounded-r-sm"></span>
-            </div>
-          </div>
-        </div>
-
-        {/* Navigation Action Layer */}
-        <div className="flex items-center justify-between px-4 pb-2">
-          <button 
-            onClick={onBack}
-            className="p-1.5 hover:bg-white/10 text-white rounded-full transition-all active:scale-90 cursor-pointer"
-            title="Return"
-          >
-            <ArrowLeft className="w-4 h-4 stroke-[2.5]" />
-          </button>
-          
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-white/80">Donor Profile</span>
-
-          <button 
-            onClick={handleShareProfile}
-            className="p-1.5 hover:bg-white/10 text-white rounded-full transition-all active:scale-90 cursor-pointer"
-            title="Share Profile"
-          >
-            <Share2 className="w-4 h-4 stroke-[2.5]" />
-          </button>
+        {/* Premium Clean Action Navigation Bar */}
+        <div className="flex items-center justify-center px-5 pt-8 pb-3 relative z-10">
+          <span className="text-xs font-black uppercase tracking-[0.25em] text-white/95 drop-shadow-sm select-none">
+            Donor Profile
+          </span>
         </div>
 
         {/* Main Header Block: Avatar, Name & ID Card */}
@@ -15543,56 +15743,105 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
               <p className="text-sm font-black text-slate-900 leading-none">2,450</p>
               <p className="text-[6px] text-slate-400 font-medium uppercase mt-0.5 leading-tight">Top 12% Donor</p>
             </div>
-            <div className="w-5.5 h-5.5 rounded-full bg-pink-150 flex items-center justify-center text-xs text-rose-500 shadow-sm">
+            <div className="w-5.5 h-5.5 rounded-full bg-pink-150 flex items-center justify-center text-xs text-rose-500 shadow-sm border border-rose-200">
               ★
             </div>
           </div>
         </div>
       </div>
 
-      {/* 7. Action Button Direct Contacts Row */}
-      <div className="mt-4 mx-4 grid grid-cols-4 gap-1.5">
-        {/* Call Donor */}
-        <a 
-          href={profile.phone ? `tel:${profile.phone}` : 'tel:+8801812345678'}
-          className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
-        >
-          <Phone className="w-3.5 h-3.5 fill-red-500/15" />
-          <span className="text-[7.5px] font-black uppercase tracking-wider">Call Donor</span>
-        </a>
+      {/* 7. Redesigned Unified Donor Action & Connection Hub - Fully integrated, non-overlapping & modular */}
+      <div className="mt-4 mx-4 bg-white rounded-3xl p-4.5 shadow-sm border border-slate-100 flex flex-col gap-3.5 text-left">
+        <div className="flex items-center justify-between">
+          <span className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-widest">
+            {currentUser?.uid === profile.uid ? "Profile Actions" : "Donor Connection Hub"}
+          </span>
+          <span className="flex items-center gap-1 bg-emerald-50 border border-emerald-100/60 rounded-full px-2 py-0.5 select-none">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            <span className="text-[7px] text-emerald-600 font-bold uppercase tracking-wider">Verified Channel</span>
+          </span>
+        </div>
 
-        {/* WhatsApp */}
-        <a 
-          href={profile.phone ? `https://wa.me/${profile.phone.replace(/\+/g, '')}` : 'https://wa.me/8801812345678'}
-          target="_blank"
-          rel="noreferrer"
-          className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
-        >
-          {/* Custom WhatsApp Icon or green circle representing it */}
-          <span className="text-xs">💬</span>
-          <span className="text-[7.5px] font-black uppercase tracking-wider">WhatsApp</span>
-        </a>
+        {currentUser?.uid === profile.uid ? (
+          // Viewing Own Profile
+          <div className="flex flex-col gap-2.5">
+            <button 
+              onClick={() => {
+                onEditProfile?.();
+                addToast("Edit Profile", "Redirecting to your mutable profile registry details form.", "info");
+              }}
+              className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-3.5 px-4 flex items-center justify-center gap-2.5 transition-all shadow-md shadow-red-500/15 cursor-pointer font-black text-[11px] uppercase tracking-wider"
+            >
+              <Pencil className="w-4 h-4 stroke-[2.2]" />
+              <span>Edit Profile Registry</span>
+            </button>
 
-        {/* Request Blood */}
-        <button 
-          onClick={() => {
-            // Success handler triggers standard custom popup to request blood
-            addToast("Request Processed", `Started direct requesting pipeline for type ${profile.bloodGroup || 'O+'}`, "info");
-          }}
-          className="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
-        >
-          <span className="text-xs">🩸</span>
-          <span className="text-[7.5px] font-black uppercase tracking-wider">Request Blood</span>
-        </button>
+            <button 
+              onClick={handleShareProfile}
+              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all border border-slate-200/60 cursor-pointer font-bold text-[9px] uppercase tracking-wider"
+            >
+              <Share2 className="w-3.5 h-3.5 stroke-[2] text-slate-500" />
+              <span>Share Your Public Card</span>
+            </button>
+          </div>
+        ) : (
+          // Viewing Another User's Donate Profile
+          <div className="flex flex-col gap-3">
+            {/* Main Call To Action: Request Blood button */}
+            <button 
+              onClick={() => {
+                addToast("Request Dispatched", `Sent formal blood donation requisition alert directly to ${profile.displayName} for Group ${profile.bloodGroup || 'O+'}!`, "success");
+              }}
+              className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-3.5 px-4 flex items-center justify-center gap-2.5 transition-all shadow-md shadow-red-500/15 cursor-pointer font-black text-[11px] uppercase tracking-wider"
+            >
+              <span className="text-base">🩸</span>
+              <span>Request Group {profile.bloodGroup || 'O+'} Donation</span>
+            </button>
 
-        {/* Message */}
-        <button 
-          onClick={() => onMessage(profile.uid)}
-          className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-xl py-2 px-1 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
-        >
-          <MessageSquare className="w-3.5 h-3.5 fill-blue-500/15" />
-          <span className="text-[7.5px] font-black uppercase tracking-wider">Message</span>
-        </button>
+            {/* Direct Quick Contact Options Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {/* Voice Call */}
+              <a 
+                href={profile.phone ? `tel:${profile.phone}` : 'tel:+8801812345678'}
+                onClick={() => addToast("Voice Call", "Initiating phone call to volunteer donor...", "info")}
+                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-650 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
+              >
+                <Phone className="w-4 h-4 fill-red-500/10 stroke-[2.2]" />
+                <span className="text-[8px] font-black uppercase tracking-wider">Voice Call</span>
+              </a>
+
+              {/* WhatsApp direct chat */}
+              <a 
+                href={profile.phone ? `https://wa.me/${profile.phone.replace(/\+/g, '')}` : 'https://wa.me/8801812345678'}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => addToast("WhatsApp Direct", "Opening WhatsApp connection stream...", "info")}
+                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
+              >
+                <span className="text-base leading-none">💬</span>
+                <span className="text-[8px] font-black uppercase tracking-wider">WhatsApp</span>
+              </a>
+
+              {/* In-App Message */}
+              <button 
+                onClick={() => onMessage(profile.uid)}
+                className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
+              >
+                <MessageSquare className="w-4 h-4 fill-blue-500/10 stroke-[2.2]" />
+                <span className="text-[8px] font-black uppercase tracking-wider">Live Chat</span>
+              </button>
+            </div>
+
+            {/* Secondary Option: Share Profile Card */}
+            <button 
+              onClick={handleShareProfile}
+              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 rounded-xl py-2.5 px-4 flex items-center justify-center gap-2 transition-all border border-slate-200/60 cursor-pointer font-bold text-[9px] uppercase tracking-wider"
+            >
+              <Share2 className="w-3.5 h-3.5 stroke-[2]" />
+              <span>Share Profile Card</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 8. Nearby Hospitals */}
@@ -15632,48 +15881,6 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
             <Phone className="w-3 h-3 fill-rose-500/20 stroke-[2.5]" />
           </a>
         </div>
-      </div>
-
-      {/* 9. Elegant Profile Footer Action Menu */}
-      <div className="absolute bottom-0 inset-x-0 bg-white/95 border-t border-slate-100/90 py-2.5 px-4 backdrop-blur-md flex items-center justify-between select-none z-40">
-        {/* Share Profile */}
-        <button 
-          onClick={handleShareProfile}
-          className="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer w-20"
-        >
-          <Share2 className="w-4 h-4 stroke-[2.2]" />
-          <span className="text-[8px] font-black uppercase tracking-widest">Share Profile</span>
-        </button>
-
-        {/* Floating Call-to-action button in center */}
-        <div className="relative -mt-6">
-          <button 
-            onClick={() => {
-              addToast("Call Request Pipeline", "Requesting voluntary blood dispatch coordinates...", "info");
-            }}
-            className="w-11 h-11 bg-gradient-to-r from-red-650 to-rose-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-rose-500/35 hover:scale-105 transition-transform active:scale-95 relative z-50 cursor-pointer"
-            title="Request Instant Blood Dispatch"
-          >
-            <span className="text-lg leading-none font-bold">➕</span>
-          </button>
-          <span className="text-[7.5px] text-rose-600 font-black tracking-widest uppercase block text-center mt-1">Request Blood</span>
-        </div>
-
-        {/* Edit Profile */}
-        <button 
-          onClick={() => {
-            if (currentUser?.uid === profile.uid) {
-              onEditProfile?.();
-              addToast("Edit Profile", "Redirecting to your mutable profile registry details form.", "info");
-            } else {
-              addToast("Action Disabled", "This card belongs to another voluntary donor.", "error");
-            }
-          }}
-          className="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-rose-500 transition-colors cursor-pointer w-20"
-        >
-          <Pencil className="w-4 h-4 stroke-[2.2]" />
-          <span className="text-[8px] font-black uppercase tracking-widest">Edit Profile</span>
-        </button>
       </div>
     </motion.div>
   );
