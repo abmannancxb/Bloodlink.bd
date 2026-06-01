@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { 
   Sparkles, 
   Mic, 
@@ -164,15 +164,44 @@ function SmartBloodRequestCard({ slots, onPublish }) {
 }
 
 // --- NEARBY DONORS LISTING CONTAINER ---
-function NearbyDonorsList({ bloodGroup, donors = [], onCall, onMessage }) {
+function NearbyDonorsList({ bloodGroup, district, thana, donors = [], onCall, onMessage }) {
   const demoDonors = [
-    { name: "Rahim Ahmed", verified: true, bg: "O+", distance: "2.1 km away", rating: "4.9", count: "128", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
-    { name: "Hossain", verified: false, bg: "A+", distance: "29.9 km away", rating: "4.8", count: "95", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80" },
-    { name: "Ab Rahman", verified: true, bg: "O+", distance: "3.6 km away", rating: "4.6", count: "43", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" }
+    { name: "Rahim Ahmed", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", distance: "2.1 km away", rating: "4.9", count: "128", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
+    { name: "Hossain", verified: false, bg: "A+", bloodGroup: "A+", district: "Dhaka", thana: "Mirpur", distance: "29.9 km away", rating: "4.8", count: "95", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80" },
+    { name: "Ab Rahman", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", distance: "3.6 km away", rating: "4.6", count: "43", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" }
   ];
 
-  const matched = [...donors, ...demoDonors].filter(d => !bloodGroup || d.bg === bloodGroup || d.bloodGroup === bloodGroup);
-  const finalDonors = matched.slice(0, 4);
+  const pool = [...(donors || []), ...demoDonors];
+  const trimLower = (val: any) => String(val || '').trim().toLowerCase();
+
+  // 1. Strict Filter (Blood Group + District + Thana)
+  let matched = pool.filter(d => {
+    const dBG = d.bloodGroup || d.bg;
+    const matchBG = !bloodGroup || dBG === bloodGroup;
+    const matchDistrict = !district || trimLower(d.district) === trimLower(district);
+    const matchThana = !thana || trimLower(d.thana) === trimLower(thana);
+    return matchBG && matchDistrict && matchThana;
+  });
+
+  // 2. Fallback Filter A (Blood Group + District)
+  if (matched.length === 0 && district) {
+    matched = pool.filter(d => {
+      const dBG = d.bloodGroup || d.bg;
+      const matchBG = !bloodGroup || dBG === bloodGroup;
+      const matchDistrict = trimLower(d.district) === trimLower(district);
+      return matchBG && matchDistrict;
+    });
+  }
+
+  // 3. Fallback Filter B (Just Blood Group)
+  if (matched.length === 0) {
+    matched = pool.filter(d => {
+      const dBG = d.bloodGroup || d.bg;
+      return !bloodGroup || dBG === bloodGroup;
+    });
+  }
+
+  const finalDonors = matched.slice(0, 5);
 
   return (
     <div className="bg-white rounded-2xl p-4 border border-rose-50/70 shadow-sm mt-3.5 space-y-3">
@@ -702,6 +731,50 @@ export default function AIBloodAssistant({
           }, 3800);
         }
 
+        // Auto creation checks
+        if (resData.requestFormTriggered) {
+          if (currentUser) {
+            const runAutoCreation = async () => {
+              try {
+                const match = (updatedSlots.medicalReason || '').match(/(\d+)\s*(ব্যাগ|unit|units|ব্যাগ রক্ত)/i);
+                const unitsNeeded = match ? parseInt(match[1]) : 1;
+
+                await addDoc(collection(db, 'requests'), {
+                  bloodGroup: updatedSlots.bloodGroup || 'O+',
+                  district: updatedSlots.district || "Cox's Bazar",
+                  thana: updatedSlots.thana || 'Sadar',
+                  hospital: updatedSlots.hospital || 'সদর হাসপাতাল',
+                  medicalReason: updatedSlots.medicalReason || 'জরুরি রক্তের আবেদন',
+                  contactPhone: updatedSlots.contactPhone || currentUser?.phone || currentUser?.phoneNumber || '',
+                  unitsNeeded: unitsNeeded,
+                  urgency: 'Urgent',
+                  status: 'Pending',
+                  requesterUid: currentUser.uid,
+                  requesterName: currentUser.displayName || currentUserProfile?.displayName || 'অজ্ঞাতনামা রক্তবন্ধু',
+                  requesterPhoto: currentUser.photoURL || '',
+                  createdAt: serverTimestamp()
+                });
+
+                setMessages(prev => [...prev, {
+                  id: Math.random().toString(),
+                  role: 'assistant',
+                  text: `🎉 চমৎকার! আপনার রক্তের আবেদনটি সফলভাবে সিস্টেমে তৈরি ও লাইভ করা হয়েছে। জেলা-থানার সকল উপযুক্ত স্বেচ্ছাসেবী রক্তদাতাদের নিকট বার্তা ও বিজ্ঞপ্তি পাঠানো হয়েছে।`,
+                  timestamp: new Date()
+                }]);
+              } catch (error) {
+                console.error("Auto request creation error:", error);
+              }
+            };
+            setTimeout(() => {
+              runAutoCreation();
+            }, 1500);
+          } else {
+            setTimeout(() => {
+              onOpenRequestForm(updatedSlots);
+            }, 2500);
+          }
+        }
+
       } else {
         throw new Error("Failed parser");
       }
@@ -953,6 +1026,8 @@ export default function AIBloodAssistant({
                             >
                               <NearbyDonorsList 
                                 bloodGroup={m.meta.payloadSlots?.bloodGroup || slots.bloodGroup} 
+                                district={m.meta.payloadSlots?.district || slots.district}
+                                thana={m.meta.payloadSlots?.thana || slots.thana}
                                 donors={allUsers}
                                 onCall={handleCallDonor}
                                 onMessage={handleMessageDonor}
