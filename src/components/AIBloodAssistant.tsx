@@ -653,15 +653,7 @@ export default function AIBloodAssistant({
     stopListening();
     setViewMode('chat');
 
-    const initialText = "👋 আসসালামু আলাইকুম! আমি BloodLink AI। কী ধরনের সাহায্য প্রয়োজন?";
-    setMessages([
-      {
-        id: 'init_greet',
-        role: 'assistant',
-        text: initialText,
-        timestamp: new Date()
-      }
-    ]);
+    setMessages([]);
     
     setTimeout(() => {
       speakText("আসসালামু আলাইকুম! আমি ব্লাডলিঙ্ক এআই। বলুন আপনার কি সহযোগিতা লাগবে?");
@@ -698,18 +690,7 @@ export default function AIBloodAssistant({
       contactPhone: null,
       taskMode: 'idle'
     });
-    const resetText = "আমি আমাদের আলোচনা আবার প্রথম থেকে শুরু করছি। বলুন, আপনার কি রক্তের সাহায্য লাগবে নাকি ডোনার খুঁজছেন?";
-    setMessages([
-      {
-        id: 'reset',
-        role: 'assistant',
-        text: resetText,
-        timestamp: new Date()
-      }
-    ]);
-    setTimeout(() => {
-      speakText(resetText);
-    }, 150);
+    setMessages([]);
   };
 
   // NLP logic processor
@@ -1033,7 +1014,7 @@ export default function AIBloodAssistant({
                 // --- CHATPLAY MODE ---
                 <>
                   {/* Top Premium Gradient Header */}
-                  <div className="bg-gradient-to-r from-red-600 via-[#ff1744] to-rose-600 text-white px-5 pt-8 pb-5 flex flex-col shrink-0 relative overflow-hidden rounded-b-[24px]">
+                  <div className="bg-gradient-to-r from-red-600 via-[#ff1744] to-rose-600 text-white px-5 pt-8 pb-7 flex flex-col shrink-0 relative overflow-hidden rounded-b-[24px]">
                     <div className="absolute top-0 right-0 w-44 h-44 bg-white/5 rounded-full blur-2xl pointer-events-none" />
                     
                     <div className="flex items-center justify-between relative z-10 w-full">
@@ -1086,29 +1067,59 @@ export default function AIBloodAssistant({
                       </div>
                     </div>
 
-                    {/* Quick action chips horizontal slider inside header */}
-                    <div className="flex gap-2.5 overflow-x-auto pt-4 pb-0.5 scrollbar-none whitespace-nowrap">
-                      {[
-                        { label: 'জরুরি রক্ত চাই', icon: '🩸', val: 'জরুরি রক্ত চাই' },
-                        { label: 'ডোনার খুঁজুন', icon: '👥', val: 'ডোনার খুঁজুন' },
-                        { label: 'নিকটবর্তী ডোনার', icon: '📍', val: 'নিকটবর্তী ডোনার দেখাও' },
-                        { label: 'রিকোয়েস্ট তৈরি', icon: '📋', val: 'রক্তের রিকোয়েস্ট তৈরি করতে চাই' },
-                        { label: 'সাহায্য', icon: '❓', val: 'সাহায্য করো' }
-                      ].map((chip, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handleChipClick(chip.val)}
-                          className="bg-white/10 hover:bg-white/25 active:scale-95 border border-white/15 px-3 py-1.5 rounded-xl text-[10.5px] font-bold text-white flex items-center gap-1 transition cursor-pointer"
-                        >
-                          <span>{chip.icon}</span>
-                          <span>{chip.label}</span>
-                        </button>
-                      ))}
-                    </div>
+
                   </div>
 
                   {/* Message logging window */}
                   <div className="flex-1 overflow-y-auto px-4.5 py-4 space-y-4 scrollbar-none scroll-smooth">
+                    {messages.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-6 px-4 text-center h-full select-none">
+                        <div className="relative mb-5 flex items-center justify-center">
+                          <div className="absolute inset-0 w-20 h-20 bg-red-500/5 rounded-full blur-2xl animate-pulse" />
+                          <RobotAvatar size="lg" isSpeaking={isSpeaking} isThinking={isThinking} isListening={isListening} />
+                        </div>
+                        
+                        <h4 className="text-base font-black text-slate-900 tracking-tight mb-2">
+                          রক্তবন্ধু স্মার্ট এআই অ্যাসিস্ট্যান্ট
+                        </h4>
+                        
+                        <p className="text-[11px] text-slate-500 leading-relaxed font-semibold max-w-[280px] mb-5">
+                          এই সহকারী আপনাকে কৃত্রিম বুদ্ধিমত্তা দিয়ে রক্তদাতা ও রক্তের রিকোয়েস্ট খুঁজতে সরাসরি সাহায্য করবে। নিচে লিখে বা ভয়েসে অনুসন্ধান করুন।
+                        </p>
+
+                        <div className="w-full max-w-[310px] bg-white border border-slate-150/85 rounded-3xl p-4.5 text-left space-y-3.5 shadow-xs">
+                          <p className="text-[10px] font-black text-[#ff1744] uppercase tracking-widest border-b border-rose-50 pb-2 flex items-center gap-1.5">
+                            <Sparkle className="w-3.5 h-3.5 fill-[#ff1744] text-[#ff1744] stroke-[2.5]" /> এআই সহকারীর মূল সুবিধাসমূহ:
+                          </p>
+                          
+                          <div className="space-y-3">
+                            <div className="flex gap-2.5">
+                              <span className="text-xs">🔍</span>
+                              <div>
+                                <h5 className="text-[11px] font-black text-slate-800 leading-tight">স্মার্ট রক্তদাতা অনুসন্ধান</h5>
+                                <p className="text-[9px] text-slate-400 font-bold mt-0.5 leading-tight">যেমন: "O+ রক্তের ডোনার কোথায় পাব?"</p>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2.5">
+                              <span className="text-xs">📋</span>
+                              <div>
+                                <h5 className="text-[11px] font-black text-slate-800 leading-tight">সহজ জরুরি রক্তের আবেদন</h5>
+                                <p className="text-[9px] text-slate-400 font-bold mt-0.5 leading-tight">যেমন: "কক্সবাজার সদর হাসপাতালে জরুরি B+ রক্ত প্রয়োজন"</p>
+                              </div>
+                            </div>
+
+                            <div className="flex gap-2.5">
+                              <span className="text-xs">🗣️</span>
+                              <div>
+                                <h5 className="text-[11px] font-black text-slate-800 leading-tight">ভয়েস কল ও লাইভ টকিং সাপোর্ট</h5>
+                                <p className="text-[9px] text-slate-400 font-bold mt-0.5 leading-tight">উপরে সবুজ ফোন বাটন টিপে সরাসরি মুখে কথা বলুন।</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {messages.map((m) => {
                       const isUser = m.role === 'user';
                       return (
@@ -1183,33 +1194,7 @@ export default function AIBloodAssistant({
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Under prompt list wrapper: "আপনি চাইলে বলতে পারেন" */}
-                  <div className="px-5 py-2.5 bg-slate-50 border-t border-slate-100 shrink-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase tracking-wider">
-                        <span>✨</span> আপনি চাইলে বলতে পারেন
-                      </p>
-                      <button className="text-[9px] text-[#ff1744] font-black uppercase tracking-wider flex items-center gap-0.5">
-                        See More <ChevronRight className="w-3 h-3 stroke-[2.5]" />
-                      </button>
-                    </div>
-                    <div className="flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-none pb-1">
-                      {[
-                        { label: 'O+ রক্ত কোথায় পাব?', val: 'O+ রক্ত কোথায় পাব?' },
-                        { label: 'নিকটবর্তী ডোনার দেখাও', val: 'নিকটবর্তী ডোনার দেখাও' },
-                        { label: 'জরুরি রিকোয়েস্ট তৈরি কর', val: 'জরুরি রিকোয়েস্ট তৈরি কর' },
-                        { label: 'AI দিয়ে ডোনার কল কর', val: 'AI দিয়ে ডোনার কে কিভাবে কল করব?' }
-                      ].map((prompt, k) => (
-                        <button
-                          key={k}
-                          onClick={() => handleSendMessage(prompt.val)}
-                          className="bg-white hover:bg-rose-50 border border-slate-200/80 hover:border-rose-200 px-3 py-1.5 rounded-full text-[10.5px] font-bold text-slate-700 transition cursor-pointer select-none"
-                        >
-                          {prompt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+
 
                   {/* Bot Interactive input footer */}
                   <div className="p-4 bg-white border-t border-slate-100 shrink-0 flex items-center justify-between gap-2 md:pb-6 relative z-10">

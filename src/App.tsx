@@ -1865,6 +1865,11 @@ export default function App() {
             return;
           }
 
+          if (!messaging) {
+            console.warn("FCM messaging is not initialized or supported.");
+            return;
+          }
+
           const permission = await Notification.requestPermission();
           if (permission === 'granted') {
             // Register service worker explicitly for FCM
@@ -1892,6 +1897,7 @@ export default function App() {
 
   // Foreground Message Handler
   useEffect(() => {
+    if (!messaging) return;
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Foreground message received:', payload);
       if (payload.notification) {
@@ -2622,51 +2628,35 @@ export default function App() {
           <div className="relative">
             <motion.div
               animate={{ 
-                scale: [1, 1.1, 1],
-                rotate: [0, 5, -5, 0]
+                scale: [1, 1.08, 1],
               }}
-              transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
               className="relative z-10"
             >
               <Droplets className="w-20 h-20 text-red-600 drop-shadow-xl" />
             </motion.div>
             <motion.div
-              animate={{ scale: [1, 1.5, 1], opacity: [0.2, 0, 0.2] }}
+              animate={{ scale: [1, 1.4, 1], opacity: [0.15, 0, 0.15] }}
               transition={{ repeat: Infinity, duration: 2 }}
               className="absolute inset-0 bg-red-100 rounded-full filter blur-xl -z-10"
             />
           </div>
 
-          <div className="flex flex-col items-center gap-4 w-64 text-center">
+          <div className="flex flex-col items-center gap-5 text-center">
             <div className="space-y-1">
               <h1 className="text-3xl font-black tracking-tighter">
                 <span className="text-red-600">Blood</span>
                 <span className="text-slate-900">Link</span>
               </h1>
-              <p className="text-red-600 text-[10px] font-black uppercase tracking-[0.3em] leading-none mb-2">Bangladesh</p>
+              <p className="text-red-100 text-[10px] font-black uppercase tracking-[0.3em] leading-none mb-1.5" style={{ color: '#dc2626' }}>Bangladesh</p>
               <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest">Saving Lives Together</p>
             </div>
 
-            <div className="w-full h-2 bg-slate-200/50 rounded-full overflow-hidden mt-4 relative">
-              <motion.div 
-                className="absolute top-0 left-0 h-full bg-red-600 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.5)]"
-                animate={{ width: `${loadProgress}%` }}
-                transition={{ duration: 0.5 }}
-              />
+            {/* Elegant Circular Spinning Track (Professional Loader) */}
+            <div className="flex justify-center items-center mt-3 relative w-12 h-12">
+              <div className="absolute inset-0 rounded-full border-4 border-red-100/50"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-red-600 border-t-transparent animate-spin"></div>
             </div>
-            
-            <div className="flex items-center gap-2">
-              <span className="text-red-600 font-black text-2xl tabular-nums">
-                {Math.round(loadProgress)}%
-              </span>
-              <div className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-            </div>
-            
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.1em] opacity-80">
-              {loadProgress < 30 ? 'Initializing connection...' : 
-               loadProgress < 60 ? 'Syncing donation network...' :
-               loadProgress < 90 ? 'Securing data pipelines...' : 'Welcome to BloodLink'}
-            </p>
           </div>
         </motion.div>
       </div>
@@ -3660,11 +3650,10 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-red-50 text-[#ff1744] flex items-center justify-center mx-auto mb-1.5">
                           <Users className="w-4 h-4" />
                         </div>
-                        <p className="text-base font-black text-slate-905 leading-none tracking-tight">
+                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">
                           {((allUsers?.filter(u => u.isAvailable !== false).length) || 0) + 2450}
                         </p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 block h-5 leading-none">Active Donors</p>
-                        <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-emerald-50 text-[7.5px] text-emerald-600 rounded-full font-black uppercase tracking-wider leading-none">All Bangladesh</span>
+                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Active Donors</p>
                       </div>
 
                       {/* Metric 2: Blood Request Total */}
@@ -3672,11 +3661,10 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-red-50 text-[#ff1744] flex items-center justify-center mx-auto mb-1.5">
                           <Droplet className="w-4 h-4 fill-[#ff1744] stroke-[#ff1744]" />
                         </div>
-                        <p className="text-base font-black text-slate-905 leading-none tracking-tight">
+                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">
                           {((requests?.length) || 0) + 382}
                         </p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 block h-5 leading-none">Blood Requests</p>
-                        <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-red-50 text-[7.5px] text-red-650 rounded-full font-black uppercase tracking-wider leading-none">Total BD Board</span>
+                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Blood Requests</p>
                       </div>
 
                       {/* Metric 3: Total Hospital */}
@@ -3684,9 +3672,8 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-1.5">
                           <Building className="w-4 h-4" />
                         </div>
-                        <p className="text-base font-black text-slate-905 leading-none tracking-tight">482</p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 block h-5 leading-none">Total Hospital</p>
-                        <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-blue-50 text-[7.5px] text-blue-600 rounded-full font-black uppercase tracking-wider leading-none">64 Districts Map</span>
+                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">6000+</p>
+                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Total Hospital</p>
                       </div>
 
                       {/* Metric 4: Hospital Total in 64 district as per map */}
@@ -3694,14 +3681,13 @@ export default function App() {
                         <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-1.5">
                           <MapPin className="w-4 h-4 stroke-rose-500" />
                         </div>
-                        <p className="text-base font-black text-slate-905 leading-none tracking-tight">64</p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 block h-5 leading-none">Districts Cover</p>
-                        <span className="inline-block mt-1.5 px-1.5 py-0.5 bg-emerald-50 text-[7.5px] text-emerald-600 rounded-full font-black uppercase tracking-wider leading-none">All BD Coverage</span>
+                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">64</p>
+                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Districts Cover</p>
                       </div>
                     </div>
 
                     {/* 3. Interactive MapView Card with Legend & Filter */}
-                    <div className="relative bg-white border border-slate-100/90 rounded-[32px] p-2.5 shadow-lg shadow-slate-200/20 overflow-hidden flex flex-col pointer-events-auto">
+                    <div className="relative bg-white rounded-[32px] p-2.5 premium-down-shadow overflow-hidden flex flex-col pointer-events-auto">
                       <div className="px-3.5 py-3 flex items-center justify-between bg-white border-b border-rose-50/50">
                         <div className="flex items-center gap-2 select-none">
                           <span className="relative flex h-2.5 w-2.5">
@@ -3765,26 +3751,26 @@ export default function App() {
                           <div className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1 mb-0.5">Legend</div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#1e40af] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-750">O+ Type</span>
+                            <span className="text-[8.5px] font-black text-slate-755">O+ Type</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#15803d] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-750">A+ Type</span>
+                            <span className="text-[8.5px] font-black text-slate-755">A+ Type</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#d97706] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-750">B+ Type</span>
+                            <span className="text-[8.5px] font-black text-slate-755">B+ Type</span>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-[#7c3aed] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-750">AB+ Type</span>
+                            <span className="text-[8.5px] font-black text-slate-755">AB+ Type</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
                     {/* 4. Quick Actions Bento Grid Row */}
-                    <div className="grid grid-cols-4 gap-2 bg-white border border-slate-200/50 rounded-3xl p-3 shadow-sm select-none">
+                    <div className="grid grid-cols-4 gap-2 bg-white rounded-3xl p-3 premium-down-shadow select-none">
                       <button 
                         onClick={() => setView('find')}
                         className="flex flex-col items-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-colors group cursor-pointer"
@@ -3839,97 +3825,111 @@ export default function App() {
                         title="Emergency Hotlines & Services"
                       >
                         <div className="w-12 h-12 rounded-full bg-[#fffbeb] text-amber-600 flex items-center justify-center shadow-inner group-hover:scale-105 duration-300">
-                          <Phone className="w-5 h-5 text-amber-600" />
+                           <Phone className="w-5 h-5 text-amber-600" />
                         </div>
                         <span className="text-[10px] font-black text-slate-800 tracking-tight mt-2 block leading-none">Emergency</span>
                         <span className="text-[8.5px] font-bold text-slate-400 mt-1 block leading-none">Hotline</span>
                       </button>
                     </div>
 
-                    {/* 5. Nearest Donor Spotlights */}
-                    <div className="bg-white border border-slate-100 rounded-[28px] p-4 shadow-[0_4px_24px_rgba(15,23,42,0.015)]">
-                      <div className="flex items-center justify-between mb-4 pb-2 border-b border-rose-50/20 select-none">
+                    {/* 5. Nearest Donor Spotlight (One Premium Designable Card) */}
+                    <div className="bg-white rounded-[28px] p-5 premium-down-shadow relative overflow-hidden">
+                      {/* Subtly glowing top-right accent */}
+                      <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-rose-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
+                      
+                      <div className="flex items-center justify-between mb-4.5 pb-2 border-b border-rose-50/20 select-none">
                         <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setView('find')}>
-                          <h3 className="text-xs font-black text-red-600 uppercase tracking-widest">
-                            Nearest Database Donors
+                          <h3 className="text-xs font-black text-red-600 uppercase tracking-widest flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Nearest Active Donor
                           </h3>
-                          <ChevronRight className="w-4 h-4 text-red-500 stroke-[2.5]" />
+                          <ChevronRight className="w-3.5 h-3.5 text-red-500 stroke-[2.5]" />
                         </div>
-                        <span className="text-[8.5px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 bg-rose-50 border border-rose-100 rounded-full px-2 py-0.5">
+                        <span className="text-[8.5px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 bg-rose-50 border border-rose-100/60 rounded-full px-2 py-0.5">
                           Live DB Sync
                         </span>
                       </div>
 
-                      <div className="divide-y divide-slate-50 space-y-4">
-                        {spotlightDonors.map((donor, idx) => {
-                          const isDemo = 'isDemo' in donor && (donor as any).isDemo;
-                          return (
-                            <div key={donor.uid + idx} className={`flex flex-col sm:flex-row items-center sm:justify-between gap-4 ${idx > 0 ? 'pt-4' : ''}`}>
-                              <div className="flex items-center gap-3.5 w-full">
+                      {spotlightDonors.length > 0 ? (() => {
+                        const donor = spotlightDonors[0];
+                        const isDemo = 'isDemo' in donor && (donor as any).isDemo;
+                        return (
+                          <div className="space-y-4">
+                            {/* Premium Spotlight Card */}
+                            <div className="bg-gradient-to-b from-rose-50/20 to-transparent p-4.5 rounded-2xl border border-rose-100/30">
+                              <div className="flex items-start gap-4">
                                 <div className="relative shrink-0 select-none">
+                                  <div className="absolute inset-0 bg-red-500/10 rounded-2xl blur-xs scale-105 animate-pulse" />
                                   <img 
                                     src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
                                     alt={donor.displayName}
-                                    className="w-12 h-12 rounded-2xl object-cover border border-slate-100 shadow-sm"
+                                    className="relative w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-md"
                                   />
-                                  <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-white shadow-sm">
-                                    <span className="absolute h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                    <span className="relative h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                  <span className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-md border border-slate-50">
+                                    <span className="absolute h-2 w-2 rounded-full bg-emerald-500 animate-ping opacity-75" />
+                                    <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
                                   </span>
                                 </div>
 
                                 <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="text-sm font-black text-slate-900 leading-none truncate">{donor.displayName}</h4>
-                                    <span className="px-1.5 py-0.5 bg-red-50 text-[8.5px] font-black text-[#ff1744] rounded-lg shrink-0">{donor.bloodGroup}</span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h4 className="text-[14px] font-black text-slate-900 leading-none truncate">{donor.displayName}</h4>
                                     {donor.isVerified && (
-                                      <span className="bg-blue-50 text-[7px] text-blue-600 font-extrabold border border-blue-100 rounded px-1 shrink-0">Verified</span>
-                                    )}
-                                    {!isDemo && (
-                                      <span className="bg-violet-50 text-[7px] text-violet-600 font-extrabold border border-violet-100 rounded px-1 shrink-0">DB Real</span>
+                                      <span className="bg-blue-50/80 text-[7.5px] text-blue-600 font-extrabold border border-blue-100/50 rounded px-1.5 py-0.5 uppercase tracking-wide shrink-0">Verified</span>
                                     )}
                                   </div>
                                   
-                                  <div className="flex items-center gap-1 mt-1.5 text-slate-400 font-extrabold text-[9.5px] select-none truncate">
+                                  <div className="flex items-center gap-1 mt-2 text-slate-500 font-extrabold text-[10px] select-none truncate">
                                     <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
                                     <span className="truncate">{donor.thana ? `${donor.thana}, ` : ''}{donor.district || 'Bangladesh'}</span>
-                                    <span className="text-slate-200 mx-1">•</span>
-                                    <span className="text-emerald-600 font-black shrink-0">Active</span>
+                                  </div>
+
+                                  <div className="flex items-center gap-4 mt-3">
+                                    <div className="flex items-center gap-1 bg-white/70 px-2 py-0.5 rounded-lg border border-slate-100">
+                                      <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Group</span>
+                                      <span className="text-xs font-black text-red-650 bg-red-50 px-1.5 py-0.5 rounded">{donor.bloodGroup}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Available Now</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-
-                              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
-                                <a
-                                  href={`tel:${donor.phone || '+8801990000000'}`}
-                                  onClick={() => {
-                                    addToast(`Calling ${donor.displayName}`, `Dialing direct secure gateway to ${donor.displayName}...`, "success");
-                                  }}
-                                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-white hover:bg-red-50 border border-slate-200 px-3 py-2 rounded-xl text-[10.5px] font-black text-slate-700 transition-all active:scale-95 cursor-pointer shadow-xs"
-                                >
-                                  <Phone className="w-3 h-3 text-slate-500 fill-slate-400" />
-                                  <span>Call</span>
-                                </a>
-
-                                <button
-                                  onClick={() => {
-                                    if (isDemo) {
-                                      addToast("Demo Donor Spotlights", `This is a verified placeholder donor. Sign up other active accounts to test live messaging.`, "info");
-                                    } else {
-                                      addToast("Connecting direct chat...", `In-app chat initialized with ${donor.displayName}`, "info");
-                                      openChat(donor.uid);
-                                    }
-                                  }}
-                                  className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 bg-gradient-to-r from-red-650 to-rose-600 hover:from-red-700 hover:to-rose-650 text-white px-3 py-2 rounded-xl text-[10.5px] font-black transition-all active:scale-95 cursor-pointer shadow-sm"
-                                >
-                                  <MessageSquare className="w-3 h-3 text-white fill-white" />
-                                  <span>Message</span>
-                                </button>
-                              </div>
                             </div>
-                          );
-                        })}
-                      </div>
+
+                            {/* Direct Action Gateway Layout */}
+                            <div className="grid grid-cols-2 gap-2.5">
+                              <a
+                                href={`tel:${donor.phone || '+8801990000000'}`}
+                                onClick={() => {
+                                  addToast(`Calling ${donor.displayName}`, `Dialing direct secure gateway to ${donor.displayName}...`, "success");
+                                }}
+                                className="flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-rose-50/50 border border-slate-150 py-3 rounded-xl text-[11px] font-black text-slate-800 transition-all active:scale-[0.97] cursor-pointer shadow-xs"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-slate-500 fill-slate-400 animate-bounce" />
+                                <span>Voice Call</span>
+                              </a>
+
+                              <button
+                                onClick={() => {
+                                  if (isDemo) {
+                                    addToast("Demo Donor Spotlight", `This is a verified placeholder donor. Sign up other active accounts to test live messaging.`, "info");
+                                  } else {
+                                    addToast("Connecting direct chat...", `In-app chat initialized with ${donor.displayName}`, "info");
+                                    openChat(donor.uid);
+                                  }
+                                }}
+                                className="flex items-center justify-center gap-1.5 bg-[#ff1744] hover:bg-red-600 text-white py-3 rounded-xl text-[11px] font-black transition-all active:scale-[0.97] cursor-pointer shadow-md shadow-red-100"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 text-white fill-white" />
+                                <span>Send Message</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })() : (
+                        <p className="text-slate-400 text-center text-xs py-4">No nearest donors available currently.</p>
+                      )}
                     </div>
 
                     {/* 6. Live Donation updates and matching Stream Activity Feed */}
@@ -3944,7 +3944,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-2.5">
-                        {liveActivityFeed.map((feed) => {
+                        {liveActivityFeed.slice(0, 3).map((feed) => {
                           const isRequest = feed.type === 'request';
                           const isFulfilled = feed.highlight === 'Donation Completed' || feed.highlight === 'Fulfilled';
                           
@@ -3971,7 +3971,7 @@ export default function App() {
                                   addToast("Requests Center", `Navigated to requested blood needs.`, "info");
                                 }
                               }}
-                              className="bg-white border border-slate-200/50 rounded-2xl p-3 flex items-center justify-between shadow-[0_2px_6px_rgba(15,23,42,0.01)] cursor-pointer hover:border-red-100 hover:shadow-xs transition-all duration-300"
+                              className="bg-white border border-slate-200/50 rounded-2xl p-3.5 flex items-center justify-between shadow-[0_2px_6px_rgba(15,23,42,0.01)] cursor-pointer hover:border-red-100 hover:shadow-xs transition-all duration-300"
                             >
                               <div className="flex items-center gap-3 min-w-0 flex-1">
                                 <div className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center shrink-0 ${
@@ -3984,7 +3984,7 @@ export default function App() {
                                   {isFulfilled ? (
                                     <Heart className="w-4 h-4 fill-emerald-500 stroke-emerald-500" />
                                   ) : isRequest ? (
-                                    <Droplet className="w-4 h-4 fill-red-655 stroke-red-650" />
+                                    <Droplet className="w-4 h-4 fill-red-650 stroke-red-650" />
                                   ) : (
                                     <MessageSquare className="w-4 h-4 text-indigo-600 fill-indigo-100" />
                                   )}
@@ -4007,10 +4007,10 @@ export default function App() {
                                   <p className="text-[10px] text-slate-400 font-semibold mt-1 leading-tight truncate whitespace-normal block line-clamp-1">
                                     {feed.subtitle}
                                   </p>
-                                  <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wider mt-1">{formatTimeAgo(feed.timestamp)}</p>
+                                  <p className="text-[8px] text-slate-450 font-bold uppercase tracking-wider mt-1">{formatTimeAgo(feed.timestamp)}</p>
                                 </div>
                               </div>
-                              <ChevronRight className="w-4 h-4 text-slate-300 shrink-0 ml-1" />
+                              <ChevronRight className="w-4 h-4 text-slate-350 shrink-0 ml-1" />
                             </div>
                           );
                         })}
@@ -4138,40 +4138,40 @@ export default function App() {
                     )}
 
                     {/* Sub-navigation Filters list matching the screenshot */}
-                    <div className="grid grid-cols-4 bg-white/50 p-1 rounded-2xl border border-slate-100 mt-4 shadow-sm">
+                    <div className="grid grid-cols-4 bg-white p-1.5 rounded-[26px] mt-4 premium-down-shadow">
                       <button 
                         onClick={() => setActiveRequestSubTab('all')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-1 rounded-xl transition-all cursor-pointer select-none text-center ${
+                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
                           activeRequestSubTab === 'all' 
-                            ? 'bg-red-50/60 text-[#ff2247] font-extrabold border-b-2 border-[#ff2247] sm:border-0' 
-                            : 'text-slate-500 hover:text-slate-800 font-semibold'
+                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
+                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
                         }`}
                       >
-                        <Layers className={`w-3.5 h-3.5 ${activeRequestSubTab === 'all' ? 'text-[#ff2247]' : 'text-slate-400'}`} />
+                        <Layers className={`w-3.5 h-3.5 ${activeRequestSubTab === 'all' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
                         <span className="text-[10px] sm:text-xs">All Requests</span>
                       </button>
 
                       <button 
                         onClick={() => setActiveRequestSubTab('urgent')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-1 rounded-xl transition-all cursor-pointer select-none text-center ${
+                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
                           activeRequestSubTab === 'urgent' 
-                            ? 'bg-red-50/60 text-[#ff2247] font-extrabold border-b-2 border-[#ff2247] sm:border-0' 
-                            : 'text-slate-500 hover:text-slate-800 font-semibold'
+                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
+                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
                         }`}
                       >
-                        <Activity className={`w-3.5 h-3.5 ${activeRequestSubTab === 'urgent' ? 'text-[#ff2247] animate-pulse' : 'text-slate-400'}`} />
+                        <Activity className={`w-3.5 h-3.5 ${activeRequestSubTab === 'urgent' ? 'text-[#ff1744] animate-pulse' : 'text-slate-400'}`} />
                         <span className="text-[10px] sm:text-xs">Urgent</span>
                       </button>
 
                       <button 
                         onClick={() => setActiveRequestSubTab('nearby')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-1 rounded-xl transition-all cursor-pointer select-none text-center ${
+                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
                           activeRequestSubTab === 'nearby' 
-                            ? 'bg-red-50/60 text-[#ff2247] font-extrabold border-b-2 border-[#ff2247] sm:border-0' 
-                            : 'text-slate-500 hover:text-slate-800 font-semibold'
+                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
+                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
                         }`}
                       >
-                        <MapPin className={`w-3.5 h-3.5 ${activeRequestSubTab === 'nearby' ? 'text-[#ff2247]' : 'text-slate-400'}`} />
+                        <MapPin className={`w-3.5 h-3.5 ${activeRequestSubTab === 'nearby' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
                         <span className="text-[10px] sm:text-xs">Nearby</span>
                       </button>
 
@@ -4183,13 +4183,13 @@ export default function App() {
                             setActiveRequestSubTab('my');
                           }
                         }}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2.5 px-1 rounded-xl transition-all cursor-pointer select-none text-center ${
+                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
                           activeRequestSubTab === 'my' 
-                            ? 'bg-red-50/60 text-[#ff2247] font-extrabold border-b-2 border-[#ff2247] sm:border-0' 
-                            : 'text-slate-500 hover:text-slate-800 font-semibold'
+                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
+                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
                         }`}
                       >
-                        <UserIcon className={`w-3.5 h-3.5 ${activeRequestSubTab === 'my' ? 'text-[#ff2247]' : 'text-slate-400'}`} />
+                        <UserIcon className={`w-3.5 h-3.5 ${activeRequestSubTab === 'my' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
                         <span className="text-[10px] sm:text-xs">My Requests</span>
                       </button>
                     </div>
@@ -6691,7 +6691,8 @@ export default function App() {
           
           {/* Semicircular / concave shape curve in the center (Exactly 104px wide) */}
           <div className="w-[104px] h-[72px] relative bg-transparent overflow-visible -mx-[1px]">
-            <svg viewBox="0 0 104 72" fill="white" className="absolute top-0 left-0 w-full h-full overflow-visible">
+            <svg viewBox="0 0 104 72" fill="none" className="absolute top-0 left-0 w-full h-full overflow-visible">
+              {/* Fill path without any border/stroke */}
               <path 
                 d="M 0,0 
                    L 12,0 
@@ -6703,6 +6704,15 @@ export default function App() {
                    Z" 
                 fill="white" 
                 fillOpacity="0.95"
+              />
+              {/* Stroke line that ONLY draws the premium curved upper border (no sides, no bottom) */}
+              <path 
+                d="M 0,0 
+                   L 12,0 
+                   C 26,0 26,45 52,45 
+                   C 78,45 78,0 92,0 
+                   L 104,0" 
+                fill="none"
                 stroke="#e2e8f0" 
                 strokeWidth="1.2"
               />
@@ -11234,10 +11244,10 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
       layout
       initial={{ opacity: 0, scale: 0.98, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`bg-white rounded-3xl p-5 border shadow-md hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group ${
+      className={`bg-white rounded-3xl p-5 premium-down-shadow hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group ${
         isUrgent 
-          ? 'border-red-200 ring-2 ring-red-50/70 shadow-red-50/50 bg-gradient-to-b from-red-50/5 via-white to-white' 
-          : 'border-slate-150 shadow-slate-100/50'
+          ? 'border border-red-200 ring-2 ring-red-50/70 bg-gradient-to-b from-red-50/5 via-white to-white' 
+          : ''
       }`}
     >
       {/* Absolute Decorative Background Vector */}
@@ -11491,7 +11501,7 @@ function RequestCardRedesigned({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="bg-white rounded-3xl p-4 border border-slate-100/80 shadow-[0_4px_20px_rgba(0,0,0,0.02)] hover:shadow-md transition-all relative overflow-hidden"
+      className="bg-white rounded-3xl p-4 premium-down-shadow hover:shadow-2xl transition-all relative overflow-hidden"
     >
       {/* Upper Content - Circle and details */}
       <div className="flex gap-4 items-start">
@@ -11809,8 +11819,8 @@ function DonorCard({ donor, onMessage, onViewProfile, currentUserProfile, showTh
       layout
       initial={{ opacity: 0, scale: 0.98, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`bg-white rounded-3xl p-5 border shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between h-full ${
-        isNearby ? 'border-red-100 ring-2 ring-red-50/70 shadow-red-50/80 bg-gradient-to-b from-red-50/5 via-white to-white' : 'border-slate-150 shadow-slate-100'
+      className={`bg-white rounded-3xl p-5 premium-down-shadow hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between h-full ${
+        isNearby ? 'border border-red-100 ring-2 ring-red-50/70 bg-gradient-to-b from-red-50/5 via-white to-white' : ''
       }`}
     >
       {/* Decorative background visual */}
@@ -15357,7 +15367,7 @@ function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, ad
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm hover:shadow-md transition-shadow mb-4 relative overflow-hidden"
+      className="bg-white rounded-3xl p-5 premium-down-shadow hover:shadow-2xl transition-shadow mb-4 relative overflow-hidden"
     >
       {isNew && (
         <div className="absolute top-0 right-0 z-10">

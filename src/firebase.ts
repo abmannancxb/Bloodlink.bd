@@ -18,10 +18,19 @@ const appConfig = {
 
 const app = initializeApp(appConfig);
 export const db = initializeFirestore(app, {
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
 }, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
-export const messaging = getMessaging(app);
+
+// Guard messaging setup against unsupported browser/iframe sandbox contexts
+export const messaging = typeof window !== 'undefined' ? (() => {
+  try {
+    return getMessaging(app);
+  } catch (err) {
+    console.warn('FCM is not supported in this environment/browser.', err);
+    return null;
+  }
+})() : null;
 
 // Enable offline persistence for Firestore
 if (typeof window !== 'undefined') {
@@ -37,4 +46,16 @@ if (typeof window !== 'undefined') {
   setPersistence(auth, browserLocalPersistence).catch((error) => {
     console.error("Auth persistence error:", error);
   });
+
+  // Test Connection
+  const testConnection = async () => {
+    try {
+      await getDocFromServer(doc(db, '_connection_test', 'status'));
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('offline')) {
+        console.warn("Firestore client is running in offline mode.");
+      }
+    }
+  };
+  testConnection();
 }

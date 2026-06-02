@@ -12,6 +12,10 @@
 }
 
 @layer utilities {
+  .premium-down-shadow {
+    box-shadow: 0 16px 36px -4px rgba(0, 0, 0, 0.05), 0 4px 16px -2px rgba(0, 0, 0, 0.015);
+  }
+  
   .custom-scrollbar::-webkit-scrollbar {
     width: 6px;
     height: 6px;
