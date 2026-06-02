@@ -544,17 +544,48 @@ Response JSON Schema:
       // If neither succeeded or rate limits/quotas were hit
       if (!usedEngine) {
         console.warn("All available AI Engines failed or keys are missing. Triggering precise fallback error.");
+        
+        const textCleaned = String(message || '').toLowerCase();
+        
+        let replyText = "আমার সিস্টেমের কাজ চলমান, অনুগ্রহ করে ম্যানুয়ালি খুঁজে নিন। দুঃখিত।";
+        let finalTaskMode = slots?.taskMode || "idle";
+        
+        const isGreeting = textCleaned.includes('হ্যালো') || textCleaned.includes('হাই') || textCleaned.includes('hello') || textCleaned.includes('hi') || textCleaned.includes('সালাম') || textCleaned.includes('salam') || textCleaned.includes('আসসালামু');
+        const isIntro = textCleaned.includes('কে তুমি') || textCleaned.includes('তুমি কে') || textCleaned.includes('পরিচয়') || textCleaned.includes('who are you') || textCleaned.includes('your name');
+        const isBenefits = textCleaned.includes('রক্তদান') || textCleaned.includes('উপকারিতা') || textCleaned.includes('রক্ত দিলে') || textCleaned.includes('benefit');
+        const isThanks = textCleaned.includes('ধন্যবাদ') || textCleaned.includes('thanks') || textCleaned.includes('thank you') || textCleaned.includes('থ্যাঙ্ক');
+        
+        if (isGreeting) {
+          replyText = "ওয়ালাইকুম আসসালাম! আশা করি আল্লাহর রহমতে ভালো আছেন। আমি আপনার রক্তবন্ধু AI সহকারী। আজ আপনাকে কীভাবে সাহায্য করতে পারি? রক্তদাতা খুঁজতে বা আবেদন তৈরি করতে রক্তের গ্রুপ দিয়ে সরাসরি প্রশ্ন করুন!";
+        } else if (isIntro) {
+          replyText = "আমি ব্লাডলিঙ্ক এআই (BloodLink AI) সহকারী। আমি আপনাকে দ্রুত রক্তের গ্রুপ অনুযায়ী স্বেচ্ছাসেবী রক্তদাতা খুঁজে পেতে এবং জরুরী রক্তের আবেদন পোস্ট করতে সাহায্য করতে পারি।";
+        } else if (isBenefits) {
+          replyText = "রক্তদান একটি পরম মহৎ কাজ। রক্ত দিলে শরীরের রক্তকণিকা পুনরুজ্জীবিত হয়, রক্তে উপাদানের ভারসাম্য ঠিক থাকে এবং হৃদরোগ ও স্ট্রোকের ঝুঁকি কমে। একটি রক্তদান সর্বোচ্চ ৪ জনের জীবন বাঁচাতে পারে!";
+        } else if (isThanks) {
+          replyText = "আপনাকে অনেক ধন্যবাদ! ব্লাডলিঙ্ক বাংলাদেশের সাথে থাকুন এবং স্বেচ্ছায় রক্তদানে এগিয়ে আসুন।";
+        } else if (slots?.bloodGroup) {
+          if (textCleaned.includes('রক্ত চাই') || textCleaned.includes('request') || textCleaned.includes('দরকার') || textCleaned.includes('প্রয়োজন')) {
+            replyText = `আমি আপনার ${slots.bloodGroup} গ্রুপের রক্তের আবেদনটির বিবরণ নোট করেছি। অনুগ্রহ করে নিচের 'Publish Request' বাটন ব্যবহার করে সরাসরি আবেদনটি পোস্ট করুন যাতে সকলে দেখতে পায়।`;
+            finalTaskMode = "create_request";
+          } else {
+            replyText = `আমি আপনার জন্য ${slots.bloodGroup} গ্রুপের রক্তদাতার সন্ধান পেয়েছি। নিচে কাছাকাছি এলাকার উপযুক্ত রক্তদাতাদের দেখতে পাবেন এবং তাদের সাথে সরাসরি যোগাযোগ করতে পারবেন।`;
+            finalTaskMode = "search_donors";
+          }
+        } else {
+          replyText = `আমি আপনার বার্তাটি পেয়েছি: "${message}"। রক্তদাতা খুঁজতে, আবেদন পোস্ট করতে বা সাধারণ যেকোনো প্রশ্ন থাকলে দয়া করে বিস্তারিত বলুন (যেমন: রক্তের গ্রুপ ও আপনার জেলা)। আমি সাহায্য করার জন্য প্রস্তুত।`;
+        }
+
         return res.status(200).json({
           success: true,
-          replyText: "আমার সিস্টেমের কাজ চলমান, অনুগ্রহ করে ম্যানুয়ালি খুঁজে নিন। দুঃখিত।",
-          limitReached: true,
+          replyText,
+          limitReached: false,
           bloodGroup: slots?.bloodGroup || null,
           district: slots?.district || null,
           thana: slots?.thana || null,
           hospital: slots?.hospital || null,
           medicalReason: slots?.medicalReason || null,
           contactPhone: slots?.contactPhone || null,
-          taskMode: slots?.taskMode || "idle",
+          taskMode: finalTaskMode,
           actionTriggered: false,
           requestFormTriggered: false
         });

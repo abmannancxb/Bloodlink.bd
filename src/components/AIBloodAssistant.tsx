@@ -894,21 +894,40 @@ export default function AIBloodAssistant({
       setIsThinking(false);
 
       const computedSlots = {
-        bloodGroup: matchingGroup || slots.bloodGroup || 'O+',
-        district: matchingDistrict || slots.district || 'Cox\'s Bazar',
-        thana: matchingThana || slots.thana || 'Sadar',
-        hospital: slots.hospital || "সদর জেনারেল হাসপাতাল",
-        medicalReason: slots.medicalReason || 'জরুরি রক্তের আবেদন',
-        contactPhone: slots.contactPhone || currentUserProfile?.phone || '018XXXXXXXX',
+        bloodGroup: matchingGroup || slots.bloodGroup,
+        district: matchingDistrict || slots.district,
+        thana: matchingThana || slots.thana,
+        hospital: slots.hospital,
+        medicalReason: slots.medicalReason,
+        contactPhone: slots.contactPhone || currentUserProfile?.phone || '',
         taskMode: isRequestTrigger ? 'create_request' : isDonorSearchTrigger ? 'search_donors' : slots.taskMode
       };
       setSlots(computedSlots);
 
-      let assistReply = "আমি আপনার অনুরোধটি নোট করেছি। ";
-      if (computedSlots.bloodGroup) {
-        assistReply += `আমি ${computedSlots.bloodGroup} ফুসফুস রক্তের জন্য ব্যবস্থা সম্পন্ন করছি।`;
+      let assistReply = "";
+      
+      const isGreeting = textCleaned.includes('হ্যালো') || textCleaned.includes('হাই') || textCleaned.includes('hello') || textCleaned.includes('hi') || textCleaned.includes('সালাম') || textCleaned.includes('salam') || textCleaned.includes('আসসালামু');
+      const isIntro = textCleaned.includes('কে তুমি') || textCleaned.includes('তুমি কে') || textCleaned.includes('পরিচয়') || textCleaned.includes('who are you') || textCleaned.includes('your name');
+      const isBenefits = textCleaned.includes('রক্তদান') || textCleaned.includes('উপকারিতা') || textCleaned.includes('রক্ত দিলে') || textCleaned.includes('benefit');
+      const isThanks = textCleaned.includes('ধন্যবাদ') || textCleaned.includes('thanks') || textCleaned.includes('thank you') || textCleaned.includes('থ্যাঙ্ক');
+
+      if (isGreeting) {
+        assistReply = "ওয়ালাইকুম আসসালাম! আমি আপনার রক্তবন্ধু AI সহকারী। আজ আপনাকে কীভাবে সাহায্য করতে পারি? রক্তদাতা খুঁজতে রক্তের গ্রুপ এবং জেলা-থানার নাম লিখে আমাকে প্রশ্ন করুন!";
+      } else if (isIntro) {
+        assistReply = "আমি ব্লাডলিঙ্ক এআই (BloodLink AI) সহকারী। আমি আপনাকে দ্রুত রক্তের গ্রুপ অনুযায়ী স্বেচ্ছাসেবী রক্তদাতা খুঁজে পেতে এবং জরুরী রক্তের আবেদন পোস্ট করতে সাহায্য করতে পারি।";
+      } else if (isBenefits) {
+        assistReply = "রক্তদান একটি পরম মহৎ কাজ। রক্ত দিলে শরীরের রক্তকণিকা পুনরুজ্জীবিত হয়, রক্তে উপাদানের ভারসাম্য ঠিক থাকে এবং হৃদরোগ ও স্ট্রোকের ঝুঁকি কমে। একটি রক্তদান সর্বোচ্চ ৪ জনের জীবন বাঁচাতে পারে!";
+      } else if (isThanks) {
+        assistReply = "আপনাকে অনেক ধন্যবাদ! ব্লাডলিঙ্ক বাংলাদেশের সাথে থাকুন এবং স্বেচ্ছায় রক্তদানে এগিয়ে আসুন।";
+      } else if (computedSlots.bloodGroup) {
+        if (isRequestTrigger) {
+          assistReply = `আপনার ${computedSlots.bloodGroup} গ্রুপের রক্তের আবেদনটির বিবরণ নোট করেছি। অনুগ্রহ করে নিচের 'Publish Request' বাটন ব্যবহার করে সরাসরি আবেদনটি পোস্ট করুন যাতে সকলে দেখতে পায়।`;
+        } else {
+          assistReply = `আমি আপনার জন্য ${computedSlots.bloodGroup} গ্রুপের রক্তদাতার সন্ধান পেয়েছি। নিচে কাছাকাছি এলাকার উপযুক্ত রক্তদাতাদের দেখতে পাবেন এবং তাদের সাথে সরাসরি যোগাযোগ করতে পারবেন।`;
+        }
       } else {
-        assistReply += "বলুন আপনার কি রক্তের গ্রুপ প্রয়োজন?";
+        // Safe natural fallback guiding the user contextually
+        assistReply = `আমি আপনার বার্তাটি পেয়েছি। রক্তদাতা খুঁজতে, আবেদন পোস্ট করতে বা সাধারণ যেকোনো প্রশ্ন থাকলে দয়া করে বিস্তারিত বলুন (যেমন: রক্তের গ্রুপ ও আপনার জেলা)। আমি সাহায্য করার জন্য প্রস্তুত।`;
       }
 
       setMessages(prev => [...prev, {
@@ -917,8 +936,8 @@ export default function AIBloodAssistant({
         text: assistReply,
         timestamp: new Date(),
         meta: {
-          showCustomCard: !!(computedSlots.bloodGroup && (isRequestTrigger || textCleaned.includes('দরকার') || textCleaned.includes('জরুরি'))),
-          showDonorsList: !!(computedSlots.bloodGroup && (isDonorSearchTrigger || textCleaned.includes('রক্তদাতা') || textCleaned.includes('অনুরোধ'))),
+          showCustomCard: !!(computedSlots.bloodGroup && (isRequestTrigger || textCleaned.includes('দরকার') || textCleaned.includes('জরুরি') || textCleaned.includes('রিকোয়েস্ট'))),
+          showDonorsList: !!(computedSlots.bloodGroup && (isDonorSearchTrigger || textCleaned.includes('রক্তদাতা') || textCleaned.includes('অনুরোধ') || textCleaned.includes('খুঁজ'))),
           payloadSlots: computedSlots
         }
       }]);
