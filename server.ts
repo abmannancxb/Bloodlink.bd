@@ -311,32 +311,59 @@ async function startServer() {
       const systemInstruction = `You are a highly intelligent, polite, and friendly Bangla (বাংলাদেশী বাংলা) voice and text assistant for 'BloodLink Bangladesh', behaving as Gemini Artificial Intelligence (জিমিনি আর্টিফিশিয়াল এআই).
 
 Core Guidelines & Conversational Paths:
-1. GREETINGS & SALAM (সালাম ও শুভেচ্ছা):
-   - If the user greets you with Salam ("আসসালামু আলাইকুম" or "সালাম"), respond warmly with: "ওয়ালাইকুম আসসালাম! আশা করি আল্লাহর রহমতে ভালো আছেন। আমি আপনার রক্তবন্ধু AI রক্ত সহকারী। আজ আপনাকে কীভাবে সাহায্য করতে পারি?"
-   - If they say other greetings like "শুভ সকাল" (Good Morning), "শুভ বিকেল" (Good Afternoon), "শুভ সন্ধ্যা" (Good Evening), "হ্যালো", "Hi", "Hello", reply appropriately in Bangla: e.g. "শুভ সকাল! আমি রক্তবন্ধু AI রক্ত সহকারী। আশা করি আপনার আজকের দিনটি সুন্দর কাটবে। রক্ত খোঁজা বা রক্তদানের বিষয়ে কীভাবে সাহায্য করতে পারি বলুন।"
-   - Keep the tone respectful, friendly, and deeply helpful.
+1. GREETINGS, SALAM & CHAT (সালাম, শুভেচ্ছা ও সাধারণ আলাপন):
+   - Always reply in Bengali (বাংলাদেশী বাংলা) unless the user requests another language.
+   - If the user greets you with Salam ("আসসালামু আলাইকুম" or "সালাম"), respond warmly with: "ওয়ালাইকুম আসসালাম! আশা করি আল্লাহর রহমতে ভালো আছেন। আমি আপনার রক্তবন্ধু AI সহকারী। আজ আপনাকে কীভাবে সাহায্য করতে পারি?"
+   - Keep the tone friendly, professional, and concise. Ensure negative space, clean spacing and clear, short Bengali answers.
+   - Ask only necessary questions. Never ask for information already available in the user's account automatically.
+   - Always keep responses highly conversational and short, offering button options where available. Button format: [বাটন টেক্সট].
+   - If the user is just saying hello or greeting you, keep "taskMode" as "idle". Do NOT invent or ask for blood group/district unless they explicitly requested help to find blood.
 
-2. GENERAL AI KNOWLEDGE (যেকোন সাধারণ প্রশ্ন):
-   - You are Gemini AI. If the user asks general, educational, science, medical, or other common questions (e.g., "তুমি কে?", "জিমিনি কি?", "রক্ত দিলে কি ক্ষতি হয়?", "বাংলাদেশ কোন মহাদেশে?", "পানির উৎস কি?"), do NOT reject them. Respond with accurate, highly informative, and concise explanations in standard Bangla.
-   - For these general questions, keep "taskMode" as "idle" (or maintain their current ongoing flow), and NEVER say "অনুগ্রহ করে আমাকে অপ্রয়োজনীয় প্রশ্ন করবেন না". Simply answer their question beautifully!
+2. GENERAL AI KNOWLEDGE (যেকোন সাধারণ প্রশ্নের উত্তর):
+   - You are Gemini AI. If the user asks general, educational, science, medical, or other common questions (e.g., "তুমি কে?", "জিমিনি কি?", "রক্ত দিলে কি ক্ষতি হয়?", "বাংলাদেশ কোন মহাদেশে?", "পানির উৎস কি?", "রক্তদানের উপকারিতা কী?"), do NOT reject them or tell them to only ask about blood. Respond with accurate, highly informative, polite, and concise explanations in standard Bangla as Gemini AI.
+   - For these general questions, keep "taskMode" as "idle" (or maintain their current ongoing flow), and NEVER say "আমি কেবল রক্ত সংক্রান্ত সাহায্য করতে পারি". Beautifully answer their query first! Keep all previously unprovided parameters as null.
 
 3. PATH A: Donor Search & Nearby Donors ("taskMode": "search_donors")
    - Use when the user wants to search, view, or find nearby donors (e.g., "ও পজিটিভ ডোনার লাগবে", "নিকটবর্তী ও পজিটিভ ডোনার দেখাও", "কক্সবাজারে ও পজিটিভ রক্তদাতা আছে?").
-   - You must collect 3 parameters: 'bloodGroup', 'district', and 'thana'.
-   - Extract any location or blood group given in the query directly, register it, and gently ask for any missing parameter (one by one) in polite Bangla.
+   - Required slots: 'bloodGroup' (e.g., "O+", "A+"), 'district' (matching BANGLADESH_LOCATIONS key), and 'thana' (matching sub-array values).
+   - If the user says "A+ donor needed" or similar, save "A+" as bloodGroup and start search immediately for the location.
+   - You must collect Blood Group and Location (district, thana). Once both are present, set 'actionTriggered' to true and 'taskMode' to "search_donors".
+   - Extract location and blood groups directly, register them, and ask for any missing parameters one by one in polite Bangla, recommending choices using button syntax [বাটন].
    - Valid bloodGroup values: A+, A-, B+, B-, AB+, AB-, O+, O-. Normalize terms like "ও পজিটিভ" to "O+", "বি পজিটিভ" to "B+", etc.
    - Match Bangla/English locations to the BANGLADESH_LOCATIONS keys (English) like "Dhaka", "Chittagong" or sub-districts like "Mirpur", "Uttara".
-   - Once all 3 fields ('bloodGroup', 'district', 'thana') are filled, set 'actionTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার প্রদত্ত রক্তের গ্রুপ (\${bloodGroup}) এবং এলাকা (\${thana}, \${district}) অনুযায়ী নিকটবর্তী উপযুক্ত রক্তদাতা খুঁজছি..."
+   - Once location and bloodGroup slots are filled, set 'actionTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার প্রদত্ত রক্তের গ্রুপ (\${bloodGroup}) এবং এলাকা (\${thana}, \${district}) অনুযায়ী নিকটবর্তী উপযুক্ত রক্তদাতা খুঁজছি..."
 
 4. PATH B: Post Blood Request & Create Blood Request ("taskMode": "create_request")
-   - Use when the user states they need/require blood or want to post a blood request (e.g., "ব্লাড লাগবে", "রক্ত লাগবে", "ব্লাড দরকার", "একটি রিকোয়েস্ট তৈরি করুন", "আবেদন করুন", "জরুরি ও পজিটিভ রক্ত দরকার").
-   - You must extract and save 5 slots: 'bloodGroup', 'district', 'thana', 'hospital' (hospital name), and 'medicalReason' (রোগীর সমস্যা ও রক্তের পরিমাণ).
-   - **Important**: Any specified blood volume/quantity (রক্তের পরিমাণ, e.g., "১ ব্যাগ", "২ ব্যাগ", "2 units", "২ ইউনিট রক্ত লাগবে") provided in the user's message MUST be saved inside the 'medicalReason' slot! For example, set 'medicalReason' to: "জরুরি রক্ত প্রয়োজন, পরিমাণ: ২ ব্যাগ" or "রক্তের পরিমাণ: ৩ ব্যাগ".
-   - **Slopping/Missing Checking Rule**: Whatever details are specified first (রক্তের গ্রুপ, জেলা, থানা, হাসপাতাল নাম, রক্তের পরিমাণ) must be saved immediately. Ask for only the missing details ("যেটা কম হবে সেটা জিজ্ঞেস করে নিবে"), one by one politely.
-   - Standard 'contactPhone' tracking:
-     * The user's account phone number provides a default ("currentUserPhone" is: '\${currentUserPhone || ''}').
-     * If "currentUserPhone" is provided and not empty, set 'contactPhone' to it. If missing, politely ask the user for an active contact phone number.
-   - When all 5 request parameters and phone are filled, set 'requestFormTriggered' to true. Set 'replyText' to: "ধন্যবাদ, আমি আপনার দেওয়া সকল তথ্য (গ্রুপ: \${bloodGroup || ''}, জেলা: \${district || ''}, থানা: \${thana || ''}, হাসপাতাল: \${hospital || ''}, পরিমাণ/কারণ: \${medicalReason || ''}) পেয়েছি। রক্তের আবেদনটি স্বয়ংক্রিয়ভাবে তৈরি করে দেওয়া হচ্ছে।"
+   - Use when the user states they need/require blood or want to post a blood request (e.g., "ব্লাড লাগবে", "রক্ত লাগবে", "ব্লাড দরকার", "একটি রিকোয়েস্ট তৈরি করুন", "আবেদন করুন", "জরুরি ও পজিটিভ রক্ত দরকার" or "আমার বাবার জন্য রক্ত লাগবে").
+   - AI SMART FEATURE: If user says "আমার বাবার জন্য রক্ত লাগবে", automatically ask for Blood Group, Bags, Hospital, and Emergency level all at once or one-by-one with beautiful option chips!
+   - Follow these exact creation steps to secure slots:
+     * Step 1: Determine blood group needed. Ask with buttons:
+       "🩸 রক্তের গ্রুপ?\n[A+] [A-] [B+] [B-] [O+] [O-] [AB+] [AB-]"
+     * Step 2: Ask for missing details politely, one by one:
+       - Number of units required (Save inside 'medicalReason' slot, e.g., "২ ব্যাগ")
+       - Hospital name (Save inside 'hospital' slot)
+       - Emergency level (Urgent / Normal) (Save inside 'medicalReason' slot, e.g., "২ ব্যাগ, জরুরি")
+     * Step 3: Use the logged-in user's mobile number automatically. If "\${currentUserPhone || ''}" is not empty, show:
+       "আপনার মোবাইল নম্বর: \${currentUserPhone}\nএটি ব্যবহার করতে চান?\n[হ্যাঁ] [না]"
+       If they confirm, set 'contactPhone' to that number. If missing or they choose "না", ask politely for their contact mobile number in Bangla.
+     * Step 4: Generate a preview exactly as shown:
+       "✅ রিকুয়েস্ট প্রস্তুত
+
+       গ্রুপ: \${bloodGroup || ''}
+       পরিমাণ: \${medicalReason || ''}
+       হাসপাতাল: \${hospital || ''}
+       মোবাইল: \${contactPhone || ''}
+       অগ্রাধিকার: \${medicalReason?.includes('জরুরি') ? 'জরুরি' : 'নরমাল'}
+
+       রিকুয়েস্টটি পোস্ট করতে চান?
+       [পোস্ট করুন] [এডিট করুন]"
+     * Step 5: Only after explicit confirmation (e.g., user says "পোস্ট করুন" or clicks [পোস্ট করুন]), set 'requestFormTriggered' to true. Never create or post without explicit confirmation.
+   - Save volume/quantity and emergency parameters inside the 'medicalReason' slot exactly.
+   - Ask for missing details one by one politely in Bangla. Never guess or hallucinate parameters. Maintain previously collected values.
+   - Follow Step 3 for contact phone tracking default values and verification.
+     * Ensure the user's phone is correctly stored once confirmed.
+     * Set 'contactPhone' properly as instructed in Step 3.
+   - When all request parameters are collected, show the preview to the user as defined in Step 4. Only trigger 'requestFormTriggered' to true if they confirm with "পোস্ট করুন" as defined in Step 5.
 
 PATH C: Donor Lookup ("taskMode": "donor_lookup")
 - Use when the user asks about a specific donor by name (e.g. "রফিক শেষ কবে রক্ত দিয়েছে?", "করিমের রক্তের গ্রুপ কী?").
@@ -346,7 +373,7 @@ PATH C: Donor Lookup ("taskMode": "donor_lookup")
 
 Conversational Steps & Parameter Memory Rules:
 1. SLOT RETENTION: You MUST carry forward and return the non-null values provided in "Current extracted slots state" in your final JSON response keys.
-2. Directivenes: Ask for only ONE missing slot at a time politely, in Bangla.
+2. Directivenes: Ask for only ONE missing slot at a time politely, in Bangla. You MUST NOT invent, guess, or assume values.
 
 Current extracted slots state from previous turns:
 - bloodGroup: ${slots?.bloodGroup || 'null'}
@@ -383,74 +410,78 @@ Response JSON Schema:
           console.warn("Gemini API key is not configured.");
           return false;
         }
-        try {
-          console.log("Using Gemini-3.5-Flash model with loaded Key...");
-          const ai = new GoogleGenAI({
-            apiKey: geminiApiKey,
-            httpOptions: {
-              headers: {
-                'User-Agent': 'aistudio-build',
+
+        const modelsToTry = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+
+        for (const currentModel of modelsToTry) {
+          try {
+            console.log(`Using Gemini SDK with model: ${currentModel}...`);
+            const ai = new GoogleGenAI({
+              apiKey: geminiApiKey,
+              httpOptions: {
+                headers: {
+                  'User-Agent': 'aistudio-build',
+                }
               }
-            }
-          });
+            });
 
-          const chatMessages = [
-            ...(history || []).map((msg: any) => ({
-              role: msg.role === 'assistant' ? 'model' : 'user',
-              parts: [{ text: msg.text }]
-            })),
-            {
-              role: 'user',
-              parts: [{ text: message }]
-            }
-          ];
-
-          const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
-            contents: chatMessages,
-            config: {
-              systemInstruction,
-              responseMimeType: "application/json",
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  replyText: { type: Type.STRING },
-                  bloodGroup: { type: Type.STRING },
-                  district: { type: Type.STRING },
-                  thana: { type: Type.STRING },
-                  hospital: { type: Type.STRING },
-                  medicalReason: { type: Type.STRING },
-                  contactPhone: { type: Type.STRING },
-                  taskMode: { type: Type.STRING },
-                  actionTriggered: { type: Type.BOOLEAN },
-                  requestFormTriggered: { type: Type.BOOLEAN }
-                },
-                required: [
-                  "replyText", 
-                  "bloodGroup", 
-                  "district", 
-                  "thana", 
-                  "hospital", 
-                  "medicalReason", 
-                  "contactPhone", 
-                  "taskMode", 
-                  "actionTriggered", 
-                  "requestFormTriggered"
-                ]
+            const chatMessages = [
+              ...(history || []).map((msg: any) => ({
+                role: msg.role === 'assistant' ? 'model' : 'user',
+                parts: [{ text: msg.text }]
+              })),
+              {
+                role: 'user',
+                parts: [{ text: message }]
               }
-            }
-          });
+            ];
 
-          if (response && response.text) {
-            responseText = response.text;
-            usedEngine = "gemini";
-            return true;
+            const response = await ai.models.generateContent({
+              model: currentModel,
+              contents: chatMessages,
+              config: {
+                systemInstruction,
+                responseMimeType: "application/json",
+                responseSchema: {
+                  type: Type.OBJECT,
+                  properties: {
+                    replyText: { type: Type.STRING },
+                    bloodGroup: { type: Type.STRING },
+                    district: { type: Type.STRING },
+                    thana: { type: Type.STRING },
+                    hospital: { type: Type.STRING },
+                    medicalReason: { type: Type.STRING },
+                    contactPhone: { type: Type.STRING },
+                    taskMode: { type: Type.STRING },
+                    actionTriggered: { type: Type.BOOLEAN },
+                    requestFormTriggered: { type: Type.BOOLEAN }
+                  },
+                  required: [
+                    "replyText", 
+                    "bloodGroup", 
+                    "district", 
+                    "thana", 
+                    "hospital", 
+                    "medicalReason", 
+                    "contactPhone", 
+                    "taskMode", 
+                    "actionTriggered", 
+                    "requestFormTriggered"
+                  ]
+                }
+              }
+            });
+
+            if (response && response.text) {
+              responseText = response.text;
+              usedEngine = `gemini (${currentModel})`;
+              return true;
+            }
+          } catch (geminiError: any) {
+            console.error(`Gemini model ${currentModel} error:`, geminiError.message || geminiError);
           }
-          return false;
-        } catch (geminiError: any) {
-          console.error("Gemini API error during query:", geminiError.message || geminiError);
-          return false;
         }
+        return false;
       };
 
       const tryGroq = async (): Promise<boolean> => {

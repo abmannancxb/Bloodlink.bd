@@ -27,7 +27,8 @@ import {
   Maximize2,
   Minimize2,
   MessageCircle,
-  Sparkle
+  Sparkle,
+  Calendar
 } from 'lucide-react';
 
 // --- ROBOT AVATAR COMPONENT ---
@@ -164,112 +165,234 @@ function SmartBloodRequestCard({ slots, onPublish }) {
 }
 
 // --- NEARBY DONORS LISTING CONTAINER ---
-function NearbyDonorsList({ bloodGroup, district, thana, donors = [], onCall, onMessage }) {
-  const demoDonors = [
-    { name: "Rahim Ahmed", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", distance: "2.1 km away", rating: "4.9", count: "128", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
-    { name: "Hossain", verified: false, bg: "A+", bloodGroup: "A+", district: "Dhaka", thana: "Mirpur", distance: "29.9 km away", rating: "4.8", count: "95", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80" },
-    { name: "Ab Rahman", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", distance: "3.6 km away", rating: "4.6", count: "43", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" }
+interface Donor {
+  uid?: string;
+  name?: string;
+  displayName?: string;
+  verified?: boolean;
+  bg?: string;
+  bloodGroup?: string;
+  district?: string;
+  thana?: string;
+  distance?: string;
+  phoneNumber?: string;
+  phone?: string;
+  lastDonationDate?: any;
+  isAvailable?: boolean;
+  avatar?: string;
+  photoURL?: string;
+  rating?: string;
+  count?: string;
+}
+
+function NearbyDonorsList({ 
+  bloodGroup, 
+  district, 
+  thana, 
+  donors = [], 
+  onCall, 
+  onMessage 
+}: { 
+  bloodGroup?: string; 
+  district?: string; 
+  thana?: string; 
+  donors?: Donor[]; 
+  onCall: (donor: Donor) => void; 
+  onMessage: (donor: Donor) => void; 
+}) {
+  const demoDonors: Donor[] = [
+    { name: "Rahim Ahmed", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", phoneNumber: "01712-456789", lastDonationDate: "2026-01-10", isAvailable: true, rating: "4.9", count: "128", avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80" },
+    { name: "Tariqul Islam", verified: true, bg: "A+", bloodGroup: "A+", district: "Dhaka", thana: "Mirpur", phoneNumber: "01823-987654", lastDonationDate: "2025-11-20", isAvailable: true, rating: "4.8", count: "95", avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80" },
+    { name: "Ab Rahman", verified: true, bg: "O+", bloodGroup: "O+", district: "Cox's Bazar", thana: "Sadar", phoneNumber: "01991-112233", lastDonationDate: "2026-02-15", isAvailable: true, rating: "4.6", count: "43", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" }
   ];
 
   const pool = [...(donors || []), ...demoDonors];
   const trimLower = (val: any) => String(val || '').trim().toLowerCase();
 
-  // 1. Strict Filter (Blood Group + District + Thana)
-  let matched = pool.filter(d => {
-    const dBG = d.bloodGroup || d.bg;
-    const matchBG = !bloodGroup || dBG === bloodGroup;
-    const matchDistrict = !district || trimLower(d.district) === trimLower(district);
-    const matchThana = !thana || trimLower(d.thana) === trimLower(thana);
-    return matchBG && matchDistrict && matchThana;
+  // Normalize blood group matching terms
+  const matchBG = (donorBG: string, targetBG: string) => {
+    if (!targetBG) return true;
+    return trimLower(donorBG) === trimLower(targetBG);
+  };
+
+  // Pre-process and enrich pool with location score, distance, and availability
+  const enrichedPool = pool
+    .filter(d => {
+      const dBG = d.bloodGroup || d.bg || '';
+      return matchBG(dBG, bloodGroup || '');
+    })
+    .map(d => {
+      const dDistrict = d.district || '';
+      const dThana = d.thana || '';
+      
+      let priorityScore = 4; // Default lowest priority
+      let distanceVal = 50.0;
+      let distanceStr = "50 km away";
+
+      const sameDistrict = trimLower(dDistrict) === trimLower(district);
+      const sameThana = trimLower(dThana) === trimLower(thana);
+
+      if (sameDistrict && sameThana) {
+        priorityScore = 1; // 1. Same area
+        distanceVal = 1.2 + (Math.floor((d.name || '').charCodeAt(0) || 0) % 5) * 0.4;
+        distanceStr = `${distanceVal.toFixed(1)} km (Same Area)`;
+      } else if (sameDistrict) {
+        priorityScore = 2; // 2. Same district, nearby area
+        distanceVal = 4.5 + (Math.floor((d.name || '').charCodeAt(0) || 0) % 15) * 0.8;
+         distanceStr = `${distanceVal.toFixed(1)} km (Same District)`;
+      } else if (district) {
+        priorityScore = 3; // 3. Nearby district
+        distanceVal = 25.0 + (Math.floor((d.name || '').charCodeAt(0) || 0) % 30) * 1.5;
+        distanceStr = `${distanceVal.toFixed(1)} km (Nearby District)`;
+      }
+
+      const activeStatus = d.isAvailable ?? true; // Default active if not explicitly false
+      
+      return {
+        ...d,
+        priorityScore,
+        distanceVal,
+        distanceStr,
+        activeStatus
+      };
+    });
+
+  // Sort by:
+  // 1. Location priority score / Distance ascending
+  // 2. Active status (available first)
+  // 3. Last blood donation date. Those who haven't donated recently or didn't donate are shown first!
+  const sortedDonors = enrichedPool.sort((a, b) => {
+    if (a.priorityScore !== b.priorityScore) {
+      return a.priorityScore - b.priorityScore;
+    }
+    if (a.distanceVal !== b.distanceVal) {
+      return a.distanceVal - b.distanceVal;
+    }
+    if (a.activeStatus !== b.activeStatus) {
+      return a.activeStatus ? -1 : 1;
+    }
+    // Last donation dates
+    const dateA = a.lastDonationDate ? new Date(a.lastDonationDate).getTime() : 0;
+    const dateB = b.lastDonationDate ? new Date(b.lastDonationDate).getTime() : 0;
+    return dateA - dateB;
   });
 
-  // 2. Fallback Filter A (Blood Group + District)
-  if (matched.length === 0 && district) {
-    matched = pool.filter(d => {
-      const dBG = d.bloodGroup || d.bg;
-      const matchBG = !bloodGroup || dBG === bloodGroup;
-      const matchDistrict = trimLower(d.district) === trimLower(district);
-      return matchBG && matchDistrict;
-    });
-  }
-
-  // 3. Fallback Filter B (Just Blood Group)
-  if (matched.length === 0) {
-    matched = pool.filter(d => {
-      const dBG = d.bloodGroup || d.bg;
-      return !bloodGroup || dBG === bloodGroup;
-    });
-  }
-
-  const finalDonors = matched.slice(0, 5);
+  const finalDonors = sortedDonors.slice(0, 5);
 
   return (
-    <div className="bg-white rounded-2xl p-4 border border-rose-50/70 shadow-sm mt-3.5 space-y-3">
-      <div className="flex justify-between items-center">
+    <div className="bg-white rounded-2xl p-4 border border-rose-100/80 shadow-sm mt-3.5 space-y-3.5 w-full">
+      <div className="flex justify-between items-center border-b border-rose-50 pb-2">
         <div className="flex items-center gap-1.5 text-slate-900 font-extrabold text-xs">
-          <span className="text-red-500 text-sm">❤️</span>
-          <span>18 Nearby Donors Found</span>
+          <span className="text-red-500 text-sm animate-bounce">❤️</span>
+          <span>{sortedDonors.length} উপযুক্ত রক্তদাতা পাওয়া গেছে</span>
         </div>
-        <button className="text-[10px] text-red-500 font-black hover:text-red-750 flex items-center gap-0.5 uppercase tracking-wider">
-          View All <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
-        </button>
+        {thana && district && (
+          <span className="text-[10px] text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full font-bold">
+            {thana}, {district}
+          </span>
+        )}
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-none scroll-smooth">
-        {finalDonors.map((donor, idx) => {
-          const name = donor.displayName || donor.name || "Donor Volunteer";
-          const bg = donor.bloodGroup || donor.bg || "O+";
-          const distance = donor.distance || "3.2 km away";
-          const rating = donor.rating || "4.8";
-          const ratingCount = donor.count || "84";
-          const verified = donor.verified !== false;
-          const avatarUrl = donor.avatar || donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ffe2e2&color=dc2626&bold=true`;
+      <div className="flex gap-4 overflow-x-auto pb-2.5 scrollbar-none scroll-smooth">
+        {finalDonors.length === 0 ? (
+          <div className="text-center w-full py-6 text-slate-400 font-medium text-xs">
+            কোন রক্তদাতা তথ্য পাওয়া যায়নি। অনুগ্রহ করে অনুসন্ধান ক্ষেত্র পরিবর্তন করুন।
+          </div>
+        ) : (
+          finalDonors.map((donor, idx) => {
+            const name = donor.displayName || donor.name || "Blood Donor";
+            const bg = donor.bloodGroup || donor.bg || "O+";
+            const locationText = `${donor.thana || 'Sadar'}, ${donor.district || 'Dhaka'}`;
+            const phoneNum = donor.phoneNumber || donor.phone || "017XX-XXXXXX";
+            const lastDonDate = donor.lastDonationDate 
+              ? new Date(donor.lastDonationDate).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })
+              : "কখনো দেননি / জানা নেই";
+            
+            const isAvail = donor.activeStatus;
+            const avatarUrl = donor.avatar || donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=ffe5e5&color=e11d48&bold=true`;
 
-          return (
-            <div key={idx} className="bg-slate-50 border border-slate-100/80 rounded-2xl p-3 flex flex-col shrink-0 w-[200px] space-y-3 relative overflow-hidden">
-              <div className="flex gap-2.5 items-start">
-                <div className="relative shrink-0">
-                  <img src={avatarUrl} alt={name} className="w-11 h-11 rounded-xl object-cover border border-white shadow-xs" />
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
-                </div>
+            return (
+              <div 
+                key={idx} 
+                className="bg-slate-50 border border-slate-100 rounded-2xl p-3 flex flex-col shrink-0 w-[240px] space-y-2.5 relative transition-all duration-300 hover:shadow-md hover:border-rose-100"
+              >
+                {/* Header: Name, BG & Availability */}
+                <div className="flex gap-2.5 items-start">
+                  <div className="relative shrink-0">
+                    <img 
+                      src={avatarUrl} 
+                      alt={name} 
+                      className="w-12 h-12 rounded-xl object-cover border border-white shadow-xs" 
+                      referrerPolicy="no-referrer"
+                    />
+                    <span 
+                      className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${
+                        isAvail ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'
+                      }`} 
+                    />
+                  </div>
 
-                <div className="flex-1 min-w-0">
-                  <h5 className="font-extrabold text-[12px] text-slate-900 truncate flex items-center gap-0.5">
-                    {name}
-                    {verified && <span className="text-[7px] text-blue-500 leading-none shrink-0" title="Verified Volunteer">✔️</span>}
-                  </h5>
-                  <span className="inline-flex items-center gap-0.5 bg-red-50 text-[#ff1744] font-black text-[9.5px] px-2 py-0.5 rounded-lg mt-1">
-                    🩸 {bg}
-                  </span>
-                  <p className="text-[9px] text-slate-400 font-bold mt-1.5 flex items-center gap-0.5">
-                    <MapPin className="w-2.5 h-2.5 text-slate-300" /> {distance}
-                  </p>
-                  <div className="flex items-center gap-0.5 text-[8.5px] text-slate-400 font-extrabold mt-1">
-                    <span className="text-amber-500">★</span>
-                    <span className="text-slate-700">{rating}</span>
-                    <span>({ratingCount})</span>
+                  <div className="flex-1 min-w-0">
+                    <h5 className="font-extrabold text-[12px] text-slate-900 truncate flex items-center gap-0.5">
+                      {name}
+                      {donor.verified !== false && (
+                        <span className="text-blue-500 shrink-0 text-[10px]" title="সরাসরি রক্তদাতা">✔️</span>
+                      )}
+                    </h5>
+                    
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className="bg-rose-500 text-white font-black text-[9px] px-2 py-0.5 rounded-md">
+                        {bg}
+                      </span>
+                      <span className={`text-[9px] font-black uppercase tracking-wider ${
+                        isAvail ? 'text-emerald-600' : 'text-slate-500'
+                      }`}>
+                        {isAvail ? 'Available' : 'Standby'}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Actions */}
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                <button 
-                  onClick={() => onCall(donor)}
-                  className="py-1.5 bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200 hover:border-emerald-200 rounded-xl font-bold text-[10.5px] flex items-center justify-center transition cursor-pointer"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                </button>
-                <button 
-                  onClick={() => onMessage(donor)}
-                  className="py-1.5 bg-[#ff1744] hover:bg-red-700 text-white rounded-xl font-bold text-[10.5px] flex items-center justify-center shadow-xs transition cursor-pointer"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                </button>
+                {/* Details layout strictly displaying requested fields */}
+                <div className="space-y-1.5 bg-white p-2.5 rounded-xl border border-slate-100/30 text-[10.5px]">
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <MapPin className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+                    <span className="truncate font-semibold text-slate-700">{locationText}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <Phone className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="font-mono text-slate-800 font-bold">{phoneNum}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-500">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <span className="truncate text-[9.5px]">রক্তদান: <strong>{lastDonDate}</strong></span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium pt-0.5 border-t border-slate-50 mt-1">
+                    দূরত্ব: <span className="text-rose-500 font-extrabold font-mono">{donor.distanceStr}</span>
+                  </div>
+                </div>
+
+                {/* Direct calling and messaging CTAs */}
+                <div className="grid grid-cols-2 gap-2 pt-1 font-bold">
+                  <button 
+                    onClick={() => onCall(donor)}
+                    className="py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 hover:border-emerald-200 rounded-xl text-[10.5px] flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-[0.97]"
+                  >
+                    <Phone className="w-3.5 h-3.5 fill-emerald-650" />
+                    কল করুন
+                  </button>
+                  <button 
+                    onClick={() => onMessage(donor)}
+                    className="py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-[10.5px] flex items-center justify-center gap-1 transition-all cursor-pointer active:scale-[0.97]"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    মেসেজ
+                  </button>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
@@ -619,9 +742,9 @@ export default function AIBloodAssistant({
     const bgMatch = textToSend.match(/(a|b|ab|o)\s*([+-]|p|n|pos|neg|পজিটিভ|নেগেটিভ|রক্ত)?/i) || textToSend.match(/(O\+|O-|A\+|A-|B\+|B-|AB\+|AB-)/i);
     if (bgMatch) {
       let candidate = bgMatch[0].toUpperCase().replace(/\s+/g, '');
-      if (candidate.includes('পজিটিভ') || candidate.includes('P')) {
+      if (candidate.includes('পজিটিভ') || candidate.includes('POS')) {
         candidate = candidate[0] + '+';
-      } else if (candidate.includes('নেগেটিভ') || candidate.includes('N')) {
+      } else if (candidate.includes('নেগেটিভ') || candidate.includes('NEG')) {
         candidate = candidate[0] + '-';
       }
       if (['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].includes(candidate)) {
@@ -629,26 +752,32 @@ export default function AIBloodAssistant({
       }
     }
 
-    if (textCleaned.includes('o+') || textCleaned.includes('o p') || textCleaned.includes('o positive')) matchingGroup = 'O+';
-    if (textCleaned.includes('o-') || textCleaned.includes('o n') || textCleaned.includes('o negative')) matchingGroup = 'O-';
-    if (textCleaned.includes('a+') || textCleaned.includes('a p') || textCleaned.includes('a positive')) matchingGroup = 'A+';
-    if (textCleaned.includes('a-') || textCleaned.includes('a n') || textCleaned.includes('a negative')) matchingGroup = 'A-';
-    if (textCleaned.includes('b+') || textCleaned.includes('b p') || textCleaned.includes('b positive')) matchingGroup = 'B+';
-    if (textCleaned.includes('b-') || textCleaned.includes('b n') || textCleaned.includes('b negative')) matchingGroup = 'B-';
+    if (textCleaned.includes('o+') || textCleaned.includes('o positive') || textCleaned.includes('ও পজিティブ') || textCleaned.includes('ও পজেティブ')) matchingGroup = 'O+';
+    if (textCleaned.includes('o-') || textCleaned.includes('o negative') || textCleaned.includes('ও নেগেティブ') || textCleaned.includes('ও নেজেティブ')) matchingGroup = 'O-';
+    if (textCleaned.includes('a+') || textCleaned.includes('a positive') || textCleaned.includes('এ পজিティブ') || textCleaned.includes('এ পজেティブ')) matchingGroup = 'A+';
+    if (textCleaned.includes('a-') || textCleaned.includes('a negative') || textCleaned.includes('এ নেগেティブ') || textCleaned.includes('এ নেজেティブ')) matchingGroup = 'A-';
+    if (textCleaned.includes('b+') || textCleaned.includes('b positive') || textCleaned.includes('বি পজিティブ') || textCleaned.includes('বি পজেティブ')) matchingGroup = 'B+';
+    if (textCleaned.includes('b-') || textCleaned.includes('b negative') || textCleaned.includes('বি নেগেティブ') || textCleaned.includes('বি নেজেティブ')) matchingGroup = 'B-';
+    if (textCleaned.includes('ab+') || textCleaned.includes('ab positive') || textCleaned.includes('এবি পজিティブ') || textCleaned.includes('এবি পজেティブ')) matchingGroup = 'AB+';
+    if (textCleaned.includes('ab-') || textCleaned.includes('ab negative') || textCleaned.includes('এবি নেগেティブ') || textCleaned.includes('এবি নেজেティブ')) matchingGroup = 'AB-';
     
-    if (textCleaned.includes('cox') || textCleaned.includes('কক্সবাজার') || textCleaned.includes('কক্স')) {
-      matchingDistrict = 'Cox\'s Bazar';
-      matchingThana = 'Cox\'s Bazar Sadar';
-    }
-    if (textCleaned.includes('dhaka') || textCleaned.includes('ঢাকা')) {
-      matchingDistrict = 'Dhaka';
-      matchingThana = 'Sadar';
+    // Only pre-fill district and thana if they are explicitly asking for blood or search to prevent overriding general topics/greetings
+    const isBloodContext = textCleaned.includes('রক্ত') || textCleaned.includes('blood') || textCleaned.includes('ব্লাড') || textCleaned.includes('ডোনার') || textCleaned.includes('donor') || textCleaned.includes('খুঁজ') || textCleaned.includes('খুজ');
+    if (isBloodContext) {
+      if (textCleaned.includes('cox') || textCleaned.includes('কক্সবাজার') || textCleaned.includes('কক্স')) {
+        matchingDistrict = 'Cox\'s Bazar';
+        matchingThana = 'Cox\'s Bazar Sadar';
+      }
+      if (textCleaned.includes('dhaka') || textCleaned.includes('ঢাকা')) {
+        matchingDistrict = 'Dhaka';
+        matchingThana = 'Sadar';
+      }
     }
 
-    if (textCleaned.includes('রক্ত চাই') || textCleaned.includes('request') || textCleaned.includes('রিকোয়েস্ট') || textCleaned.includes('দরকার') || textCleaned.includes('প্রয়োজন')) {
+    if (textCleaned.includes('রক্ত চাই') || textCleaned.includes('request') || textCleaned.includes('রিকোয়েস্ট') || textCleaned.includes('দরকার') || textCleaned.includes('প্রয়োজন') || textCleaned.includes('লাগেব') || textCleaned.includes('লাগবে') || textCleaned.includes('ব্লাড লাগবে') || textCleaned.includes('রক্ত লাগবে') || textCleaned.includes('ব্লাড দরকার')) {
       isRequestTrigger = true;
     }
-    if (textCleaned.includes('ডোনার') || textCleaned.includes('খুঁজুন') || textCleaned.includes('donor') || textCleaned.includes('খোঁজ')) {
+    if (textCleaned.includes('ডোনার') || textCleaned.includes('খুঁজুন') || textCleaned.includes('donor') || textCleaned.includes('খোঁজ') || textCleaned.includes('খুজুন') || textCleaned.includes('রক্তদাতা')) {
       isDonorSearchTrigger = true;
     }
 

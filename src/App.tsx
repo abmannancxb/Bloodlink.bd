@@ -275,6 +275,16 @@ interface FirestoreErrorInfo {
   }
 }
 
+// Register listeners for real-time error displaying
+let errorListeners: ((errInfo: FirestoreErrorInfo) => void)[] = [];
+
+export function registerErrorListener(listener: (errInfo: FirestoreErrorInfo) => void) {
+  errorListeners.push(listener);
+  return () => {
+    errorListeners = errorListeners.filter(l => l !== listener);
+  };
+}
+
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const message = error instanceof Error ? error.message : String(error);
   const isOffline = message.includes('offline');
@@ -303,9 +313,18 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     return;
   }
 
-  // Note: Since this is outside the React context, we log it. 
-  // We should prefer catching this in the components using addToast.
   console.error("Critical Firestore Error:", message);
+
+  // Distribute error to registered listeners asynchronously
+  setTimeout(() => {
+    errorListeners.forEach(listener => {
+      try {
+        listener(errInfo);
+      } catch (err) {
+        console.error("Error dispatching to error listener: ", err);
+      }
+    });
+  }, 0);
 }
 export { handleFirestoreError, playNotificationSound };
 
@@ -709,6 +728,53 @@ export default function App() {
   const viewRef = useRef(view);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
+  const [lastCriticalError, setLastCriticalError] = useState<{ error: string, operationType?: string, path?: string | null } | null>(null);
+
+  useEffect(() => {
+    // Listen for Firestore errors
+    const unsubFirestore = registerErrorListener((errInfo) => {
+      setLastCriticalError({
+        error: errInfo.error,
+        operationType: errInfo.operationType,
+        path: errInfo.path
+      });
+    });
+
+    // Listen for global runtime scripting errors to help diagnose any appлет issues
+    const handleGlobalError = (event: ErrorEvent) => {
+      // Ignore routine non-critical browser/extension specific warnings or third party messages
+      if (event.message?.includes('ResizeObserver') || event.message?.includes('Script error')) {
+        return;
+      }
+      setLastCriticalError({
+        error: event.message || 'JavaScript execution error',
+        operationType: 'Global Runtime Error',
+        path: event.filename ? `${event.filename}:${event.lineno}` : 'N/A'
+      });
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      const message = reason instanceof Error ? reason.message : String(reason);
+      // Skip benign developer socket rejection logs
+      if (message.includes('websocket') || message.includes('vite')) return;
+
+      setLastCriticalError({
+        error: message || 'Unhandled Promise Rejection',
+        operationType: 'Background Promise Rejection',
+        path: 'N/A'
+      });
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      unsubFirestore();
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
 
   const mainTouchStartRef = useRef<{ x: number; y: number } | null>(null);
 
@@ -1485,6 +1551,81 @@ export default function App() {
   const [quickFilterHighRated, setQuickFilterHighRated] = useState<boolean>(false);
   const districtInitialized = useRef(false);
 
+  // Optimized memoized lookups for high performance
+  const userMap = useMemo(() => {
+    const map = new globalThis.Map<string, UserProfile>();
+    allUsers.forEach(u => {
+      if (u.uid) map.set(u.uid, u);
+    });
+    return map;
+  }, [allUsers]);
+
+  const filteredRequests = useMemo(() => {
+    let filtered = requests.filter(r => {
+      if (filterDistrict && r.district !== filterDistrict) return false;
+      if (filterThana && r.thana !== filterThana) return false;
+      if (filterBloodGroup && r.bloodGroup !== filterBloodGroup) return false;
+      if (hideFulfilled && r.status !== 'Pending') return false;
+
+      if (activeRequestSubTab === 'urgent' && r.urgency !== 'Urgent') return false;
+      if (activeRequestSubTab === 'my' && r.requesterUid !== user?.uid) return false;
+      if (activeRequestSubTab === 'nearby') {
+        if (profile?.district && r.district !== profile.district) return false;
+      }
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      if (requestSortBy === 'oldest') {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeA - timeB;
+      } else if (requestSortBy === 'units') {
+        return (b.unitsNeeded || 1) - (a.unitsNeeded || 1);
+      } else {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      }
+    });
+  }, [requests, filterDistrict, filterThana, filterBloodGroup, hideFulfilled, activeRequestSubTab, user?.uid, profile?.district, requestSortBy]);
+
+  const filteredPosts = useMemo(() => {
+    let filtered = posts.filter(post => {
+      if (selectedStoryId && post.id === selectedStoryId) return true;
+      if (communityTab === 'following') {
+        if (!user) return false;
+        const author = userMap.get(post.authorUid);
+        const isFollowing = author?.followers?.includes(user.uid) || post.authorUid === user.uid;
+        if (!isFollowing) return false;
+      } else if (communityTab === 'verified') {
+        const author = userMap.get(post.authorUid);
+        if (!author?.isVerified) return false;
+      }
+      if (activeTag) {
+        const t = activeTag.toLowerCase();
+        if (!post.content?.toLowerCase().includes(t)) return false;
+      }
+      if (communitySearch.trim()) {
+        const searchLower = communitySearch.toLowerCase();
+        const author = userMap.get(post.authorUid);
+        const contentMatch = post.content?.toLowerCase().includes(searchLower);
+        const authorMatch = author?.displayName?.toLowerCase().includes(searchLower) || author?.thana?.toLowerCase().includes(searchLower) || author?.district?.toLowerCase().includes(searchLower);
+        if (!contentMatch && !authorMatch) return false;
+      }
+      return true;
+    });
+
+    if (selectedStoryId) {
+      filtered = [...filtered].sort((a, b) => {
+        if (a.id === selectedStoryId) return -1;
+        if (b.id === selectedStoryId) return 1;
+        return 0;
+      });
+    }
+    return filtered;
+  }, [posts, selectedStoryId, communityTab, user, userMap, activeTag, communitySearch]);
+
   // Set default filters from profile once on startup
   useEffect(() => {
     if (profile?.district && !districtInitialized.current) {
@@ -2001,17 +2142,27 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     // We need users for the Chat system as well, not just AdminPanel
-    const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const users = snapshot.docs.map(doc => ({
-        ...doc.data(),
-        uid: doc.id
-      })) as UserProfile[];
-      setAllUsers(users);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
-    });
+    // Optimize: fetch users once statically to avoid highly intensive background real-time updates and multiple re-renders
+    let isMounted = true;
+    const fetchUsers = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'users'));
+        if (isMounted) {
+          const users = snapshot.docs.map(doc => ({
+            ...doc.data(),
+            uid: doc.id
+          })) as UserProfile[];
+          setAllUsers(users);
+        }
+      } catch (error) {
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      }
+    };
+    fetchUsers();
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+    };
   }, [user, isGuest]);
 
   // Organizations Listener
@@ -2739,6 +2890,43 @@ export default function App() {
     <APIProvider key={effectiveApiKey} apiKey={effectiveApiKey} version="weekly">
       <div className="h-dvh flex flex-col bg-slate-50 overflow-hidden relative">
         <ToastContainer toasts={toasts} onRemove={onRemoveToast} onAction={onActionToast} />
+        
+        {lastCriticalError && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-20 left-4 right-4 md:left-auto md:right-4 md:w-[450px] z-[99999] bg-white border border-rose-200 shadow-2xl rounded-2xl p-4 pointer-events-auto"
+          >
+            <div className="absolute top-0 left-0 right-0 h-1 bg-red-600 rounded-t-2xl" />
+            <div className="flex gap-3">
+              <div className="p-2 bg-red-50 text-red-600 rounded-xl shrink-0">
+                <ShieldAlert className="w-5 h-5 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="font-extrabold text-slate-900 text-[10px] uppercase tracking-wider">Critical Exception Detected</h4>
+                  <button 
+                    onClick={() => setLastCriticalError(null)}
+                    className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="bg-slate-50 border border-slate-100 p-3 rounded-xl mt-3">
+                  <p className="text-red-700 text-xs font-mono break-all leading-relaxed max-h-32 overflow-y-auto">
+                    {lastCriticalError.error}
+                  </p>
+                </div>
+                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                  <span>Op: <strong className="text-slate-600">{lastCriticalError.operationType || 'unknown'}</strong></span>
+                  <span>Path: <strong className="text-slate-600 break-all select-all">{lastCriticalError.path || 'N/A'}</strong></span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
         <ConfirmModal config={confirmConfig} />
 
         {!user && isGuest && (
@@ -4070,37 +4258,7 @@ export default function App() {
                   {/* Main List content */}
                   <div className="px-5 space-y-4">
                     {(() => {
-                      let filtered = requests.filter(r => {
-                        // Dropdown Filters
-                        if (filterDistrict && r.district !== filterDistrict) return false;
-                        if (filterThana && r.thana !== filterThana) return false;
-                        if (filterBloodGroup && r.bloodGroup !== filterBloodGroup) return false;
-                        if (hideFulfilled && r.status !== 'Pending') return false;
-
-                        // Sub tab category filters
-                        if (activeRequestSubTab === 'urgent' && r.urgency !== 'Urgent') return false;
-                        if (activeRequestSubTab === 'my' && r.requesterUid !== user?.uid) return false;
-                        if (activeRequestSubTab === 'nearby') {
-                          if (profile?.district && r.district !== profile.district) return false;
-                        }
-                        return true;
-                      });
-
-                      // Apply sorting
-                      filtered = [...filtered].sort((a, b) => {
-                        if (requestSortBy === 'oldest') {
-                          const timeA = a.createdAt?.seconds || 0;
-                          const timeB = b.createdAt?.seconds || 0;
-                          return timeA - timeB;
-                        } else if (requestSortBy === 'units') {
-                          return (b.unitsNeeded || 1) - (a.unitsNeeded || 1);
-                        } else {
-                          // newest
-                          const timeA = a.createdAt?.seconds || 0;
-                          const timeB = b.createdAt?.seconds || 0;
-                          return timeB - timeA;
-                        }
-                      });
+                      const filtered = filteredRequests;
 
                       if (filtered.length === 0) {
                         return (
@@ -4903,38 +5061,7 @@ export default function App() {
                   
                   <div className="space-y-4">
                     {(() => {
-                      let filtered = posts.filter(post => {
-                        if (selectedStoryId && post.id === selectedStoryId) return true;
-                        if (communityTab === 'following') {
-                          if (!user) return false;
-                          const author = allUsers.find(u => u.uid === post.authorUid);
-                          const isFollowing = author?.followers?.includes(user.uid) || post.authorUid === user.uid;
-                          if (!isFollowing) return false;
-                        } else if (communityTab === 'verified') {
-                          const author = allUsers.find(u => u.uid === post.authorUid);
-                          if (!author?.isVerified) return false;
-                        }
-                        if (activeTag) {
-                          const t = activeTag.toLowerCase();
-                          if (!post.content?.toLowerCase().includes(t)) return false;
-                        }
-                        if (communitySearch.trim()) {
-                          const searchLower = communitySearch.toLowerCase();
-                          const author = allUsers.find(u => u.uid === post.authorUid);
-                          const contentMatch = post.content?.toLowerCase().includes(searchLower);
-                          const authorMatch = author?.displayName?.toLowerCase().includes(searchLower) || author?.thana?.toLowerCase().includes(searchLower) || author?.district?.toLowerCase().includes(searchLower);
-                          if (!contentMatch && !authorMatch) return false;
-                        }
-                        return true;
-                      });
-
-                      if (selectedStoryId) {
-                        filtered = [...filtered].sort((a, b) => {
-                          if (a.id === selectedStoryId) return -1;
-                          if (b.id === selectedStoryId) return 1;
-                          return 0;
-                        });
-                      }
+                      const filtered = filteredPosts;
 
                       if (filtered.length === 0) {
                         return (
@@ -4947,7 +5074,7 @@ export default function App() {
                       }
 
                       return filtered.slice(0, feedLimit).map(post => {
-                        const authorProfile = allUsers.find(u => u.uid === post.authorUid);
+                        const authorProfile = userMap.get(post.authorUid);
                         const isAuthor = user?.uid === post.authorUid;
                         
                         // Parse local dynamic dates elegantly
@@ -6883,6 +7010,22 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   const [userFilterStatus, setUserFilterStatus] = useState<'all' | 'blocked' | 'active'>('all');
   const [seoEditTab, setSeoEditTab] = useState<'about' | 'contact' | 'privacy' | 'terms' | 'faq'>('about');
   const [galleryFilter, setGalleryFilter] = useState<'all' | 'post' | 'profile'>('all');
+
+  // Memoize storage stats to avoid repetitive filters inside JSX render
+  const storageStats = useMemo(() => {
+    const postsWithImg = posts.filter(p => p.imageUrl).length;
+    const usersWithPhoto = users.filter(u => u.photoURL).length;
+    const usedBytesKb = posts.length * 0.5 + users.length * 1.0 + (postsWithImg + usersWithPhoto) * 150;
+    const usedMb = usedBytesKb / 1024;
+    const percent = (usedMb / 1024) * 100;
+    const freeMb = 1024 - usedMb;
+    return {
+      usedMbStr: usedMb.toFixed(2),
+      percentStr: percent.toFixed(4),
+      percentStyle: `${Math.max(1, Math.min(100, percent))}%`,
+      freeMbStr: freeMb.toFixed(2)
+    };
+  }, [posts, users]);
   const [lightboxImage, setLightboxImage] = useState<any | null>(null);
 
   // AI Assistant Panel States
@@ -6995,23 +7138,27 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   }, [posts, users]);
 
   const COLORS = ['#ef4444', '#f87171', '#fb7185', '#fda4af', '#fecdd3', '#fee2e2', '#3b82f6', '#60a5fa'];
-  const stats = {
-    totalUsers: users.length,
-    activeDonors: users.filter(u => u.isAvailable).length,
-    blockedUsers: users.filter(u => u.isBlocked).length,
-    totalRequests: requests.length,
-    pendingRequests: requests.filter(r => r.status === 'Pending').length,
-    fulfilledRequests: requests.filter(r => r.status === 'Fulfilled').length,
-    totalPosts: posts.length,
-    hiddenPosts: posts.filter(p => p.isHidden).length,
-    pendingReports: reports.filter(r => r.status === 'pending').length,
-    totalOrgs: organizations.length,
-    pendingApps: orgApplications.filter(a => a.status === 'pending').length,
-    bloodGroupStats: BLOOD_GROUPS.reduce((acc, bg) => {
-      acc[bg] = users.filter(u => u.bloodGroup === bg).length;
-      return acc;
-    }, {} as Record<string, number>)
-  };
+  
+  // Memoize computing dashboard stats to avoid repeating nested filters during sub-view actions
+  const stats = useMemo(() => {
+    return {
+      totalUsers: users.length,
+      activeDonors: users.filter(u => u.isAvailable).length,
+      blockedUsers: users.filter(u => u.isBlocked).length,
+      totalRequests: requests.length,
+      pendingRequests: requests.filter(r => r.status === 'Pending').length,
+      fulfilledRequests: requests.filter(r => r.status === 'Fulfilled').length,
+      totalPosts: posts.length,
+      hiddenPosts: posts.filter(p => p.isHidden).length,
+      pendingReports: reports.filter(r => r.status === 'pending').length,
+      totalOrgs: organizations.length,
+      pendingApps: orgApplications.filter(a => a.status === 'pending').length,
+      bloodGroupStats: BLOOD_GROUPS.reduce((acc, bg) => {
+        acc[bg] = users.filter(u => u.bloodGroup === bg).length;
+        return acc;
+      }, {} as Record<string, number>)
+    };
+  }, [users, requests, posts, reports, organizations, orgApplications]);
 
   const chartData = useMemo(() => {
     const last14Days = Array.from({ length: 14 }, (_, i) => {
@@ -8565,7 +8712,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                         <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 text-[9px] font-black rounded-md">Spark Free Tier</span>
                       </div>
                       <div className="flex items-baseline gap-1 mt-1.5">
-                        <span className="text-2xl font-black text-slate-900">{((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024).toFixed(2)} MB</span>
+                        <span className="text-2xl font-black text-slate-900">{storageStats.usedMbStr} MB</span>
                         <span className="text-xs text-slate-400">/ 1,024 MB</span>
                       </div>
                     </div>
@@ -8573,12 +8720,12 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                       <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
                         <div 
                           className="bg-rose-500 h-full rounded-full transition-all duration-500"
-                          style={{ width: `${Math.max(1, Math.min(100, (((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024) / 1024) * 100))}%` }}
+                          style={{ width: storageStats.percentStyle }}
                         />
                       </div>
                       <div className="flex justify-between text-[9px] font-medium text-slate-400 mt-2">
-                        <span>{(1024 - (posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024).toFixed(2)} MB Free Space</span>
-                        <span>{(((posts.length * 0.5 + users.length * 1.0 + (posts.filter(p => p.imageUrl).length + users.filter(u => u.photoURL).length) * 150) / 1024) / 1024 * 100).toFixed(4)}% Used</span>
+                        <span>{storageStats.freeMbStr} MB Free Space</span>
+                        <span>{storageStats.percentStr}% Used</span>
                       </div>
                     </div>
                   </div>
@@ -14263,7 +14410,7 @@ interface PostCardProps {
 function PostCard({ post, user, profile, allUsers, onViewProfile, askConfirm, addToast, notifyAdmins }: PostCardProps) {
   const [showComments, setShowComments] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const authorProfile = allUsers.find(u => u.uid === post.authorUid);
+  const authorProfile = useMemo(() => allUsers.find(u => u.uid === post.authorUid), [allUsers, post.authorUid]);
   const handleReaction = async (type: 'likes' | 'dislikes') => {
     if (!user) {
       addToast("Auth Required", "Please login to react to posts.", 'info');
@@ -14704,7 +14851,7 @@ const CommentItem: React.FC<CommentItemProps> = ({ comment, currentUser, postId,
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const authorProfile = allUsers.find(u => u.uid === comment.authorUid);
+  const authorProfile = useMemo(() => allUsers.find(u => u.uid === comment.authorUid), [allUsers, comment.authorUid]);
 
   useEffect(() => {
     const q = query(
