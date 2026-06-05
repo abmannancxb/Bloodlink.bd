@@ -520,6 +520,20 @@ export default function App() {
     };
   }, []);
 
+  const [showRequestsOverlay, setShowRequestsOverlay] = useState<boolean>(() => {
+    try {
+      const pathParam = window.location.pathname.replace(/^\//, '');
+      const segments = pathParam.split('/');
+      const viewKey = segments[0];
+      if (viewKey === 'request' || viewKey === 'requests') {
+        return true;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  });
+
   const [view, setView] = useState<'requests' | 'find' | 'feed' | 'profile' | 'public-profile' | 'notifications' | 'admin' | 'post-opinion' | 'request-form' | 'admin-login' | 'chats' | 'chat-room' | 'organizations' | 'org-dashboard' | 'org-apply' | 'about' | 'contact' | 'privacy' | 'terms' | 'faq' | 'emergency' | 'hospitals'>(() => {
     try {
       const pathParam = window.location.pathname.replace(/^\//, '');
@@ -633,6 +647,9 @@ export default function App() {
 
         if (validViews.includes(mappedView) || validViews.includes(viewKey)) {
           setView(mappedView as any);
+          if (mappedView === 'requests') {
+            setShowRequestsOverlay(viewKey === 'request' || viewKey === 'requests');
+          }
           if (mappedView === 'public-profile' && uidParam) {
             setSelectedUserId(uidParam);
           }
@@ -654,7 +671,7 @@ export default function App() {
 
   useEffect(() => {
     if (view) {
-      let urlKey = view === 'feed' ? 'community' : view === 'requests' ? 'request' : view;
+      let urlKey = view === 'feed' ? 'community' : view === 'requests' ? (showRequestsOverlay ? 'request' : 'home') : view;
       let pathName = `/${urlKey}`;
       let searchStr = '';
       let pageTitle = 'BloodLink Bangladesh | AI Blood Donation Platform';
@@ -726,7 +743,7 @@ export default function App() {
         window.history.replaceState(null, '', cleanUrl);
       }
     }
-  }, [view, selectedUserId, selectedOrgId, selectedStoryId, posts, allUsers, organizations]);
+  }, [view, showRequestsOverlay, selectedUserId, selectedOrgId, selectedStoryId, posts, allUsers, organizations]);
 
   useEffect(() => {
     const ephemeral = ['admin-login', 'chat-room', 'post-opinion', 'request-form', 'org-apply', 'public-profile', 'org-dashboard'];
@@ -736,7 +753,6 @@ export default function App() {
   }, [view]);
   const [showNotificationConsent, setShowNotificationConsent] = useState(false);
   const [showLocationConsent, setShowLocationConsent] = useState(false);
-  const [showRequestsOverlay, setShowRequestsOverlay] = useState(false);
   const [mapOverviewOpen, setMapOverviewOpen] = useState(false);
   const [isFloatingWidgetClosed, setIsFloatingWidgetClosed] = useState(false);
   const [showMiddleMenu, setShowMiddleMenu] = useState(false);
