@@ -69,7 +69,8 @@ import {
   ConfirmConfig,
   DonationRecord,
   SystemSettings,
-  OrganizationMember
+  OrganizationMember,
+  getDonorId
 } from './types';
 export type { 
   UserProfile, 
@@ -645,7 +646,16 @@ export default function App() {
           mappedView = 'requests';
         }
 
-        if (validViews.includes(mappedView) || validViews.includes(viewKey)) {
+        const isValid = validViews.includes(mappedView) || validViews.includes(viewKey);
+        if (!isValid) {
+          const matchingUser = allUsers.find(u => u.username?.toLowerCase() === viewKey.toLowerCase());
+          if (matchingUser) {
+            mappedView = 'public-profile';
+            uidParam = matchingUser.uid;
+          }
+        }
+
+        if (validViews.includes(mappedView) || mappedView === 'public-profile') {
           setView(mappedView as any);
           if (mappedView === 'requests') {
             setShowRequestsOverlay(viewKey === 'request' || viewKey === 'requests');
@@ -667,7 +677,7 @@ export default function App() {
       window.removeEventListener('hashchange', handleUrlChange);
       window.removeEventListener('popstate', handleUrlChange);
     };
-  }, []);
+  }, [allUsers]);
 
   useEffect(() => {
     if (view) {
@@ -698,8 +708,14 @@ export default function App() {
         pageTitle = 'Search Voluntary Blood Donors in Bangladesh | Dhaka, CTG, Sylhet';
         pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
       } else if (view === 'public-profile' && selectedUserId) {
-        searchStr = `?uid=${selectedUserId}`;
         const targetUser = allUsers.find(u => u.uid === selectedUserId);
+        if (targetUser && targetUser.username) {
+          pathName = `/${targetUser.username.toLowerCase()}`;
+          searchStr = '';
+        } else {
+          pathName = '/public-profile';
+          searchStr = `?uid=${selectedUserId}`;
+        }
         if (targetUser) {
           pageTitle = `Voluntary Blood Donor: ${targetUser.displayName} (${targetUser.bloodGroup}) | BloodLink BD`;
           pageDesc = `View the active blood donor profile of ${targetUser.displayName} in ${targetUser.district}, ${targetUser.thana}. Contact directly for blood need matching ${targetUser.bloodGroup}.`;
@@ -13272,7 +13288,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
     isBlocked: initialProfile?.isBlocked || false,
     organizationId: initialProfile?.organizationId,
     organizationName: initialProfile?.organizationName,
-    coverURL: initialProfile?.coverURL || ''
+    coverURL: initialProfile?.coverURL || '',
+    username: initialProfile?.username || ''
   });
 
   useEffect(() => {
@@ -13290,7 +13307,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
         nextDonationEligibility: initialProfile.nextDonationEligibility || prev.nextDonationEligibility,
         isAvailable: initialProfile.isAvailable ?? prev.isAvailable,
         organizationId: initialProfile.organizationId,
-        organizationName: initialProfile.organizationName
+        organizationName: initialProfile.organizationName,
+        username: initialProfile.username || prev.username
       }));
     }
   }, [initialProfile]);
@@ -13370,6 +13388,15 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
       console.warn("Profile validation failed", { bloodGroup: formData.bloodGroup, district: formData.district, thana: formData.thana });
       addToast("Missing Information", "Please select your Blood Group, District, and Thana.", 'warning');
       return;
+    }
+
+    if (formData.username) {
+      const cleanUsername = formData.username.trim().toLowerCase();
+      const isTaken = allUsers.some(u => u.username?.toLowerCase() === cleanUsername && u.uid !== user.uid);
+      if (isTaken) {
+        addToast("Username Taken", "This handle is already registered by another user. Please choose a different unique username.", "warning");
+        return;
+      }
     }
 
     setSaving(true);
@@ -13684,6 +13711,42 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                       className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all"
                     />
                   </div>
+                </div>
+
+                {/* Username Custom Handle Field */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+                    <span>Unique Handle (Public Website Username)</span>
+                    <span className="text-[8px] font-extrabold text-[#ff2247] bg-rose-50 border border-rose-100 px-2.5 py-0.5 rounded-full uppercase tracking-widest leading-none">Custom link</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <span className="text-xs font-black text-slate-400 font-mono">bloodlink.bd/</span>
+                    </div>
+                    <input 
+                      type="text"
+                      placeholder="e.g. mannan"
+                      value={formData.username || ''}
+                      onChange={(e) => {
+                        const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+                        setFormData({ ...formData, username: cleanVal });
+                      }}
+                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-[#ff2247] focus:bg-white rounded-2xl pl-24 pr-4 py-3 text-xs font-black text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-slate-350 font-mono"
+                    />
+                  </div>
+                  {formData.username && (
+                    <div className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
+                      {allUsers.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase() && u.uid !== user.uid) ? (
+                        <span className="text-red-600">
+                          ✖ Handle is currently claimed by another active donor. Choice is invalid.
+                        </span>
+                      ) : (
+                        <span className="text-emerald-600 animate-pulse">
+                          ✔ Handle is completely available! Your direct profile url: <strong>bloodlink.bd/{formData.username}</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Gender Switch */}
@@ -16713,7 +16776,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
             <QrCode className="w-9 h-9 text-slate-900 stroke-[1.8]" />
             <span className="text-[6.5px] text-slate-400 font-black tracking-widest mt-1 uppercase text-center">Donor ID</span>
             <span className="text-[8px] text-slate-900 font-black tracking-tighter mt-0.5 uppercase">
-              BLD{profile.uid.substring(0, 5).toUpperCase()}
+              {getDonorId(profile, allUsers)}
             </span>
           </div>
         </div>
@@ -17121,6 +17184,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         onClose={() => setShowCardModal(false)}
         profile={profile}
         addToast={addToast}
+        allUsers={allUsers}
       />
     </motion.div>
   );

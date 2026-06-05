@@ -1,28 +1,17 @@
 import React, { useRef, useEffect, useState } from "react";
 import { X, Download, Share2, Copy, Check, QrCode } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-
-interface UserProfile {
-  uid: string;
-  displayName: string;
-  email: string | null;
-  phone: string | null;
-  bloodGroup: string | null;
-  thana: string | null;
-  district: string | null;
-  photoURL: string | null;
-  isVerified?: boolean;
-  lastDonationDate?: any;
-}
+import { UserProfile, getDonorId } from "../types";
 
 interface DonorCardModalProps {
   isOpen: boolean;
   onClose: () => void;
   profile: UserProfile;
   addToast: (title: string, body: string, type: "success" | "error" | "info") => void;
+  allUsers?: UserProfile[];
 }
 
-export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCardModalProps) {
+export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = [] }: DonorCardModalProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -33,8 +22,8 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
   const formatDisplayDate = (val: any) => {
     if (!val) return "2026-06-02";
     if (typeof val === "string") return val;
-    if (val.seconds) {
-      const d = new Date(val.seconds * 1000);
+    if (val && typeof val === "object" && 'seconds' in val) {
+      const d = new Date((val as any).seconds * 1000);
       return d.toISOString().split("T")[0];
     }
     if (val instanceof Date) {
@@ -43,7 +32,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
     return String(val);
   };
 
-  const donorId = `BLD${profile.uid.substring(0, 8).toUpperCase()}`;
+  const donorId = getDonorId(profile, allUsers);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -147,71 +136,45 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
       ctx.lineWidth = 1;
       ctx.stroke();
 
-      // Draw stylized high-end vector QR grid matrix
-      const matrixX = qrBoxX + 25;
-      const matrixY = qrBoxY + 25;
-      const matrixSize = 140;
+      // Draw stylized dynamic vertical barcode lines instead of QR matrix
+      const barcodeX = qrBoxX + 20;
+      const barcodeY = qrBoxY + 20;
+      const barcodeW = qrBoxW - 40;
+      const barcodeH = 120;
 
-      ctx.fillStyle = "#0F172A"; // Slate-900
+      ctx.fillStyle = "#0F172A"; // Slate-900 for barcodes
 
-      // Draw Top-Left QR Anchor Square
-      ctx.fillRect(matrixX, matrixY, 35, 35);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(matrixX + 5, matrixY + 5, 25, 25);
-      ctx.fillStyle = "#0F172A";
-      ctx.fillRect(matrixX + 10, matrixY + 10, 15, 15);
-
-      // Draw Top-Right QR Anchor Square
-      ctx.fillRect(matrixX + matrixSize - 35, matrixY, 35, 35);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(matrixX + matrixSize - 30, matrixY + 5, 25, 25);
-      ctx.fillStyle = "#0F172A";
-      ctx.fillRect(matrixX + matrixSize - 25, matrixY + 10, 15, 15);
-
-      // Draw Bottom-Left QR Anchor Square
-      ctx.fillRect(matrixX, matrixY + matrixSize - 35, 35, 35);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(matrixX + 5, matrixY + matrixSize - 30, 25, 25);
-      ctx.fillStyle = "#0F172A";
-      ctx.fillRect(matrixX + 10, matrixY + matrixSize - 25, 15, 15);
-
-      // Draw Bottom-Right alignment target
-      ctx.fillRect(matrixX + matrixSize - 25, matrixY + matrixSize - 25, 15, 15);
-      ctx.fillStyle = "#FFFFFF";
-      ctx.fillRect(matrixX + matrixSize - 21, matrixY + matrixSize - 21, 7, 7);
-      ctx.fillStyle = "#0F172A";
-      ctx.fillRect(matrixX + matrixSize - 18, matrixY + matrixSize - 18, 3, 3);
-
-      // Fill in some random aesthetic QR pixels to look incredibly lifelike
-      srand(profile.uid); // seed RNG to make it static per user
-      const cellSize = 6;
-      for (let row = 0; row < matrixSize; row += cellSize) {
-        for (let col = 0; col < matrixSize; col += cellSize) {
-          // Avoid corner anchor regions
-          const isTopLeft = row < 40 && col < 40;
-          const isTopRight = row < 40 && col > matrixSize - 40;
-          const isBottomLeft = row > matrixSize - 40 && col < 40;
-          const isBottomRight = row > matrixSize - 30 && col > matrixSize - 30;
-
-          if (!isTopLeft && !isTopRight && !isBottomLeft && !isBottomRight) {
-            if (random() > 0.45) {
-              ctx.fillRect(matrixX + col, matrixY + row, cellSize - 1, cellSize - 1);
-            }
-          }
-        }
+      // Seed the generator statically with profile.uid
+      srand(profile.uid);
+      
+      let currX = barcodeX;
+      while (currX < barcodeX + barcodeW) {
+        const thickness = Math.floor(random() * 4) + 1; // line width 1 to 4
+        const space = Math.floor(random() * 5) + 2; // spacing 2 to 6
+        
+        ctx.fillRect(currX, barcodeY, thickness, barcodeH);
+        currX += thickness + space;
       }
 
-      // Text inside White QR box
+      // Text inside White Barcode Box
       ctx.fillStyle = "#64748B"; // slate-500
-      ctx.font = "900 10px 'Space Grotesk', sans-serif";
+      ctx.font = "900 9px 'Space Grotesk', sans-serif";
       ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
-      ctx.fillText("DONOR ID", qrBoxX + qrBoxW / 2, qrBoxY + qrBoxH - 45);
+      ctx.fillText("DONOR LINK", qrBoxX + qrBoxW / 2, qrBoxY + 165);
       if ("letterSpacing" in ctx) ctx.letterSpacing = "normal";
 
       ctx.fillStyle = "#0F172A"; // slate-900
-      ctx.font = "900 15px 'Courier New', monospace";
-      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + qrBoxH - 24);
+      ctx.font = "900 13px 'Courier New', monospace";
+      const domainLink = profile.username 
+        ? `bloodlink.bd/${profile.username.toLowerCase()}`
+        : `bloodlink.bd/BDNR-${String(allUsers.findIndex(u => u.uid === profile.uid) !== -1 ? allUsers.findIndex(u => u.uid === profile.uid) + 1 : '01').padStart(2, '0')}`;
+      ctx.fillText(domainLink, qrBoxX + qrBoxW / 2, qrBoxY + 185);
+
+      ctx.fillStyle = "#E11D48"; // rose-600 format
+      ctx.font = "bold 9px 'Space Grotesk', sans-serif";
+      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + 215);
 
       // 6. Draw Left Column Text & Details
       const labelX = 320;
@@ -220,6 +183,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
       ctx.fillStyle = "#FFFFFF";
       ctx.font = "900 38px 'Space Grotesk', 'Inter', sans-serif";
       ctx.textAlign = "left";
+      ctx.textBaseline = "top";
       ctx.fillText(profile.displayName, labelX, 150);
 
       // Verified check circle if eligible
@@ -263,7 +227,8 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
       ctx.fillStyle = "#E11D48"; // rose-600
       ctx.font = "900 13px 'Space Grotesk', sans-serif";
       ctx.textAlign = "left";
-      ctx.fillText(`${profile.bloodGroup || "O+"} Positive`, bgPillX + 28, bgPillY + 22);
+      ctx.textBaseline = "middle"; // PERFECT ALIGNMENT
+      ctx.fillText(`${profile.bloodGroup || "O+"} Positive`, bgPillX + 28, bgPillY + 17);
 
       // Badge 2 (Verified Rank Badge): White pill with green verified
       const rankPillX = labelX + 175;
@@ -289,7 +254,9 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
 
       ctx.fillStyle = "#059669"; // emerald-600 font
       ctx.font = "900 13px 'Space Grotesk', sans-serif";
-      ctx.fillText("Verified Donor", rankPillX + 32, bgPillY + 22);
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle"; // PERFECT ALIGNMENT
+      ctx.fillText("Verified Donor", rankPillX + 32, bgPillY + 17);
 
       // 7. Last Donation, Location, and Availability Rows
       ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
@@ -441,7 +408,9 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast }: DonorCard
 
   // Safe copy links to clipboard
   const handleCopyLink = () => {
-    const shareUrl = `${window.location.origin}?profile=${profile.uid}`;
+    const shareUrl = profile.username 
+      ? `${window.location.origin}/${profile.username.toLowerCase()}` 
+      : `${window.location.origin}?profile=${profile.uid}`;
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
       addToast("Card Link Copied!", "Shareable profile registry link copied to your clipboard.", "success");
