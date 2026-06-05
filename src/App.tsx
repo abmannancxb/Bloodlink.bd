@@ -188,7 +188,9 @@ import {
   Activity,
   AlertTriangle,
   Bot,
-  QrCode
+  QrCode,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -390,6 +392,18 @@ export default function App() {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setIsMapExpanded(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const activeChatRef = useRef<Chat | null>(null);
   const profileScrollRef = useRef<HTMLDivElement | null>(null);
   const profileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -532,7 +546,7 @@ export default function App() {
       const validViews = [
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
-        'community', 'explore', 'nearby', 'home', 'about', 'contact', 'privacy',
+        'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
         'terms', 'faq', 'story'
       ];
 
@@ -540,7 +554,7 @@ export default function App() {
         let mappedView = viewKey;
         if (viewKey === 'community' || viewKey === 'story') {
           mappedView = 'feed';
-        } else if (viewKey === 'home' || viewKey === 'explore' || viewKey === 'nearby') {
+        } else if (viewKey === 'home' || viewKey === 'request' || viewKey === 'requests' || viewKey === 'explore' || viewKey === 'nearby') {
           mappedView = 'requests';
         }
 
@@ -605,7 +619,7 @@ export default function App() {
       const validViews = [
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
-        'community', 'explore', 'nearby', 'home', 'about', 'contact', 'privacy',
+        'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
         'terms', 'faq', 'story'
       ];
       
@@ -613,7 +627,7 @@ export default function App() {
         let mappedView = viewKey;
         if (viewKey === 'community' || viewKey === 'story') {
           mappedView = 'feed';
-        } else if (viewKey === 'home' || viewKey === 'explore' || viewKey === 'nearby') {
+        } else if (viewKey === 'home' || viewKey === 'request' || viewKey === 'requests' || viewKey === 'explore' || viewKey === 'nearby') {
           mappedView = 'requests';
         }
 
@@ -640,7 +654,7 @@ export default function App() {
 
   useEffect(() => {
     if (view) {
-      let urlKey = view === 'feed' ? 'community' : view === 'requests' ? 'home' : view;
+      let urlKey = view === 'feed' ? 'community' : view === 'requests' ? 'request' : view;
       let pathName = `/${urlKey}`;
       let searchStr = '';
       let pageTitle = 'BloodLink Bangladesh | AI Blood Donation Platform';
@@ -3892,7 +3906,9 @@ export default function App() {
                       </div>
 
                       {/* Actual Interactive Google Map Frame with controlled height */}
-                      <div className="h-[390px] w-full rounded-[26px] overflow-hidden relative z-10 border border-slate-100">
+                      <div className={isMapExpanded 
+                        ? "fixed inset-0 w-screen h-screen z-[99999] bg-white border-none rounded-none overflow-hidden" 
+                        : "h-[390px] w-full rounded-[26px] overflow-hidden relative z-10 border border-slate-100"}>
                         <MapView 
                           requests={requests.filter(r => !filterBloodGroup || r.bloodGroup === filterBloodGroup)} 
                           donors={activeDonors.filter(d => !filterBloodGroup || d.bloodGroup === filterBloodGroup)} 
@@ -3912,6 +3928,38 @@ export default function App() {
                           mapResetKey={mapResetKey}
                           onOverviewChange={setMapOverviewOpen}
                         />
+
+                        {/* Corner buttons: Full screen toggle (Maximize/Minimize) top-left inside viewport */}
+                        <div className="absolute top-4 left-4 z-40 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsMapExpanded(prev => !prev);
+                              addToast(
+                                !isMapExpanded ? "Full View Map Active" : "Exit Full View Map",
+                                !isMapExpanded ? "Map expanded to full screen mode for overall geographic view." : "Restored map dashboard space.",
+                                "success"
+                              );
+                            }}
+                            className="w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200/80 shadow-lg rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 group font-black cursor-pointer"
+                            title={isMapExpanded ? "Minimize Map View" : "Maximize Map View"}
+                          >
+                            {isMapExpanded ? (
+                              <Minimize2 className="w-5.5 h-5.5 text-slate-700 group-hover:scale-110 transition-all duration-200" />
+                            ) : (
+                              <Maximize2 className="w-5.5 h-5.5 text-red-650 group-hover:scale-110 transition-all duration-200" />
+                            )}
+                          </button>
+
+                          {/* Full View Header Overlay Banner */}
+                          {isMapExpanded && (
+                            <div className="bg-white/95 backdrop-blur-md rounded-2xl py-2 px-4 shadow-lg border border-slate-200/60 flex items-center gap-2 animate-fade-in shrink-0">
+                              <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+                              <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Emergency Lifesavers Map (Full View)</span>
+                              <span className="text-[8px] text-slate-400 font-extrabold select-none pl-2 border-l border-slate-200 hidden sm:inline">Esc to restore</span>
+                            </div>
+                          )}
+                        </div>
 
                         {/* Floating compass crosshair target button on bottom left inside map viewport */}
                         <div className="absolute bottom-4 left-4 z-40">
