@@ -50,6 +50,7 @@ import { auth, db, messaging } from './firebase';
 export { auth, db, messaging };
 import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
 import AIBloodAssistant from './components/AIBloodAssistant';
+import { DonorCardModal } from './components/DonorCardModal';
 
 import { 
   OperationType,
@@ -2616,46 +2617,207 @@ export default function App() {
   if (loading || loadProgress < 100) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 relative overflow-hidden">
-        {/* Background Accents */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-red-100/30 rounded-full blur-3xl -mr-32 -mt-32" />
-        <div className="absolute bottom-0 left-0 w-64 h-64 bg-slate-200/30 rounded-full blur-3xl -ml-32 -mb-32" />
+        {/* Style block for highly specific, premium animation effects */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes emptyLiquid {
+            0% {
+              transform: translateY(-5px);
+            }
+            80% {
+              transform: translateY(115px);
+            }
+            90% {
+              transform: translateY(135px);
+            }
+            100% {
+              transform: translateY(-5px);
+            }
+          }
+          @keyframes dripBlood {
+            0% {
+              transform: translateY(0) scale(0);
+              opacity: 0;
+            }
+            15% {
+              transform: translateY(0) scale(1);
+              opacity: 1;
+            }
+            85% {
+              transform: translateY(75px) scale(0.9);
+              opacity: 1;
+            }
+            100% {
+              transform: translateY(85px) scale(0.2);
+              opacity: 0;
+            }
+          }
+          @keyframes waveMotion {
+            0% {
+              transform: translateX(0);
+            }
+            50% {
+              transform: translateX(-15px);
+            }
+            100% {
+              transform: translateX(0);
+            }
+          }
+          @keyframes floatBag {
+            0%, 100% {
+              transform: translateY(0) rotate(0deg);
+            }
+            50% {
+              transform: translateY(-5px) rotate(1deg);
+            }
+          }
+          @keyframes pulseLabel {
+            0%, 100% {
+              opacity: 0.6;
+            }
+            50% {
+              opacity: 1;
+            }
+          }
+        `}} />
+
+        {/* Ambient background glows for gorgeous aesthetic */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-red-100/35 rounded-full blur-3xl -mr-36 -mt-36" />
+        <div className="absolute bottom-0 left-0 w-80 h-80 bg-rose-100/35 rounded-full blur-3xl -ml-36 -mb-36" />
         
         <motion.div 
-          initial={{ scale: 0.8, opacity: 0 }}
+          initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="flex flex-col items-center gap-8 relative z-10"
+          transition={{ duration: 0.5 }}
+          className="flex flex-col items-center gap-6 relative z-10 w-full max-w-xs"
         >
-          <div className="relative">
-            <motion.div
-              animate={{ 
-                scale: [1, 1.08, 1],
-              }}
-              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-              className="relative z-10"
-            >
-              <Droplets className="w-20 h-20 text-red-600 drop-shadow-xl" />
-            </motion.div>
-            <motion.div
-              animate={{ scale: [1, 1.4, 1], opacity: [0.15, 0, 0.15] }}
-              transition={{ repeat: Infinity, duration: 2 }}
-              className="absolute inset-0 bg-red-100 rounded-full filter blur-xl -z-10"
-            />
+          {/* Animated 3D-feel Blood Bag Representation */}
+          <div className="relative flex items-center justify-center" style={{ animation: 'floatBag 4.5s ease-in-out infinite' }}>
+            <svg viewBox="0 0 160 220" className="w-36 h-48 drop-shadow-2xl relative select-none">
+              <defs>
+                {/* Inner fluid clipper */}
+                <clipPath id="blood-bag-inner">
+                  <path d="M 46,24 h 68 c 12,0 20,8 20,20 v 108 c 0,14 -10,24 -24,24 h -60 c -14,0 -24,-10 -24,-24 v -108 c 0,-12 8,-20 20,-20 z" />
+                </clipPath>
+                
+                {/* Rich red fluid gradient representing arterial blood */}
+                <linearGradient id="blood-grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#ef4444" />
+                  <stop offset="40%" stopColor="#dc2626" />
+                  <stop offset="100%" stopColor="#991b1b" />
+                </linearGradient>
+
+                {/* Translucent white gloss overlay */}
+                <linearGradient id="gloss-grad" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stopColor="rgba(255,255,255,0.45)" stopOpacity="0.8" />
+                  <stop offset="30%" stopColor="rgba(255,255,255,0.15)" stopOpacity="0.3" />
+                  <stop offset="100%" stopColor="rgba(255,255,255,0)" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+
+              {/* Outer transparent protective blood bag casing */}
+              <path 
+                d="M 42,20 h 76 c 15,0 24,9 24,24 v 114 c 0,18 -12,28 -28,28 h -68 c -16,0 -28,-10 -28,-28 v -114 c 0,-15 9,-24 24,-24 z" 
+                fill="rgba(255, 255, 255, 0.65)" 
+                stroke="#cbd5e1" 
+                strokeWidth="2.5" 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+              />
+
+              {/* Hanger slot top rim reinforcement */}
+              <rect x="62" y="8" width="36" height="4" rx="2" fill="#94a3b8" opacity="0.4" />
+              <circle cx="80" cy="12" r="4.5" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1.5" />
+
+              {/* Embedded Fluid volume ML marking ticks (printed scale on plastic) */}
+              <g opacity="0.4" stroke="#475569" strokeWidth="1.2" strokeLinecap="round">
+                <line x1="32" y1="45" x2="40" y2="45" />
+                <line x1="32" y1="70" x2="40" y2="70" />
+                <line x1="32" y1="95" x2="40" y2="95" />
+                <line x1="32" y1="120" x2="40" y2="120" />
+                <line x1="32" y1="145" x2="40" y2="145" />
+              </g>
+              <g opacity="0.45" fill="#475569" fontSize="6.5" fontWeight="900" fontFamily="sans-serif">
+                <text x="44" y="48">500ml</text>
+                <text x="44" y="73">400ml</text>
+                <text x="44" y="98">300ml</text>
+                <text x="44" y="123">200ml</text>
+                <text x="44" y="148">100ml</text>
+              </g>
+
+              {/* Inside Liquid Area with clipping boundaries */}
+              <g clipPath="url(#blood-bag-inner)">
+                {/* Animating Blood Liquid block */}
+                <g style={{ animation: 'emptyLiquid 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
+                  {/* Wave shape on top of the liquid block */}
+                  <path 
+                    d="M -20,24 q 12,-4 25,0 t 25,0 t 25,0 t 25,0 t 25,0 t 25,0 t 25,0 v 170 h -200 z" 
+                    fill="url(#blood-grad)" 
+                    style={{ animation: 'waveMotion 1.8s linear infinite' }}
+                  />
+                </g>
+              </g>
+
+              {/* Outer gloss highlight line for the plastic bag to feel 3D */}
+              <path 
+                d="M 45,23 h 70 c 12,0 20,8 20,20 v 110" 
+                fill="none" 
+                stroke="url(#gloss-grad)" 
+                strokeWidth="3.5" 
+                strokeLinecap="round" 
+                opacity="0.8"
+              />
+
+              {/* Bottom Ports where tubes connect */}
+              {/* Left port */}
+              <rect x="58" y="185" width="12" height="12" rx="2" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1" />
+              <line x1="64" y1="197" x2="64" y2="204" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
+
+              {/* Right active extraction port */}
+              <rect x="90" y="185" width="12" height="14" rx="2" fill="#ef4444" stroke="#dc2626" strokeWidth="1.5" />
+              <path d="M 96,197 v 8" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
+
+              {/* Pulsing red core light in port showing active flow */}
+              <circle cx="96" cy="191" r="2" fill="#ffffff" opacity="0.8" />
+
+              {/* Dynamic Drip coming out from under the active port right at 205px */}
+              <g style={{ animation: 'dripBlood 1.4s linear infinite' }}>
+                <path 
+                  d="M 96,206 c -2.5,0 -4.5,2.5 -4.5,5 0,3 2,5 4.5,5 s 4.5,-2 4.5,-5 c 0,-2.5 -2,-5 -4.5,-5 z" 
+                  fill="#dc2626" 
+                />
+              </g>
+            </svg>
+
+            {/* Pulsing ambient glow */}
+            <div className="absolute inset-0 bg-red-500/5 rounded-full filter blur-2xl -z-10" />
           </div>
 
-          <div className="flex flex-col items-center gap-5 text-center">
+          {/* Redesigned Text & Typography Container */}
+          <div className="flex flex-col items-center gap-4 text-center">
             <div className="space-y-1">
-              <h1 className="text-3xl font-black tracking-tighter">
+              <h1 className="text-3xl font-black tracking-tighter select-none">
                 <span className="text-red-600">Blood</span>
                 <span className="text-slate-900">Link</span>
               </h1>
-              <p className="text-red-100 text-[10px] font-black uppercase tracking-[0.3em] leading-none mb-1.5" style={{ color: '#dc2626' }}>Bangladesh</p>
-              <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest">Saving Lives Together</p>
+              <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] leading-none mb-1">Bangladesh</p>
+              <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest select-none">Saving Lives Together</p>
             </div>
 
-            {/* Elegant Circular Spinning Track (Professional Loader) */}
-            <div className="flex justify-center items-center mt-3 relative w-12 h-12">
-              <div className="absolute inset-0 rounded-full border-4 border-red-100/50"></div>
-              <div className="absolute inset-0 rounded-full border-4 border-red-600 border-t-transparent animate-spin"></div>
+            {/* Custom Interactive Progress Bar & Status Text */}
+            <div className="flex flex-col items-center gap-2 mt-2 w-48">
+              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden p-0.5">
+                <motion.div 
+                  initial={{ width: "0%" }}
+                  animate={{ width: `${loadProgress}%` }}
+                  transition={{ ease: "easeOut" }}
+                  className="h-full bg-red-600 rounded-full"
+                />
+              </div>
+
+              <div className="flex justify-between items-center w-full px-0.5 mt-0.5 text-[10px] font-black select-none">
+                <span className="text-slate-500 lowercase tracking-tight animate-pulse" style={{ animation: 'pulseLabel 1.8s infinite' }}>সংযুক্ত করা হচ্ছে...</span>
+                <span className="text-slate-800 font-extrabold">{Math.round(loadProgress)}%</span>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -7616,12 +7778,14 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   const [lightboxImage, setLightboxImage] = useState<any | null>(null);
 
   // AI Assistant Panel States
-  const [aiEnginePrefValue, setAiEnginePrefValue] = useState<'both_gemini' | 'both_groq' | 'gemini' | 'groq'>('both_gemini');
+  const [aiEnginePrefValue, setAiEnginePrefValue] = useState<'both_gemini' | 'both_groq' | 'gemini' | 'groq' | 'openai'>('openai');
   const [geminiApiKeyVal, setGeminiApiKeyVal] = useState('');
   const [groqApiKeyVal, setGroqApiKeyVal] = useState('');
+  const [openaiApiKeyVal, setOpenaiApiKeyVal] = useState('');
   const [aiLimitValue, setAiLimitValue] = useState(500);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
   const [savingAiSettings, setSavingAiSettings] = useState(false);
 
   // Test Sandbox state
@@ -7632,9 +7796,10 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   // Sync with Firestore settings prop
   useEffect(() => {
     if (settings) {
-      setAiEnginePrefValue(settings.aiEnginePreference || 'both_gemini');
+      setAiEnginePrefValue(settings.aiEnginePreference || 'openai');
       setGeminiApiKeyVal(settings.geminiApiKeyOverride || '');
       setGroqApiKeyVal(settings.groqApiKeyOverride || '');
+      setOpenaiApiKeyVal(settings.openaiApiKeyOverride || '');
       setAiLimitValue(settings.aiDailyLimit || 500);
     }
   }, [settings]);
@@ -8951,6 +9116,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                       onChange={(e) => setAiEnginePrefValue(e.target.value as any)}
                       className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
                     >
+                      <option value="openai">OpenAI Priority: Use OpenAI GPT-4o-Mini & OpenAI Voicemodel (এআই চ্যাট ও ভয়েস)</option>
                       <option value="both_gemini">Auto-priority: Use Gemini-3.5-Flash primarily (fallback to Groq)</option>
                       <option value="both_groq">Auto-priority: Use Groq Llama-3.3 primarily (fallback to Gemini)</option>
                       <option value="gemini">Strict Mode: Gemini-3.5-Flash ONLY (Disabled Groq)</option>
@@ -8966,7 +9132,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                       value={aiLimitValue}
                       onChange={(e) => setAiLimitValue(parseInt(e.target.value) || 0)}
                       placeholder="e.g. 500"
-                      className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                      className="w-full bg-white border border-slate-200 rounded-2xl px-4 py-3 text-xs font-bold text-slate-950 focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
                     />
                     <p className="text-[9px] text-slate-400 mt-1 px-1">The system will yield to instructions fallback once count is reached for the calendar date.</p>
                   </div>
@@ -8974,6 +9140,30 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
 
                 {/* Secret Key Overrides */}
                 <div className="bg-slate-50/50 p-5 rounded-2xl border border-slate-100 space-y-4">
+                  {/* OpenAI Key */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-[10px] font-black uppercase text-slate-500 tracking-widest px-1">openai api key (ওপেন এআই কি)</label>
+                      <span className="text-[9px] text-slate-400 font-semibold uppercase tracking-wider">Optionally Custom</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showOpenaiKey ? 'text' : 'password'}
+                        value={openaiApiKeyVal}
+                        onChange={(e) => setOpenaiApiKeyVal(e.target.value)}
+                        placeholder="Using system OPENAI_API_KEY if left blank"
+                        className="w-full bg-white border border-slate-200 rounded-2xl pl-4 pr-12 py-3 text-xs font-semibold text-slate-900 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 transition-all outline-none font-mono"
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => setShowOpenaiKey(!showOpenaiKey)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 outline-none"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Gemini Key */}
                   <div>
                     <div className="flex justify-between items-center mb-1.5">
@@ -9034,6 +9224,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                           aiEnginePreference: aiEnginePrefValue,
                           geminiApiKeyOverride: geminiApiKeyVal.trim(),
                           groqApiKeyOverride: groqApiKeyVal.trim(),
+                          openaiApiKeyOverride: openaiApiKeyVal.trim(),
                           aiDailyLimit: aiLimitValue,
                           updatedAt: serverTimestamp(),
                           updatedBy: adminUser?.uid
@@ -16229,6 +16420,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
   const [showAllDonations, setShowAllDonations] = useState(false);
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
 
   useEffect(() => {
     let unsubscribeProfile: () => void;
@@ -16329,23 +16521,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
   const impactScore = donationCount * 120 + (profile.followers?.length || 0) * 15 + userRequests.length * 10;
 
   const handleShareProfile = async () => {
-    const shareUrl = `${window.location.origin}?profile=${profile.uid}`;
-    const shareData = {
-      title: `${profile.displayName} | Blood Volunteer Profile`,
-      text: `Let's support ${profile.displayName} (${profile.bloodGroup}), a voluntary lifesaving blood donor of ${profile.thana}, ${profile.district}.`,
-      url: shareUrl
-    };
-
-    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
-      try {
-        await navigator.share(shareData);
-        addToast("Profile Shared", "Shared successfully!", "success");
-      } catch (err) {
-        copyToClipboard(shareUrl);
-      }
-    } else {
-      copyToClipboard(shareUrl);
-    }
+    setShowCardModal(true);
   };
 
   const copyToClipboard = (url: string) => {
@@ -16855,6 +17031,13 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
           </a>
         </div>
       </div>
+
+      <DonorCardModal
+        isOpen={showCardModal}
+        onClose={() => setShowCardModal(false)}
+        profile={profile}
+        addToast={addToast}
+      />
     </motion.div>
   );
 }

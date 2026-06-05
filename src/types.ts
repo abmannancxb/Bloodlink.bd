@@ -80,9 +80,10 @@ export interface SystemSettings {
   seoTerms?: string;
   seoFaq?: string;
   // AI Assistant configuration
-  aiEnginePreference?: 'both_gemini' | 'both_groq' | 'gemini' | 'groq';
+  aiEnginePreference?: 'both_gemini' | 'both_groq' | 'gemini' | 'groq' | 'openai';
   geminiApiKeyOverride?: string;
   groqApiKeyOverride?: string;
+  openaiApiKeyOverride?: string;
   aiDailyLimit?: number;
   aiTodayUsageCount?: number;
   aiTodayResetDate?: string;

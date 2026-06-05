@@ -7,6 +7,7 @@ import firebaseConfig from "./firebase-applet-config.json" with { type: "json" }
 import { GoogleGenAI, Type } from "@google/genai";
 import { BANGLADESH_LOCATIONS } from "./src/constants";
 import Groq from "groq-sdk";
+import OpenAI from "openai";
 
 // Initialize firebase-admin safely
 try {
@@ -138,9 +139,10 @@ async function getSitemapXml(): Promise<string> {
 
 // Safe server-side memory state for AI assistant settings and limits fallback (useful when Firestore write/read permissions are restricted)
 const inMemoryAiSettings = {
-  aiEnginePreference: "both_gemini",
+  aiEnginePreference: "openai",
   geminiApiKeyOverride: "",
-  groqApiKeyOverride: "",
+  groqApiKeyOverride: "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",
+  openaiApiKeyOverride: "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",
   aiDailyLimit: 500,
   aiTodayUsageCount: 0,
   aiTodayResetDate: new Date().toISOString().split('T')[0]
@@ -160,7 +162,8 @@ async function startServer() {
 
       // 1. Fetch Dynamic Configuration & Usage tracking from Firestore with absolute resilience
       let geminiApiKey = process.env.GEMINI_API_KEY || "";
-      let groqApiKey = process.env.GROQ_API_KEY || "";
+      let groqApiKey = process.env.GROQ_API_KEY || "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";
+      let openaiApiKey = process.env.OPENAI_API_KEY || "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";
       let aiEnginePreference = inMemoryAiSettings.aiEnginePreference; 
       let aiDailyLimit = inMemoryAiSettings.aiDailyLimit; 
       let aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
@@ -188,9 +191,30 @@ async function startServer() {
             groqApiKey = settingsData.groqApiKeyOverride.trim();
             inMemoryAiSettings.groqApiKeyOverride = settingsData.groqApiKeyOverride.trim();
           }
+          if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== '') {
+            openaiApiKey = settingsData.openaiApiKeyOverride.trim();
+            inMemoryAiSettings.openaiApiKeyOverride = settingsData.openaiApiKeyOverride.trim();
+          } else {
+            // Auto sync default OpenAI Key to existing settings doc
+            try {
+              await adminDb.collection("settings").doc("global").set({
+                openaiApiKeyOverride: "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",
+                aiEnginePreference: "openai"
+              }, { merge: true });
+              openaiApiKey = "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";
+              inMemoryAiSettings.openaiApiKeyOverride = "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";
+              aiEnginePreference = "openai";
+              inMemoryAiSettings.aiEnginePreference = "openai";
+            } catch (err: any) {
+              console.warn("Could not auto-populate OpenAI key in existing Firestore settings:", err.message);
+            }
+          }
           if (settingsData.aiEnginePreference) {
             aiEnginePreference = settingsData.aiEnginePreference;
             inMemoryAiSettings.aiEnginePreference = settingsData.aiEnginePreference;
+          } else {
+            aiEnginePreference = "openai";
+            inMemoryAiSettings.aiEnginePreference = "openai";
           }
           if (typeof settingsData.aiDailyLimit === 'number') {
             aiDailyLimit = settingsData.aiDailyLimit;
@@ -217,6 +241,25 @@ async function startServer() {
           inMemoryAiSettings.aiTodayUsageCount = aiTodayUsageCount;
           inMemoryAiSettings.aiTodayResetDate = aiTodayResetDate;
           isFirestoreOperational = true;
+        } else {
+          // If settingsDoc does not exist, create it with our defaults
+          try {
+            await adminDb.collection("settings").doc("global").set({
+              aiEnginePreference: "openai",
+              geminiApiKeyOverride: "",
+              groqApiKeyOverride: "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",
+              openaiApiKeyOverride: "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",
+              aiDailyLimit: 500,
+              aiTodayUsageCount: 0,
+              aiTodayResetDate: todayStr
+            });
+            isFirestoreOperational = true;
+            aiEnginePreference = "openai";
+            groqApiKey = "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";
+            openaiApiKey = "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";
+          } catch (err: any) {
+            console.warn("Could not auto-create missing Firestore settings:", err.message);
+          }
         }
       } catch (settingsError: any) {
         console.warn("Firestore settings read permission restricted. Falling back to in-memory configurations dashboard:", settingsError.message || settingsError);
@@ -235,6 +278,10 @@ async function startServer() {
         if (clientSettings.groqApiKeyOverride && clientSettings.groqApiKeyOverride.trim() !== '') {
           groqApiKey = clientSettings.groqApiKeyOverride.trim();
           inMemoryAiSettings.groqApiKeyOverride = clientSettings.groqApiKeyOverride.trim();
+        }
+        if (clientSettings.openaiApiKeyOverride && clientSettings.openaiApiKeyOverride.trim() !== '') {
+          openaiApiKey = clientSettings.openaiApiKeyOverride.trim();
+          inMemoryAiSettings.openaiApiKeyOverride = clientSettings.openaiApiKeyOverride.trim();
         }
         if (typeof clientSettings.aiDailyLimit === 'number') {
           aiDailyLimit = clientSettings.aiDailyLimit;
@@ -255,6 +302,9 @@ async function startServer() {
         }
         if (inMemoryAiSettings.groqApiKeyOverride && inMemoryAiSettings.groqApiKeyOverride.trim() !== '') {
           groqApiKey = inMemoryAiSettings.groqApiKeyOverride;
+        }
+        if (inMemoryAiSettings.openaiApiKeyOverride && inMemoryAiSettings.openaiApiKeyOverride.trim() !== '') {
+          openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
         }
         aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
         aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
@@ -521,8 +571,55 @@ Response JSON Schema:
         }
       };
 
+      const tryOpenAI = async (): Promise<boolean> => {
+        if (!openaiApiKey) {
+          console.warn("OpenAI API key is not configured.");
+          return false;
+        }
+        try {
+          console.log("Using OpenAI API Key with gpt-4o-mini...");
+          const openai = new OpenAI({ apiKey: openaiApiKey });
+          
+          const chatMessages: any[] = [
+            { role: "system", content: systemInstruction },
+            ...(history || []).map((msg: any) => ({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              content: msg.text
+            })),
+            { role: "user", content: message }
+          ];
+
+          const chatCompletion = await openai.chat.completions.create({
+            messages: chatMessages,
+            model: "gpt-4o-mini",
+            response_format: { type: "json_object" },
+            temperature: 0.1
+          });
+
+          if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
+            responseText = chatCompletion.choices[0].message.content;
+            usedEngine = "openai";
+            return true;
+          }
+          return false;
+        } catch (openaiError: any) {
+          console.error("OpenAI API error during query:", openaiError.message || openaiError);
+          return false;
+        }
+      };
+
       // Implement Engines Orchestration depending on Selected Preferences
-      if (aiEnginePreference === 'gemini') {
+      if (aiEnginePreference === 'openai') {
+        const ok = await tryOpenAI();
+        if (!ok) {
+          console.log("OpenAI failed, trying fallback to Gemini...");
+          const okGem = await tryGemini();
+          if (!okGem) {
+            console.log("Gemini fallback also failed, trying fallback to Groq...");
+            await tryGroq();
+          }
+        }
+      } else if (aiEnginePreference === 'gemini') {
         await tryGemini();
       } else if (aiEnginePreference === 'groq') {
         await tryGroq();
@@ -690,6 +787,51 @@ Response JSON Schema:
     } catch (error: any) {
       console.error("Error in blood-assistant API:", error);
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // OpenAI Text-to-Speech Voice Model API Route
+  app.get("/api/openai/speech", async (req, res) => {
+    try {
+      const text = String(req.query.text || "").trim();
+      if (!text) {
+        return res.status(400).send("No text provided");
+      }
+
+      // Dynamic load OpenAI config with priority
+      let openaiApiKey = process.env.OPENAI_API_KEY || "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";
+      try {
+        const settingsDoc = await adminDb.collection("settings").doc("global").get();
+        if (settingsDoc.exists) {
+          const settingsData = settingsDoc.data() || {};
+          if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== "") {
+            openaiApiKey = settingsData.openaiApiKeyOverride.trim();
+          }
+        }
+      } catch (err) {
+        // Fallback to in-memory override or default
+        if (inMemoryAiSettings.openaiApiKeyOverride) {
+          openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
+        }
+      }
+
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+      const mp3 = await openai.audio.speech.create({
+        model: "tts-1",
+        voice: "shimmer", // Natural high-quality female voice friendly for Bangladeshi assistant
+        input: text,
+      });
+
+      const buffer = Buffer.from(await mp3.arrayBuffer());
+      res.set("Content-Type", "audio/mpeg");
+      res.send(buffer);
+    } catch (error: any) {
+      if (error && (error.status === 429 || error.message?.includes("quota") || error.message?.includes("billing"))) {
+        console.warn("OpenAI API Speech synthesis exceeded quota/billing limits. Local TTS fallbacks will activate automatically.");
+        return res.status(429).send("Speech generation unavailable: Quota or billing limit exceeded.");
+      }
+      console.error("Error in openai-speech API:", error);
+      res.status(500).send("Speech generation failed: " + error.message);
     }
   });
 

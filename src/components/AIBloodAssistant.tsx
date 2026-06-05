@@ -468,6 +468,7 @@ export default function AIBloodAssistant({
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<any>(window.speechSynthesis);
   const activeUtteranceRef = useRef<any>(null);
+  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const isComponentMounted = useRef(true);
 
@@ -552,9 +553,9 @@ export default function AIBloodAssistant({
     return cleaned.trim();
   };
 
-  // Native Speech Synthesis voice speaker using standard browser Web Speech API
-  const speakText = (text: string) => {
-    if (!synthRef.current || isMuted) return;
+  // Native Speech Synthesis voice speaker with premium OpenAI server-side Voice fallbacks
+  const speakText = async (text: string) => {
+    if (isMuted) return;
 
     stopSpeaking();
     stopListening();
@@ -562,40 +563,93 @@ export default function AIBloodAssistant({
     const cleanedText = cleanMarkdownAndSymbols(text);
     if (!cleanedText) return;
 
-    const utterance = new SpeechSynthesisUtterance(cleanedText);
-    utterance.lang = 'bn-BD';
-    
-    const voices = synthRef.current.getVoices();
-    const bnVoice = voices.find((v: any) => v.lang.startsWith('bn'));
-    if (bnVoice) {
-      utterance.voice = bnVoice;
-    }
+    let alreadyFallenBack = false;
 
-    utterance.onstart = () => {
+    // Use OpenAI TTS model by calling /api/openai/speech
+    try {
       setIsSpeaking(true);
-    };
+      const audioUrl = `/api/openai/speech?text=${encodeURIComponent(cleanedText)}`;
+      const audio = new Audio(audioUrl);
+      activeAudioRef.current = audio;
 
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      if (isOpen && autoPilotMic) {
-        startListening();
+      audio.onended = () => {
+        setIsSpeaking(false);
+        if (isOpen && autoPilotMic) {
+          startListening();
+        }
+      };
+
+      audio.onerror = (e) => {
+        console.warn("OpenAI TTS Audio error, falling back to local SpeechSynthesis:", e);
+        if (!alreadyFallenBack) {
+          alreadyFallenBack = true;
+          fallbackToLocalSpeechSynthesis(cleanedText);
+        }
+      };
+
+      await audio.play();
+    } catch (err) {
+      console.warn("Could not load OpenAI TTS, trying local fallback:", err);
+      if (!alreadyFallenBack) {
+        alreadyFallenBack = true;
+        fallbackToLocalSpeechSynthesis(cleanedText);
       }
-    };
+    }
+  };
 
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      if (isOpen && autoPilotMic) {
-        startListening();
+  const fallbackToLocalSpeechSynthesis = (bnText: string) => {
+    if (!synthRef.current || isMuted) return;
+    
+    try {
+      const utterance = new SpeechSynthesisUtterance(bnText);
+      utterance.lang = 'bn-BD';
+      
+      const voices = synthRef.current.getVoices();
+      const bnVoice = voices.find((v: any) => v.lang.startsWith('bn'));
+      if (bnVoice) {
+        utterance.voice = bnVoice;
       }
-    };
 
-    activeUtteranceRef.current = utterance;
-    synthRef.current.speak(utterance);
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        if (isOpen && autoPilotMic) {
+          startListening();
+        }
+      };
+
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        if (isOpen && autoPilotMic) {
+          startListening();
+        }
+      };
+
+      activeUtteranceRef.current = utterance;
+      synthRef.current.speak(utterance);
+    } catch (localErr) {
+      console.error("Local speech synthesis failure:", localErr);
+      setIsSpeaking(false);
+    }
   };
 
   const stopSpeaking = () => {
+    // 1. Cancel browser Voice utterance
     if (synthRef.current) {
       synthRef.current.cancel();
+    }
+    // 2. Pause and reset OpenAI Audio playback
+    if (activeAudioRef.current) {
+      try {
+        activeAudioRef.current.pause();
+        activeAudioRef.current.src = "";
+      } catch (e) {
+        // Safe play/pause error handle
+      }
+      activeAudioRef.current = null;
     }
     setIsSpeaking(false);
   };
