@@ -743,8 +743,19 @@ export default function App() {
 
     // Listen for global runtime scripting errors to help diagnose any appлет issues
     const handleGlobalError = (event: ErrorEvent) => {
+      const msg = event.message || '';
       // Ignore routine non-critical browser/extension specific warnings or third party messages
-      if (event.message?.includes('ResizeObserver') || event.message?.includes('Script error')) {
+      if (msg.includes('ResizeObserver') || msg.includes('Script error')) {
+        return;
+      }
+      const lower = msg.toLowerCase();
+      if (
+        lower.includes('websocket') || 
+        lower.includes('vite') || 
+        lower.includes('sockjs') || 
+        lower.includes('socket') || 
+        lower.includes('hmr')
+      ) {
         return;
       }
       setLastCriticalError({
@@ -757,8 +768,17 @@ export default function App() {
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
+      const lower = message.toLowerCase();
       // Skip benign developer socket rejection logs
-      if (message.includes('websocket') || message.includes('vite')) return;
+      if (
+        lower.includes('websocket') || 
+        lower.includes('vite') || 
+        lower.includes('sockjs') || 
+        lower.includes('socket') || 
+        lower.includes('hmr')
+      ) {
+        return;
+      }
 
       setLastCriticalError({
         error: message || 'Unhandled Promise Rejection',
