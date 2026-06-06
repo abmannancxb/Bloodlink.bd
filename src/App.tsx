@@ -665,18 +665,19 @@ export default function App() {
 
         const isValid = validViews.includes(mappedView) || validViews.includes(viewKey);
         if (!isValid) {
+          mappedView = 'public-profile';
+          uidParam = viewKey;
+
           const bdnrMatch = viewKey.match(/^bdnr-(\d+)$/i);
           if (bdnrMatch) {
             const indexValue = parseInt(bdnrMatch[1], 10) - 1;
             const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
             if (indexValue >= 0 && indexValue < sortedAll.length) {
-              mappedView = 'public-profile';
               uidParam = sortedAll[indexValue].uid;
             }
           } else {
             const matchingUser = allUsers.find(u => u.username?.toLowerCase() === viewKey.toLowerCase());
             if (matchingUser) {
-              mappedView = 'public-profile';
               uidParam = matchingUser.uid;
             }
           }
