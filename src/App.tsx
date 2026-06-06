@@ -734,21 +734,22 @@ export default function App() {
       } else if (view === 'find') {
         pageTitle = 'Search Voluntary Blood Donors in Bangladesh | Dhaka, CTG, Sylhet';
         pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
-      } else if (view === 'public-profile' && selectedUserId) {
+      } else if ((view === 'public-profile' && selectedUserId) || (view === 'profile' && user)) {
         let targetUser: UserProfile | undefined = undefined;
+        const targetId = view === 'profile' ? user?.uid : selectedUserId;
         if (allUsers.length === 0) {
           // Keep the current pathname while loading list of users to prevent incorrect /bdnr-01 redirect
           pathName = window.location.pathname;
         } else {
-          targetUser = allUsers.find(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
+          targetUser = allUsers.find(u => u.uid === targetId || u.username?.toLowerCase() === targetId?.toLowerCase());
           const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
-          const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
+          const indexValue = sortedAll.findIndex(u => u.uid === targetId || u.username?.toLowerCase() === targetId?.toLowerCase());
           const serialNo = indexValue !== -1 ? indexValue + 1 : 1;
           const padded = String(serialNo).padStart(2, '0');
           if (targetUser?.username && targetUser.username.trim()) {
             pathName = `/${targetUser.username.trim().toLowerCase()}`;
-          } else if (selectedUserId.startsWith('bdnr-')) {
-            pathName = `/${selectedUserId.toLowerCase()}`;
+          } else if (targetId?.startsWith('bdnr-')) {
+            pathName = `/${targetId.toLowerCase()}`;
           } else {
             pathName = `/bdnr-${padded}`;
           }
@@ -797,7 +798,7 @@ export default function App() {
         window.history.replaceState(null, '', cleanUrl);
       }
     }
-  }, [view, showRequestsOverlay, selectedUserId, selectedOrgId, selectedStoryId, posts, allUsers, organizations]);
+  }, [view, showRequestsOverlay, selectedUserId, selectedOrgId, selectedStoryId, posts, allUsers, organizations, user]);
 
   useEffect(() => {
     const ephemeral = ['admin-login', 'chat-room', 'post-opinion', 'request-form', 'org-apply', 'public-profile', 'org-dashboard'];
@@ -2186,14 +2187,20 @@ export default function App() {
               setProfile(null);
               localStorage.removeItem('bloodlink_persisted_user');
               localStorage.removeItem('bloodlink_persisted_profile');
-              if (viewRef.current !== 'admin-login' && viewRef.current !== 'org-apply') setView('requests');
+              const publicBypassViews = ['admin-login', 'org-apply', 'public-profile', 'org-dashboard', 'about', 'contact', 'privacy', 'terms', 'faq', 'feed'];
+              if (!publicBypassViews.includes(viewRef.current)) {
+                setView('requests');
+              }
             }
           } else {
             setUser(null);
             setProfile(null);
             localStorage.removeItem('bloodlink_persisted_user');
             localStorage.removeItem('bloodlink_persisted_profile');
-            if (viewRef.current !== 'admin-login' && viewRef.current !== 'org-apply') setView('requests');
+            const publicBypassViews = ['admin-login', 'org-apply', 'public-profile', 'org-dashboard', 'about', 'contact', 'privacy', 'terms', 'faq', 'feed'];
+            if (!publicBypassViews.includes(viewRef.current)) {
+              setView('requests');
+            }
           }
         }
       } catch (err) {
@@ -2451,8 +2458,7 @@ export default function App() {
 
   // Admin/Chat: Users Listener
   useEffect(() => {
-    if (!user && !isGuest) return;
-    // We need users for the Chat system as well, not just AdminPanel
+    // We need users for stats, maps, public profiles, and routing as well
     // Optimize: fetch users once statically to avoid highly intensive background real-time updates and multiple re-renders
     let isMounted = true;
     const fetchUsers = async () => {
