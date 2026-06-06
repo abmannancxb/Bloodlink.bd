@@ -137,11 +137,11 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       }
 
       // 3. Right White Box for QR Code badge (Floating with soft corner matching frame - aligned higher up!)
-      const qrBoxX = 705;
+      const qrBoxX = 780;
       const qrBoxY = 110;
-      const qrBoxW = 220;
-      const qrBoxH = 265;
-      const qrR = 28;
+      const qrBoxW = 170;
+      const qrBoxH = 225;
+      const qrR = 20;
 
       ctx.save();
       // Premium depth shadows under the floating QR panel to make it high-end and pop-out
@@ -159,25 +159,25 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       ctx.restore();
 
       // Style finder patterns and modern high-end vector QR grid matrix
-      const matrixX = qrBoxX + 40;
-      const matrixY = qrBoxY + 25;
-      const matrixSize = 140;
+      const matrixX = qrBoxX + 28;
+      const matrixY = qrBoxY + 18;
+      const matrixSize = 114;
 
-      drawFinderPattern(ctx, matrixX, matrixY, 35);
-      drawFinderPattern(ctx, matrixX + matrixSize - 35, matrixY, 35);
-      drawFinderPattern(ctx, matrixX, matrixY + matrixSize - 35, 35);
+      drawFinderPattern(ctx, matrixX, matrixY, 30);
+      drawFinderPattern(ctx, matrixX + matrixSize - 30, matrixY, 30);
+      drawFinderPattern(ctx, matrixX, matrixY + matrixSize - 30, 30);
 
       // Seed deterministic generator with UID to construct static unique QR representation
       srand(profile.uid);
 
       // Draw high-density QR pixel squares
-      const cellSize = 7;
+      const cellSize = 6;
       ctx.fillStyle = "#1E293B"; // Slate dark pixel grid
       for (let row = 0; row < matrixSize; row += cellSize) {
         for (let col = 0; col < matrixSize; col += cellSize) {
-          const isTopLeft = row < 40 && col < 40;
-          const isTopRight = row < 40 && col > matrixSize - 40;
-          const isBottomLeft = row > matrixSize - 40 && col < 40;
+          const isTopLeft = row < 34 && col < 34;
+          const isTopRight = row < 34 && col > matrixSize - 34;
+          const isBottomLeft = row > matrixSize - 34 && col < 34;
 
           if (!isTopLeft && !isTopRight && !isBottomLeft) {
             if (random() > 0.42) {
@@ -193,30 +193,30 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
 
       // Labels below the QR inside the white panel
       ctx.fillStyle = "#64748B"; // Premium medium slate
-      ctx.font = "900 12px 'Space Grotesk', sans-serif";
+      ctx.font = "900 10px 'Space Grotesk', sans-serif";
       ctx.textBaseline = "middle";
       ctx.textAlign = "center";
       if ("letterSpacing" in ctx) {
-        ctx.letterSpacing = "4px";
+        ctx.letterSpacing = "3px";
       }
-      ctx.fillText("DONOR ID", qrBoxX + qrBoxW / 2, qrBoxY + 195); // Perfectly balanced padding
+      ctx.fillText("DONOR ID", qrBoxX + qrBoxW / 2, qrBoxY + 165); // Perfectly balanced padding
       if ("letterSpacing" in ctx) {
         ctx.letterSpacing = "normal";
       }
 
       // Big, highly bold and legible DONOR ID
       ctx.fillStyle = "#0F172A"; // Ultra slate dark
-      ctx.font = "900 24px 'Space Grotesk', sans-serif";
-      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + 225);
+      ctx.font = "900 18px 'Space Grotesk', sans-serif";
+      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + 195);
 
       // 4. Draw Left Column elements matching vertical layout of screenshot
       const nameText = profile.displayName.toUpperCase();
       ctx.fillStyle = "#FFFFFF";
       
-      // Dynamic font size optimization for long names to prevent bleeding into QR Code area (starts at 705)
+      // Dynamic font size optimization for long names to prevent bleeding into QR Code area (starts at 780)
       let nameFontSize = 42;
       ctx.font = `900 ${nameFontSize}px 'Space Grotesk', 'Inter', sans-serif`;
-      while (ctx.measureText(nameText).width > 440 && nameFontSize > 22) {
+      while (ctx.measureText(nameText).width > 490 && nameFontSize > 22) {
         nameFontSize -= 2;
         ctx.font = `900 ${nameFontSize}px 'Space Grotesk', 'Inter', sans-serif`;
       }
@@ -307,7 +307,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       ctx.fillStyle = "#059669"; // emerald dark
       ctx.fillText(verText, pill2X + 37, pillY + 20);
 
-      // Location details line — Optimized to prevent overlapping with any QR Code box on the right (starts at X=705)
+      // Location details line — Optimized to prevent overlapping with any QR Code box on the right (starts at X=780)
       const localThana = profile.thana || "Cox's Bazar Sadar";
       const localDistrict = profile.district || "Cox's Bazar";
       const locationText = `📍 Location: ${localThana}, ${localDistrict}`;
@@ -315,7 +315,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       
       let locFontSize = 18;
       ctx.font = `900 ${locFontSize}px 'Space Grotesk', sans-serif`;
-      while (ctx.measureText(locationText).width > 440 && locFontSize > 13) {
+      while (ctx.measureText(locationText).width > 490 && locFontSize > 13) {
         locFontSize -= 1;
         ctx.font = `900 ${locFontSize}px 'Space Grotesk', sans-serif`;
       }
@@ -329,7 +329,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       
       let statsFontSize = 16;
       ctx.font = `900 ${statsFontSize}px 'Space Grotesk', sans-serif`;
-      while (ctx.measureText(statsRowText).width > 440 && statsFontSize > 12) {
+      while (ctx.measureText(statsRowText).width > 490 && statsFontSize > 12) {
         statsFontSize -= 1;
         ctx.font = `900 ${statsFontSize}px 'Space Grotesk', sans-serif`;
       }
