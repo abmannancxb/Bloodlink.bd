@@ -50,24 +50,17 @@ export interface UserProfile {
   nextDonationEligibility?: string;
   coverURL?: string;
   username?: string;
+  weight?: number;
+  heightFeet?: number;
+  heightInches?: number;
+  lastProfileSaveDate?: string;
 }
 
 export function getDonorId(profile: UserProfile, allUsers: UserProfile[] = []) {
-  if (profile.username) {
-    return `BDNR-${profile.username.toUpperCase()}`;
-  }
-  // Stable sorting of all users who do not have a username by their uid
-  const sortedWithoutUsername = [...allUsers]
-    .filter(u => !u.username)
-    .sort((a, b) => a.uid.localeCompare(b.uid));
-    
-  let index = sortedWithoutUsername.findIndex(u => u.uid === profile.uid);
-  if (index === -1) {
-    // If not found in the filtered list, check in the complete list
-    const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
-    index = sortedAll.findIndex(u => u.uid === profile.uid);
-  }
+  // Stable sorting of all users by their uid
+  const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
   
+  const index = sortedAll.findIndex(u => u.uid === profile.uid);
   const serialNo = index !== -1 ? index + 1 : 1;
   const padded = String(serialNo).padStart(2, '0');
   return `BDNR-${padded}`;

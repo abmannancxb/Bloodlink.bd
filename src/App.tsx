@@ -535,7 +535,7 @@ export default function App() {
     return false;
   });
 
-  const [view, setView] = useState<'requests' | 'find' | 'feed' | 'profile' | 'public-profile' | 'notifications' | 'admin' | 'post-opinion' | 'request-form' | 'admin-login' | 'chats' | 'chat-room' | 'organizations' | 'org-dashboard' | 'org-apply' | 'about' | 'contact' | 'privacy' | 'terms' | 'faq' | 'emergency' | 'hospitals'>(() => {
+  const [view, setView] = useState<'requests' | 'find' | 'feed' | 'profile' | 'public-profile' | 'edit-profile' | 'notifications' | 'admin' | 'post-opinion' | 'request-form' | 'admin-login' | 'chats' | 'chat-room' | 'organizations' | 'org-dashboard' | 'org-apply' | 'about' | 'contact' | 'privacy' | 'terms' | 'faq' | 'emergency' | 'hospitals'>(() => {
     try {
       const pathParam = window.location.pathname.replace(/^\//, '');
       const searchParams = new URLSearchParams(window.location.search);
@@ -648,10 +648,20 @@ export default function App() {
 
         const isValid = validViews.includes(mappedView) || validViews.includes(viewKey);
         if (!isValid) {
-          const matchingUser = allUsers.find(u => u.username?.toLowerCase() === viewKey.toLowerCase());
-          if (matchingUser) {
-            mappedView = 'public-profile';
-            uidParam = matchingUser.uid;
+          const bdnrMatch = viewKey.match(/^bdnr-(\d+)$/i);
+          if (bdnrMatch) {
+            const indexValue = parseInt(bdnrMatch[1], 10) - 1;
+            const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
+            if (indexValue >= 0 && indexValue < sortedAll.length) {
+              mappedView = 'public-profile';
+              uidParam = sortedAll[indexValue].uid;
+            }
+          } else {
+            const matchingUser = allUsers.find(u => u.username?.toLowerCase() === viewKey.toLowerCase());
+            if (matchingUser) {
+              mappedView = 'public-profile';
+              uidParam = matchingUser.uid;
+            }
           }
         }
 
@@ -709,13 +719,12 @@ export default function App() {
         pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
       } else if (view === 'public-profile' && selectedUserId) {
         const targetUser = allUsers.find(u => u.uid === selectedUserId);
-        if (targetUser && targetUser.username) {
-          pathName = `/${targetUser.username.toLowerCase()}`;
-          searchStr = '';
-        } else {
-          pathName = '/public-profile';
-          searchStr = `?uid=${selectedUserId}`;
-        }
+        const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
+        const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId);
+        const serialNo = indexValue !== -1 ? indexValue + 1 : 1;
+        const padded = String(serialNo).padStart(2, '0');
+        pathName = `/bdnr-${padded}`;
+        searchStr = '';
         if (targetUser) {
           pageTitle = `Voluntary Blood Donor: ${targetUser.displayName} (${targetUser.bloodGroup}) | BloodLink BD`;
           pageDesc = `View the active blood donor profile of ${targetUser.displayName} in ${targetUser.district}, ${targetUser.thana}. Contact directly for blood need matching ${targetUser.bloodGroup}.`;
@@ -2985,7 +2994,7 @@ export default function App() {
     );
   }
 
-  if (!user && !isGuest && view !== 'admin-login' && view !== 'org-apply' && view !== 'about' && view !== 'contact' && view !== 'privacy' && view !== 'terms' && view !== 'faq') {
+  if (!user && !isGuest && view !== 'public-profile' && view !== 'admin-login' && view !== 'org-apply' && view !== 'about' && view !== 'contact' && view !== 'privacy' && view !== 'terms' && view !== 'faq') {
     const showGoogle = settings?.showLoginGoogle !== false;
     const showOrg = settings?.showLoginOrg !== false;
     const showGuest = settings?.showLoginGuest !== false;
@@ -5769,22 +5778,20 @@ export default function App() {
         {view === 'profile' && user && (
           <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
             <div className="max-w-4xl mx-auto pb-4">
-              <ProfileForm 
-                user={user} 
-                initialProfile={profile} 
-                requests={requests.filter(r => r.requesterUid === user.uid)}
-                donations={donations}
-                posts={posts}
-                allUsers={allUsers}
-                onLeave={leaveOrganization}
-                onNavigateOrganizations={() => setView('organizations')}
-                onSuccess={(p) => { setProfile(p); setView('requests'); handleSetActiveChat(null); }}
-                onViewProfile={(uid) => onViewProfile(uid)}
-                askConfirm={askConfirm}
+              <PublicProfileView 
+                uid={user.uid} 
+                onBack={() => setView('requests')} 
+                onMessage={(uid) => openChat(uid)}
+                currentUser={user}
+                currentProfile={profile}
+                onDeleteRequest={handleDeleteRequest}
+                onDonationDone={handleDonationDone}
                 addToast={addToast}
-                requestNotificationPermission={requestNotificationPermission}
+                allUsers={allUsers}
+                askConfirm={askConfirm}
                 notifyAdmins={notifyAdmins}
-                onLogout={handleLogout}
+                onViewProfile={(uid) => onViewProfile(uid)}
+                onEditProfile={() => setView('edit-profile')}
               />
 
               <div className="mt-12 pt-12 border-t border-slate-100 flex flex-col items-center gap-6">
@@ -5824,6 +5831,31 @@ export default function App() {
                   Force Version Check
                 </button>
               </div>
+            </div>
+          </motion.div>
+        )}
+
+        {view === 'edit-profile' && user && (
+          <motion.div key="edit-profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
+            <div className="max-w-4xl mx-auto pb-4">
+              <ProfileForm 
+                user={user} 
+                initialProfile={profile} 
+                requests={requests.filter(r => r.requesterUid === user.uid)}
+                donations={donations}
+                posts={posts}
+                allUsers={allUsers}
+                onLeave={leaveOrganization}
+                onNavigateOrganizations={() => setView('organizations')}
+                onSuccess={(p) => { setProfile(p); setView('profile'); handleSetActiveChat(null); }}
+                onViewProfile={(uid) => onViewProfile(uid)}
+                onCancel={() => setView('profile')}
+                askConfirm={askConfirm}
+                addToast={addToast}
+                requestNotificationPermission={requestNotificationPermission}
+                notifyAdmins={notifyAdmins}
+                onLogout={handleLogout}
+              />
             </div>
           </motion.div>
         )}
@@ -13252,7 +13284,7 @@ function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings, addToa
   );
 }
 
-function ProfileForm({ user, initialProfile, requests, donations, posts, allUsers, onLeave, onNavigateOrganizations, onSuccess, onViewProfile, askConfirm, addToast, requestNotificationPermission, notifyAdmins, onLogout }: { 
+function ProfileForm({ user, initialProfile, requests, donations, posts, allUsers, onLeave, onNavigateOrganizations, onSuccess, onViewProfile, onCancel, askConfirm, addToast, requestNotificationPermission, notifyAdmins, onLogout }: { 
   user: FirebaseUser, 
   initialProfile: UserProfile | null, 
   requests: BloodRequest[], 
@@ -13263,6 +13295,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
   onNavigateOrganizations: () => void, 
   onSuccess: (p: UserProfile) => void,
   onViewProfile: (uid: string) => void,
+  onCancel?: () => void,
   askConfirm: (title: string, message: string, confirmText?: string, type?: ConfirmConfig['type'], cancelText?: string) => Promise<boolean>,
   addToast: (title: string, body: string, type?: Toast['type'], requestId?: string) => void,
   requestNotificationPermission: () => Promise<void>,
@@ -13289,7 +13322,11 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
     organizationId: initialProfile?.organizationId,
     organizationName: initialProfile?.organizationName,
     coverURL: initialProfile?.coverURL || '',
-    username: initialProfile?.username || ''
+    username: initialProfile?.username || '',
+    weight: initialProfile?.weight || undefined,
+    heightFeet: initialProfile?.heightFeet || undefined,
+    heightInches: initialProfile?.heightInches || undefined,
+    lastProfileSaveDate: initialProfile?.lastProfileSaveDate || ''
   });
 
   useEffect(() => {
@@ -13308,7 +13345,11 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
         isAvailable: initialProfile.isAvailable ?? prev.isAvailable,
         organizationId: initialProfile.organizationId,
         organizationName: initialProfile.organizationName,
-        username: initialProfile.username || prev.username
+        username: initialProfile.username || prev.username,
+        weight: initialProfile.weight || prev.weight,
+        heightFeet: initialProfile.heightFeet || prev.heightFeet,
+        heightInches: initialProfile.heightInches || prev.heightInches,
+        lastProfileSaveDate: initialProfile.lastProfileSaveDate || prev.lastProfileSaveDate
       }));
     }
   }, [initialProfile]);
@@ -13390,6 +13431,22 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
       return;
     }
 
+    // 7-day cooldown save check
+    if (initialProfile?.lastProfileSaveDate) {
+      const lastSaveTime = new Date(initialProfile.lastProfileSaveDate).getTime();
+      const diffTime = Date.now() - lastSaveTime;
+      const cooldownMs = 7 * 24 * 60 * 60 * 1000;
+      if (diffTime < cooldownMs) {
+        const remainingDays = Math.ceil((cooldownMs - diffTime) / (24 * 60 * 60 * 1000));
+        addToast(
+          "Profile Locked",
+          `Once saved, you can only change your profile after 7 days! Remaining time: ${remainingDays} day(s).`,
+          "warning"
+        );
+        return;
+      }
+    }
+
     if (formData.username) {
       const cleanUsername = formData.username.trim().toLowerCase();
       const isTaken = allUsers.some(u => u.username?.toLowerCase() === cleanUsername && u.uid !== user.uid);
@@ -13412,8 +13469,13 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
 
       const batch = writeBatch(db);
       
+      const newSaveDate = new Date().toISOString();
       const dataToSave: any = { 
         ...formData,
+        weight: formData.weight !== undefined ? Number(formData.weight) : deleteField(),
+        heightFeet: formData.heightFeet !== undefined ? Number(formData.heightFeet) : deleteField(),
+        heightInches: formData.heightInches !== undefined ? Number(formData.heightInches) : deleteField(),
+        lastProfileSaveDate: newSaveDate,
         nextDonationEligibility: nextEligibility,
         updatedAt: serverTimestamp()
       };
@@ -13473,205 +13535,80 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -15 }}
-      transition={{ duration: 0.4 }}
-      className="bg-slate-50/50 rounded-[2.5rem] border border-slate-200/80 shadow-2xl overflow-hidden"
+      initial={{ opacity: 0, scale: 0.99 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.99 }}
+      transition={{ duration: 0.3 }}
+      className="max-w-[430px] mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-150/50 relative text-slate-800 font-sans pb-8 animate-fade-in"
     >
-      {/* Cover Photo Area with Backdrop Mask and Dot Overlay */}
-      <div className="h-44 md:h-60 bg-slate-900 relative group/cover overflow-hidden">
+      {/* Cover Photo Banner */}
+      <div className="h-32 bg-slate-900 relative overflow-hidden">
         {formData.coverURL ? (
           <img 
             src={formData.coverURL} 
-            className="w-full h-full object-cover transition-transform duration-1000 group-hover/cover:scale-105" 
+            className="w-full h-full object-cover opacity-80" 
             alt="Cover Banner" 
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-r from-red-600 via-red-500 to-rose-600" />
+          <div className="w-full h-full bg-gradient-to-r from-red-650 via-[#FF1744] to-red-600" />
         )}
         
-        {/* Soft Linear Gradient Mask for Readability */}
-        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/65 via-slate-950/20 to-transparent" />
+        {/* Soft Linear Gradient Mask */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#F6F8FC] via-slate-950/20 to-transparent" />
         
-        {/* Grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.12] mix-blend-overlay">
-          <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1.2px, transparent 0)', backgroundSize: '16px 16px' }} />
-        </div>
-
-        {/* Cover Photo Upload Button */}
+        {/* Cover Photo Upload Button - Minimal Pencil Icon */}
         <button
           type="button"
           onClick={() => {
             const url = prompt('Enter Cover Image URL (Facebook-style web link):');
             if (url !== null) setFormData({ ...formData, coverURL: url });
           }}
-          className="absolute bottom-5 right-5 bg-white/95 backdrop-blur-md text-slate-800 hover:bg-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg border border-slate-200/50 transition-all hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+          className="absolute top-4 right-4 bg-white/90 backdrop-blur-md text-slate-700 hover:bg-white p-2 rounded-full shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          title="Change Cover Art"
         >
-          <Camera className="w-3.5 h-3.5 text-slate-600" />
-          Change Art Cover
+          <Camera className="w-3.5 h-3.5" />
         </button>
       </div>
 
-      <div className="px-4 pb-8 -mt-16 md:-mt-24 relative z-10 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT PANEL: PROFILE STATUS & QUICK WIDGETS (4 cols) */}
-          <div className="col-span-1 lg:col-span-4 space-y-6">
-            
-            {/* Quick Profile Overview Box */}
-            <div className="bg-white rounded-3xl border border-slate-150 p-6 shadow-xl shadow-slate-100/50 flex flex-col items-center text-center">
-              {/* Profile Avatar Wrapper */}
-              <div 
-                onClick={handleImageClick}
-                className="relative group/photo cursor-pointer hover:scale-[1.03] active:scale-95 transition-all mb-4"
-                title="Click to select or upload profile avatar"
-              >
-                <img 
-                  src={formData.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.displayName)}&background=fecdd3&color=e11d48&bold=true`} 
-                  className="w-28 h-28 sm:w-32 sm:h-32 rounded-full object-cover border-[5px] border-white shadow-2xl transition-all group-hover/photo:brightness-95" 
-                  alt="Avatar"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="absolute bottom-1 right-1 bg-red-605 text-white w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-lg ring-4 ring-red-500/10 group-hover/photo:scale-110 transition-all">
-                  <Camera className="w-3.5 h-3.5" />
-                </div>
-              </div>
-              <input 
-                type="file" 
-                ref={photoInputRef} 
-                accept="image/*" 
-                onChange={handlePhotoChange} 
-                className="hidden" 
-              />
-
-              {/* Patient/User Name Display */}
-              <div className="space-y-1 mb-2">
-                <div className="flex items-center justify-center gap-2">
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none leading-none">
-                    {formData.displayName || "Anonymous User"}
-                  </h2>
-                  <div className="text-[10px] font-black uppercase text-red-600 bg-red-50 border border-red-100 px-2.5 py-0.5 rounded-md shadow-sm">
-                    {formData.bloodGroup || "—"}
-                  </div>
-                </div>
-                <p className="text-[11px] font-bold text-slate-400 font-mono flex items-center justify-center gap-1">
-                  <Mail className="w-3 h-3 text-slate-400" />
-                  {formData.email}
-                </p>
-              </div>
-
-              {/* Address indicator banner */}
-              <div className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-slate-50 border border-slate-100 rounded-full text-slate-500 text-[10px] font-black uppercase tracking-wider mb-6">
-                <MapPin className="w-3.5 h-3.5 text-red-500" />
-                <span>{formData.thana || 'Thana'}, {formData.district || 'District'}</span>
-              </div>
-
-              {/* Utility shortcuts */}
-              <div className="w-full space-y-2">
-                <button 
-                  type="button"
-                  onClick={() => onViewProfile(user.uid)}
-                  className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-black py-3 rounded-2xl border border-slate-200/50 transition-all text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Eye className="w-4 h-4 text-slate-500" />
-                  View Public Profile
-                </button>
-              </div>
+      {/* Main Container Overlap */}
+      <div className="px-5 -mt-12 relative z-10">
+        
+        {/* Header Block with Avatar and Page Title */}
+        {/* Header Block with Avatar and Page Title */}
+        <div className="flex flex-col items-center text-center mb-6">
+          <div 
+            onClick={handleImageClick}
+            className="relative group/photo cursor-pointer hover:scale-[1.03] active:scale-95 transition-all mb-3 select-none"
+            title="Click to select or upload profile avatar"
+          >
+            <img 
+              src={formData.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.displayName || 'Donor')}&background=fecdd3&color=e11d48&bold=true`} 
+              className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl" 
+              alt="Avatar"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute bottom-1 right-1 bg-red-655 text-white w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-md">
+              <Camera className="w-3.5 h-3.5" />
             </div>
-
-            {/* Quick Status: Available to Donate Toggle Widget */}
-            <div className="bg-white rounded-3xl border border-slate-150 p-6 shadow-xl shadow-slate-100/50 space-y-4">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Donor Discovery</h3>
-                  <p className="text-xs font-bold text-slate-700">Public Availability</p>
-                </div>
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-wider ${formData.isAvailable ? 'bg-emerald-500/10 text-emerald-707 border border-emerald-555/20' : 'bg-rose-500/10 text-rose-700 border border-rose-500/20'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${formData.isAvailable ? 'bg-emerald-505 animate-pulse' : 'bg-rose-500'}`} />
-                  {formData.isAvailable ? 'Discovered' : 'Hidden'}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-450 leading-relaxed font-semibold">
-                When active, your profile is listed in live searches. People experiencing urgency in your district will be able to summon your coordination help.
-              </p>
-
-              <button
-                type="button"
-                onClick={() => setFormData({ ...formData, isAvailable: !formData.isAvailable })}
-                className={`w-full py-3.5 rounded-2xl border-2 font-black text-[10px] uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center gap-2 ${
-                  formData.isAvailable 
-                    ? 'bg-emerald-500/5 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 shadow-sm' 
-                    : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {formData.isAvailable ? '✓ Mode: Available to Donate' : '✗ Mode: Currently Invisible'}
-              </button>
-            </div>
-
-            {/* Organization Community Widget */}
-            <div className="bg-gradient-to-br from-red-500/5 to-rose-500/5 rounded-3xl border border-red-500/10 p-6 shadow-xl shadow-red-500/5 space-y-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-red-100 flex items-center justify-center text-red-600">
-                    <Building className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-[10px] font-black text-red-600 uppercase tracking-widest leading-none">Association</h3>
-                    <p className="text-xs font-bold text-slate-800">Your Organization</p>
-                  </div>
-                </div>
-              </div>
-
-              {initialProfile?.organizationId ? (
-                <div className="space-y-3">
-                  <div className="bg-white border border-red-100 p-4 rounded-2xl">
-                    <p className="text-[9px] font-black text-rose-500 uppercase tracking-widest mb-1">Affiliated Club</p>
-                    <p className="font-black text-slate-900 text-sm leading-snug">{initialProfile.organizationName}</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2">
-                    <button 
-                      type="button"
-                      onClick={onNavigateOrganizations}
-                      className="py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all cursor-pointer"
-                    >
-                      Browse Clubs
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => {
-                        console.log("ProfileForm: Leave button clicked");
-                        onLeave();
-                      }}
-                      className="py-2.5 border border-red-200 text-red-600 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-red-50 transition-all cursor-pointer active:scale-95"
-                    >
-                      Leave Team
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
-                    Associate with a local volunteering club or union in your district to manage corporate campaigns and group donations.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={onNavigateOrganizations}
-                    className="w-full py-3 bg-white hover:bg-slate-50 text-red-600 font-black border border-red-100 text-[9px] uppercase tracking-widest rounded-xl transition-all shadow-md shadow-red-100/30 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-red-500" />
-                    Join an Organization
-                  </button>
-                </div>
-              )}
-            </div>
-
           </div>
+          <input 
+            type="file" 
+            ref={photoInputRef} 
+            accept="image/*" 
+            onChange={handlePhotoChange} 
+            className="hidden" 
+          />
 
-          {/* RIGHT PANEL: CORE EDITABLE PROFILE DETAILS Form (8 cols) */}
-          <div className="col-span-1 lg:col-span-8 bg-white rounded-3xl border border-slate-150 p-6 md:p-8 shadow-xl shadow-slate-100/50">
-            <form onSubmit={handleSubmit} className="space-y-8">
+          <h2 className="text-lg font-black text-slate-900 tracking-tight leading-none">
+            Edit Profile Registry
+          </h2>
+          <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mt-1.5">
+            Volunteering Credentials
+          </p>
+        </div>
+
+        {/* Unified Redesigned Edit Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
               
               {/* SECTION A: IDENTITY & CONTACT INFO */}
               <div className="space-y-4">
@@ -13695,7 +13632,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                       placeholder="e.g. Adnan Mannan"
                       value={formData.displayName}
                       onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-slate-350"
+                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
                     />
                   </div>
 
@@ -13705,10 +13642,10 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                     <input 
                       required
                       type="tel"
-                      placeholder="01XXXXXXXXX"
+                      placeholder="e.g. 01800000000"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all"
+                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
                     />
                   </div>
                 </div>
@@ -13720,8 +13657,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                     <span className="text-[8px] font-extrabold text-[#ff2247] bg-rose-50 border border-rose-100 px-2.5 py-0.5 rounded-full uppercase tracking-widest leading-none">Custom link</span>
                   </label>
                   <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <span className="text-xs font-black text-slate-400 font-mono">bloodlink.bd/</span>
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <span className="text-xs font-black text-slate-900 font-mono select-none">bloodlink.bd/</span>
                     </div>
                     <input 
                       type="text"
@@ -13731,9 +13668,10 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                         const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
                         setFormData({ ...formData, username: cleanVal });
                       }}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-[#ff2247] focus:bg-white rounded-2xl pl-24 pr-4 py-3 text-xs font-black text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-slate-350 font-mono"
+                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-[#ff2247] focus:bg-white rounded-2xl pl-[112px] pr-4 py-3 text-xs font-black text-slate-905 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold font-mono"
                     />
                   </div>
+                </div>
                   {formData.username && (
                     <div className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
                       {allUsers.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase() && u.uid !== user.uid) ? (
@@ -13747,7 +13685,6 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                       )}
                     </div>
                   )}
-                </div>
 
                 {/* Gender Switch */}
                 <div className="space-y-1.5">
@@ -13830,6 +13767,57 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                     </div>
                   </div>
                 )}
+
+                {/* Weight & Height Input Group */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Weight Field */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Weight (KG)</label>
+                    <input 
+                      type="number"
+                      placeholder="e.g. 70"
+                      min="30"
+                      max="200"
+                      value={formData.weight !== undefined ? formData.weight : ''}
+                      onChange={(e) => {
+                        const val = e.target.value === '' ? undefined : Number(e.target.value);
+                        setFormData({ ...formData, weight: val });
+                      }}
+                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
+                    />
+                  </div>
+
+                  {/* Height Field (Feet & Inches) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Height (Feet/Inches)</label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <input 
+                        type="number"
+                        placeholder="Ft"
+                        min="3"
+                        max="8"
+                        value={formData.heightFeet !== undefined ? formData.heightFeet : ''}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : Number(e.target.value);
+                          setFormData({ ...formData, heightFeet: val });
+                        }}
+                        className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-3 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold text-center"
+                      />
+                      <input 
+                        type="number"
+                        placeholder="In"
+                        min="0"
+                        max="11"
+                        value={formData.heightInches !== undefined ? formData.heightInches : ''}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : Number(e.target.value);
+                          setFormData({ ...formData, heightInches: val });
+                        }}
+                        className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-3 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold text-center"
+                      />
+                    </div>
+                  </div>
+                </div>
 
                 {/* Last Donation date picker */}
                 <div className="space-y-1.5">
@@ -13967,11 +13955,9 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
               </div>
             </form>
           </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+        </motion.div>
+      );
+    }
 
 function NotificationsView({ requests, globalAlerts, profile, addToast, onDonationDone }: { requests: BloodRequest[], globalAlerts?: any[], profile: UserProfile | null, addToast: (title: string, message: string, type: Toast['type']) => void, onDonationDone: (req: BloodRequest) => void }) {
   const [permission, setPermission] = useState<NotificationPermission>(
@@ -16712,9 +16698,9 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         </div>
 
         {/* Main Header Block: Avatar, Name & ID Card */}
-        <div className="px-5 pt-3 flex items-start justify-between gap-3">
+        <div className="px-5 pt-3 relative">
           {/* Left / Info Side */}
-          <div className="flex-1 flex gap-3.5 items-start">
+          <div className="flex gap-3.5 items-start pr-18">
             {/* Avatar Circle Container with Online dot */}
             <div className="relative shrink-0 select-none">
               <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/95 p-0.5 shadow-md bg-white/10">
@@ -16731,9 +16717,9 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
             </div>
 
             {/* Core Text Info Block */}
-            <div className="space-y-1.5 pt-1 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h1 className="text-sm font-extrabold text-white tracking-tight leading-none drop-shadow-sm">
+            <div className="space-y-1.5 pt-1 flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-sm font-extrabold text-white tracking-tight leading-none drop-shadow-sm truncate max-w-full">
                   {profile.displayName}
                 </h1>
                 {profile.isVerified && (
@@ -16771,11 +16757,11 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
             </div>
           </div>
 
-          {/* Right Custom QR Code/Donor ID Card */}
-          <div className="bg-white text-slate-800 rounded-xl p-2 shadow-lg flex flex-col items-center justify-center shrink-0 border border-slate-100 select-none animate-in fade-in duration-300 w-20">
-            <QrCode className="w-9 h-9 text-slate-900 stroke-[1.8]" />
-            <span className="text-[6.5px] text-slate-400 font-black tracking-widest mt-1 uppercase text-center">Donor ID</span>
-            <span className="text-[8px] text-slate-900 font-black tracking-tighter mt-0.5 uppercase">
+          {/* Right Custom QR Code/Donor ID Card positioned higher up in right corner */}
+          <div className="absolute top-[-1.5rem] right-4 z-40 bg-white text-slate-800 rounded-xl p-1.5 shadow-xl flex flex-col items-center justify-center shrink-0 border border-slate-100 select-none animate-in fade-in duration-300 w-18.5 hover:scale-[1.03] transition-all">
+            <QrCode className="w-8 h-8 text-slate-900 stroke-[1.8]" />
+            <span className="text-[6px] text-slate-400 font-black tracking-wider mt-1 uppercase text-center leading-none">Donor ID</span>
+            <span className="text-[7.5px] text-slate-900 font-extrabold tracking-tighter mt-0.5 uppercase leading-none">
               {getDonorId(profile, allUsers)}
             </span>
           </div>
@@ -16821,75 +16807,146 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         </div>
       </div>
 
-      {/* 3. Divided Detailed Info Area + Health Score */}
-      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex gap-4">
-        {/* Left column info items list */}
-        <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-2 text-left">
-          <div className="space-y-0.5">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Age</span>
-            <span className="text-[10px] font-bold text-slate-800">{profile.age || '28 Years'}</span>
-          </div>
-          
-          <div className="space-y-0.5">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Gender</span>
-            <span className="text-[10px] font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</span>
-          </div>
+      {/* 3. Divided Detailed Info Area + Dynamic BMI Calculator and Tips */}
+      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex flex-col gap-3">
+        <div className="flex gap-4">
+          {/* Left column info items list */}
+          <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-2.5 text-left">
+            <div className="space-y-0.5">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Age</span>
+              <span className="text-[10px] font-bold text-slate-800">{profile.age || '28 Years'}</span>
+            </div>
+            
+            <div className="space-y-0.5">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Gender</span>
+              <span className="text-[10px] font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</span>
+            </div>
 
-          <div className="space-y-0.5 col-span-2">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Location</span>
-            <span className="text-[10.5px] font-bold text-slate-800 tracking-tight flex items-center gap-0.5">
-              <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
-              <span>{profile.thana || 'Cox\'s Bazar Sadar'}, {profile.district || 'Cox\'s Bazar'}, BD</span>
-            </span>
-          </div>
+            <div className="space-y-0.5 col-span-2">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Location</span>
+              <span className="text-[10.5px] font-bold text-slate-800 tracking-tight flex items-center gap-0.5">
+                <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
+                <span>{profile.thana || 'Cox\'s Bazar Sadar'}, {profile.district || 'Cox\'s Bazar'}, BD</span>
+              </span>
+            </div>
 
-          <div className="space-y-0.5 col-span-2">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Email</span>
-            <span className="text-[10px] font-mono text-slate-600 truncate block max-w-[150px]">{profile.email || 'rashadahmed@gmail.com'}</span>
-          </div>
+            <div className="space-y-0.5 col-span-2">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Email</span>
+              <span className="text-[10px] font-mono text-slate-600 truncate block max-w-[150px]">{profile.email || 'rashadahmed@gmail.com'}</span>
+            </div>
 
-          <div className="space-y-0.5 col-span-2">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Phone</span>
-            <span className="text-[10px] font-extrabold text-slate-800">{profile.phone || '+880 1812-345678'}</span>
-          </div>
+            <div className="space-y-0.5 col-span-2">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Phone</span>
+              <span className="text-[10px] font-extrabold text-slate-800">{profile.phone || '+880 1812-345678'}</span>
+            </div>
 
-          <div className="space-y-0.5">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Blood Group</span>
-            <span className="text-[10px] font-extrabold text-rose-600">{profile.bloodGroup || 'O+'} (Positive)</span>
-          </div>
+            <div className="space-y-0.5">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Blood Group</span>
+              <span className="text-[10px] font-extrabold text-rose-600">{profile.bloodGroup || 'O+'} (Positive)</span>
+            </div>
 
-          <div className="space-y-0.5">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Weight</span>
-            <span className="text-[10px] font-bold text-slate-800">{profile.weight || '68 KG'}</span>
-          </div>
+            <div className="space-y-0.5">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Weight</span>
+              <span className="text-[10px] font-bold text-slate-800">
+                {profile.weight ? `${profile.weight} KG` : '68 KG'}
+              </span>
+            </div>
 
-          <div className="space-y-0.5 col-span-2">
-            <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Eligibility</span>
-            <span className="text-[9.5px] font-extrabold text-emerald-600 flex items-center gap-0.5">
-              <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 animate-ping"></span>
-              <span>{isEligibleNow ? 'Eligible to Donate' : 'Resting State Period'}</span>
-            </span>
-          </div>
-        </div>
+            <div className="space-y-0.5 col-span-2">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Height</span>
+              <span className="text-[10px] font-bold text-slate-800">
+                {profile.heightFeet ? `${profile.heightFeet} Ft ${profile.heightInches || 0} In` : '5 Ft 9 In'}
+              </span>
+            </div>
 
-        {/* Right Health Score circle container */}
-        <div className="w-[105px] bg-rose-50/20 rounded-xl p-2.5 border border-rose-100 flex flex-col items-center justify-center shrink-0">
-          <span className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest mb-1.5 text-center leading-none">Health Score</span>
-          
-          <div className="relative w-16 h-16 flex items-center justify-center">
-            {/* SVG Progress Circle Background */}
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-              <circle cx="18" cy="18" r="16" fill="none" stroke="#FEE2E2" strokeWidth="2.5" />
-              <circle cx="18" cy="18" r="16" fill="none" stroke="#F43F5E" strokeWidth="2.5" strokeDasharray="100" strokeDashoffset={100 - 96} strokeLinecap="round" />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-              <span className="text-sm font-black text-slate-900">96</span>
-              <span className="text-[6.5px] text-slate-400 font-bold">of 100</span>
+            <div className="space-y-0.5 col-span-2">
+              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Eligibility</span>
+              <span className="text-[9.5px] font-extrabold text-emerald-600 flex items-center gap-0.5">
+                <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 animate-ping"></span>
+                <span>{isEligibleNow ? 'Eligible to Donate' : 'Resting State Period'}</span>
+              </span>
             </div>
           </div>
 
-          <span className="text-[8.5px] font-black text-emerald-600 uppercase tracking-widest mt-1.5 text-center leading-none">Excellent</span>
+          {/* Right Dynamic BMI Circular Container */}
+          {(() => {
+            const weightKg = profile.weight || 68;
+            const feet = profile.heightFeet || 5;
+            const inches = profile.heightInches || 9;
+            const totalInches = (feet * 12) + inches;
+            const heightMeters = totalInches * 0.0254;
+            const bmi = Number((weightKg / (heightMeters * heightMeters)).toFixed(1));
+
+            let classification = "Normal Weight";
+            let colorClass = "stroke-emerald-500";
+            let textClass = "text-emerald-600";
+            
+            if (bmi < 18.5) {
+              classification = "Underweight";
+              colorClass = "stroke-amber-500";
+              textClass = "text-amber-600";
+            } else if (bmi >= 25 && bmi < 30) {
+              classification = "Overweight";
+              colorClass = "stroke-amber-500";
+              textClass = "text-amber-600";
+            } else if (bmi >= 30) {
+              classification = "Obese";
+              colorClass = "stroke-rose-500";
+              textClass = "text-rose-600";
+            }
+
+            // Map BMI (range 15-35) into percentage offset for 0 to 100 dash array
+            const percentage = Math.max(10, Math.min(100, ((bmi - 12) / 28) * 100));
+
+            return (
+              <div className="w-[105px] bg-[#F8FAFC] rounded-xl p-2.5 border border-slate-100 flex flex-col items-center justify-center shrink-0">
+                <span className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest mb-1.5 text-center leading-none">BMI Score</span>
+                
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="16" fill="none" stroke="#E2E8F0" strokeWidth="2.5" />
+                    <circle cx="18" cy="18" r="16" fill="none" className={colorClass} strokeWidth="2.5" strokeDasharray="100" strokeDashoffset={100 - percentage} strokeLinecap="round" />
+                  </svg>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                    <span className="text-sm font-black text-slate-900">{bmi}</span>
+                    <span className="text-[6.5px] text-slate-400 font-bold uppercase">Metric</span>
+                  </div>
+                </div>
+
+                <span className={`text-[8px] font-black uppercase tracking-widest mt-2 text-center leading-none ${textClass}`}>{classification}</span>
+              </div>
+            );
+          })()}
         </div>
+
+        {/* Clinically Driven BMI Tips */}
+        {(() => {
+          const weightKg = profile.weight || 68;
+          const feet = profile.heightFeet || 5;
+          const inches = profile.heightInches || 9;
+          const totalInches = (feet * 12) + inches;
+          const heightMeters = totalInches * 0.0254;
+          const bmi = Number((weightKg / (heightMeters * heightMeters)).toFixed(1));
+
+          let tip = "Healthy dynamic! Maintain hydrated nutrition and optimal mineral counts between donation sessions.";
+          if (bmi < 18.5) {
+            tip = "Prioritize nutrient-dense calories and organic proteins to reach ideal donor mass limits safely.";
+          } else if (bmi >= 25 && bmi < 30) {
+            tip = "Consider balanced fiber counts and active cardio exercises to support optimal blood pressure.";
+          } else if (bmi >= 30) {
+            tip = "Choose high-quality whole foods, limit sodium intake, and monitor metabolic stats regularly.";
+          }
+
+          return (
+            <div className="mt-1 pt-2.5 border-t border-slate-100">
+              <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-widest block leading-none">Clinician Medical Advice & BMI Tips</span>
+              <p className="text-[10px] text-slate-600 font-semibold leading-normal mt-1 flex items-start gap-1">
+                <span className="text-rose-500 text-[11px] shrink-0 leading-none">💡</span>
+                <span>{tip}</span>
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       {/* 4. Two-Column Row (Recent Donations & Achievements) */}

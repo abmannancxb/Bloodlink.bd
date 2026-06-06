@@ -45,266 +45,433 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      // Ensure crisp high definition
+      // Ensure crisp high definition with widescreen standard layout cropped to the card outline
       canvas.width = 1000;
-      canvas.height = 524;
+      canvas.height = 680;
 
-      // 1. Draw rounded outer clipper path for high-end look
-      ctx.save();
-      ctx.beginPath();
-      const radius = 32;
-      ctx.moveTo(radius, 0);
-      ctx.lineTo(canvas.width - radius, 0);
-      ctx.quadraticCurveTo(canvas.width, 0, canvas.width, radius);
-      ctx.lineTo(canvas.width, canvas.height - radius);
-      ctx.quadraticCurveTo(canvas.width, canvas.height, canvas.width - radius, canvas.height);
-      ctx.lineTo(radius, canvas.height);
-      ctx.quadraticCurveTo(0, canvas.height, 0, canvas.height - radius);
-      ctx.lineTo(0, radius);
-      ctx.quadraticCurveTo(0, 0, radius, 0);
-      ctx.closePath();
-      ctx.clip();
-
-      // 2. Draw rich crimson-to-ruby red linear gradient background
-      const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      grad.addColorStop(0, "#E53935"); // Primary Curvaceous From
-      grad.addColorStop(0.5, "#FF1744"); // Mid Ruby Active
-      grad.addColorStop(1, "#E31B23"); // Baseline Ruby Solid
-      ctx.fillStyle = grad;
+      // Draw elegant soft background of the card environment (soft off-white bento stage)
+      ctx.fillStyle = "#F8FAFC";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // 3. Draw ambient lighting overlay (curved glowing shapes/vector rings)
-      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      // 1. Draw Red Card background
+      ctx.save();
+      const redCardX = 25;
+      const redCardY = 25;
+      const redCardW = 950;
+      const redCardH = 630;
+      const redCardR = 48;
+
+      // Realistic premium drop shadow on the central ID card
+      ctx.shadowColor = "rgba(220, 38, 38, 0.25)";
+      ctx.shadowBlur = 35;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 15;
+
       ctx.beginPath();
-      ctx.arc(-50, canvas.height + 50, 240, 0, Math.PI * 2);
+      ctx.roundRect 
+        ? ctx.roundRect(redCardX, redCardY, redCardW, redCardH, redCardR) 
+        : drawFallbackRoundRect(ctx, redCardX, redCardY, redCardW, redCardH, redCardR);
+      ctx.closePath();
+
+      // Premium ruby cherry red linear gradient background from screenshot
+      const grad = ctx.createLinearGradient(redCardX, redCardY, redCardX, redCardY + redCardH);
+      grad.addColorStop(0, "#FF406D"); // Light coral rose accent
+      grad.addColorStop(0.35, "#EF4444"); // Mid vibrant red
+      grad.addColorStop(1, "#D31F27"); // Sleek base crimson red
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.restore(); // Restore shadow so it does not affect any inner items
+
+      // Draw premium design/wave line overlays on card background with clipping to stay within margins
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect 
+        ? ctx.roundRect(redCardX, redCardY, redCardW, redCardH, redCardR) 
+        : drawFallbackRoundRect(ctx, redCardX, redCardY, redCardW, redCardH, redCardR);
+      ctx.clip();
+
+      // Elegant glow behind the profile photo
+      const avatarBoxX = 135;
+      const avatarBoxY = 250;
+      const avatarR = 75;
+      const labelX = 240;
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.beginPath();
+      ctx.arc(avatarBoxX, avatarBoxY, 200, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.fillStyle = "rgba(255, 64, 129, 0.15)";
+      // Top right elegant concentric vector swoop lines
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 3.5;
       ctx.beginPath();
-      ctx.arc(canvas.width + 50, -50, 300, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.arc(redCardX + redCardW, redCardY, 320, Math.PI * 0.95, Math.PI * 1.55);
+      ctx.stroke();
 
-      // Subtle modern tech vector horizontal lines for sleek touch
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
       ctx.lineWidth = 1.5;
-      for (let i = 0; i < canvas.height; i += 30) {
-        ctx.beginPath();
-        ctx.moveTo(0, i);
-        ctx.lineTo(canvas.width, i);
-        ctx.stroke();
-      }
+      ctx.beginPath();
+      ctx.arc(redCardX + redCardW, redCardY, 380, Math.PI * 0.95, Math.PI * 1.55);
+      ctx.stroke();
 
-      // 4. Header title: "DONOR PROFILE"
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.font = "black 20px 'Space Grotesk', 'Inter', sans-serif";
+      // Bottom left concentric wave arcs surrounding the details area
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(redCardX, redCardY + redCardH, 450, Math.PI * 1.6, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+
+      // 2. Header Title text: "DONOR PROFILE"
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "900 34px 'Space Grotesk', 'Inter', sans-serif";
       ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      // Track the letter spacing nicely matching photo standard
+      ctx.textBaseline = "middle";
       if ("letterSpacing" in ctx) {
-        ctx.letterSpacing = "10px";
+        ctx.letterSpacing = "15px";
       }
-      ctx.fillText("DONOR PROFILE", canvas.width / 2, 50);
-
-      // Restore letterspacing for rest of texts
+      ctx.fillText("DONOR PROFILE", redCardX + redCardW / 2, redCardY + 65);
       if ("letterSpacing" in ctx) {
         ctx.letterSpacing = "normal";
       }
 
-      // 5. Draw QR Code White Container Box on the Right
-      const qrBoxX = 720;
-      const qrBoxY = 135;
-      const qrBoxW = 190;
-      const qrBoxH = 240;
-      const qrR = 20;
+      // 3. Right White Box for QR Code badge (Floating with soft corner matching frame - aligned higher up!)
+      const qrBoxX = 705;
+      const qrBoxY = 110;
+      const qrBoxW = 220;
+      const qrBoxH = 265;
+      const qrR = 28;
+
+      ctx.save();
+      // Premium depth shadows under the floating QR panel to make it high-end and pop-out
+      ctx.shadowColor = "rgba(15, 23, 42, 0.12)";
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 8;
 
       ctx.fillStyle = "#FFFFFF";
       ctx.beginPath();
-      ctx.moveTo(qrBoxX + qrR, qrBoxY);
-      ctx.lineTo(qrBoxX + qrBoxW - qrR, qrBoxY);
-      ctx.quadraticCurveTo(qrBoxX + qrBoxW, qrBoxY, qrBoxX + qrBoxW, qrBoxY + qrR);
-      ctx.lineTo(qrBoxX + qrBoxW, qrBoxY + qrBoxH - qrR);
-      ctx.quadraticCurveTo(qrBoxX + qrBoxW, qrBoxY + qrBoxH, qrBoxX + qrBoxW - qrR, qrBoxY + qrBoxH);
-      ctx.lineTo(qrBoxX + qrR, qrBoxY + qrBoxH);
-      ctx.quadraticCurveTo(qrBoxX, qrBoxY + qrBoxH, qrBoxX, qrBoxY + qrBoxH - qrR);
-      ctx.lineTo(qrBoxX, qrBoxY + qrR);
-      ctx.quadraticCurveTo(qrBoxX, qrBoxY, qrBoxX + qrR, qrBoxY);
-      ctx.closePath();
+      ctx.roundRect 
+        ? ctx.roundRect(qrBoxX, qrBoxY, qrBoxW, qrBoxH, qrR) 
+        : drawFallbackRoundRect(ctx, qrBoxX, qrBoxY, qrBoxW, qrBoxH, qrR);
       ctx.fill();
+      ctx.restore();
 
-      // Add soft inset shadow line in QR container
-      ctx.strokeStyle = "rgba(240, 240, 240, 0.8)";
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      // Style finder patterns and modern high-end vector QR grid matrix
+      const matrixX = qrBoxX + 40;
+      const matrixY = qrBoxY + 25;
+      const matrixSize = 140;
 
-      // Draw stylized dynamic vertical barcode lines instead of QR matrix
-      const barcodeX = qrBoxX + 20;
-      const barcodeY = qrBoxY + 20;
-      const barcodeW = qrBoxW - 40;
-      const barcodeH = 120;
+      drawFinderPattern(ctx, matrixX, matrixY, 35);
+      drawFinderPattern(ctx, matrixX + matrixSize - 35, matrixY, 35);
+      drawFinderPattern(ctx, matrixX, matrixY + matrixSize - 35, 35);
 
-      ctx.fillStyle = "#0F172A"; // Slate-900 for barcodes
-
-      // Seed the generator statically with profile.uid
+      // Seed deterministic generator with UID to construct static unique QR representation
       srand(profile.uid);
-      
-      let currX = barcodeX;
-      while (currX < barcodeX + barcodeW) {
-        const thickness = Math.floor(random() * 4) + 1; // line width 1 to 4
-        const space = Math.floor(random() * 5) + 2; // spacing 2 to 6
-        
-        ctx.fillRect(currX, barcodeY, thickness, barcodeH);
-        currX += thickness + space;
+
+      // Draw high-density QR pixel squares
+      const cellSize = 7;
+      ctx.fillStyle = "#1E293B"; // Slate dark pixel grid
+      for (let row = 0; row < matrixSize; row += cellSize) {
+        for (let col = 0; col < matrixSize; col += cellSize) {
+          const isTopLeft = row < 40 && col < 40;
+          const isTopRight = row < 40 && col > matrixSize - 40;
+          const isBottomLeft = row > matrixSize - 40 && col < 40;
+
+          if (!isTopLeft && !isTopRight && !isBottomLeft) {
+            if (random() > 0.42) {
+              ctx.beginPath();
+              ctx.roundRect 
+                ? ctx.roundRect(matrixX + col + 1, matrixY + row + 1, cellSize - 2, cellSize - 2, 2.5)
+                : ctx.fillRect(matrixX + col + 1, matrixY + row + 1, cellSize - 2, cellSize - 2);
+              ctx.fill();
+            }
+          }
+        }
       }
 
-      // Text inside White Barcode Box
-      ctx.fillStyle = "#64748B"; // slate-500
-      ctx.font = "900 9px 'Space Grotesk', sans-serif";
-      ctx.textAlign = "center";
+      // Labels below the QR inside the white panel
+      ctx.fillStyle = "#64748B"; // Premium medium slate
+      ctx.font = "900 12px 'Space Grotesk', sans-serif";
       ctx.textBaseline = "middle";
-      if ("letterSpacing" in ctx) ctx.letterSpacing = "2px";
-      ctx.fillText("DONOR LINK", qrBoxX + qrBoxW / 2, qrBoxY + 165);
-      if ("letterSpacing" in ctx) ctx.letterSpacing = "normal";
+      ctx.textAlign = "center";
+      if ("letterSpacing" in ctx) {
+        ctx.letterSpacing = "4px";
+      }
+      ctx.fillText("DONOR ID", qrBoxX + qrBoxW / 2, qrBoxY + 195); // Perfectly balanced padding
+      if ("letterSpacing" in ctx) {
+        ctx.letterSpacing = "normal";
+      }
 
-      ctx.fillStyle = "#0F172A"; // slate-900
-      ctx.font = "900 13px 'Courier New', monospace";
-      const domainLink = profile.username 
-        ? `bloodlink.bd/${profile.username.toLowerCase()}`
-        : `bloodlink.bd/BDNR-${String(allUsers.findIndex(u => u.uid === profile.uid) !== -1 ? allUsers.findIndex(u => u.uid === profile.uid) + 1 : '01').padStart(2, '0')}`;
-      ctx.fillText(domainLink, qrBoxX + qrBoxW / 2, qrBoxY + 185);
+      // Big, highly bold and legible DONOR ID
+      ctx.fillStyle = "#0F172A"; // Ultra slate dark
+      ctx.font = "900 24px 'Space Grotesk', sans-serif";
+      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + 225);
 
-      ctx.fillStyle = "#E11D48"; // rose-600 format
-      ctx.font = "bold 9px 'Space Grotesk', sans-serif";
-      ctx.fillText(donorId, qrBoxX + qrBoxW / 2, qrBoxY + 215);
-
-      // 6. Draw Left Column Text & Details
-      const labelX = 320;
-
-      // Primary name
+      // 4. Draw Left Column elements matching vertical layout of screenshot
+      const nameText = profile.displayName.toUpperCase();
       ctx.fillStyle = "#FFFFFF";
-      ctx.font = "900 38px 'Space Grotesk', 'Inter', sans-serif";
+      
+      // Dynamic font size optimization for long names to prevent bleeding into QR Code area (starts at 705)
+      let nameFontSize = 42;
+      ctx.font = `900 ${nameFontSize}px 'Space Grotesk', 'Inter', sans-serif`;
+      while (ctx.measureText(nameText).width > 440 && nameFontSize > 22) {
+        nameFontSize -= 2;
+        ctx.font = `900 ${nameFontSize}px 'Space Grotesk', 'Inter', sans-serif`;
+      }
+      
       ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.fillText(profile.displayName, labelX, 150);
+      ctx.textBaseline = "middle";
+      ctx.fillText(nameText, labelX, 175);
 
-      // Verified check circle if eligible
-      const textWidth = ctx.measureText(profile.displayName).width;
+      const nameW = ctx.measureText(nameText).width;
+
+      // Draw high fidelity verified check Badge right next to the Name
       if (profile.isVerified) {
-        ctx.fillStyle = "#10B981"; // emerald-500 verified
+        const checkCenterX = labelX + nameW + 24;
+        const checkCenterY = 175;
+        const checkRadius = 14;
+
+        ctx.fillStyle = "#FFFFFF";
         ctx.beginPath();
-        ctx.arc(labelX + textWidth + 25, 163, 11, 0, Math.PI * 2);
+        ctx.arc(checkCenterX, checkCenterY, checkRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw small beautiful tick
-        ctx.strokeStyle = "#FFFFFF";
-        ctx.lineWidth = 2.5;
+        // Custom Crimson Thick Check shape
+        ctx.strokeStyle = "#E11D48";
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
         ctx.beginPath();
-        ctx.moveTo(labelX + textWidth + 21, 163);
-        ctx.lineTo(labelX + textWidth + 24, 166);
-        ctx.lineTo(labelX + textWidth + 29, 159);
+        ctx.moveTo(checkCenterX - 5, checkCenterY);
+        ctx.lineTo(checkCenterX - 1.8, checkCenterY + 3.8);
+        ctx.lineTo(checkCenterX + 5, checkCenterY - 3.8);
         ctx.stroke();
       }
 
-      // Draw Badge Pills side-by-side
-      // Badge 1 (Blood Group): White pill with red group
-      const bgPillX = labelX;
-      const bgPillY = 195;
-      const bgPillW = 160;
-      const bgPillH = 34;
-      const pillR = 17;
+      // Pills side-by-side
+      // Pill 1: Blood Group
+      const bgText = `• ${profile.bloodGroup || "O+"} Positive`;
+      ctx.font = "900 18px 'Space Grotesk', sans-serif";
+      const pill1W = ctx.measureText(bgText).width + 30;
+      const pillH = 40;
+      const pillY = 215;
 
-      ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+      ctx.fillStyle = "#FFFFFF";
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(bgPillX, bgPillY, bgPillW, bgPillH, pillR) : drawFallbackRoundRect(ctx, bgPillX, bgPillY, bgPillW, bgPillH, pillR);
+      ctx.roundRect 
+        ? ctx.roundRect(labelX, pillY, pill1W, pillH, 20) 
+        : drawFallbackRoundRect(ctx, labelX, pillY, pill1W, pillH, 20);
       ctx.fill();
 
-      // Draw blood circle node
-      ctx.fillStyle = "#EC4899"; // pink-500
-      ctx.beginPath();
-      ctx.arc(bgPillX + 16, bgPillY + 17, 5, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Blood Badge Text
-      ctx.fillStyle = "#E11D48"; // rose-600
-      ctx.font = "900 13px 'Space Grotesk', sans-serif";
+      ctx.fillStyle = "#E11D48"; // Premium Rose
       ctx.textAlign = "left";
-      ctx.textBaseline = "middle"; // PERFECT ALIGNMENT
-      ctx.fillText(`${profile.bloodGroup || "O+"} Positive`, bgPillX + 28, bgPillY + 17);
+      ctx.textBaseline = "middle";
+      ctx.fillText(bgText, labelX + 15, pillY + 20);
 
-      // Badge 2 (Verified Rank Badge): White pill with green verified
-      const rankPillX = labelX + 175;
-      const rankPillW = 155;
+      // Pill 2: Verified Donor
+      const verText = "Verified Donor";
+      ctx.font = "900 18px 'Space Grotesk', sans-serif";
+      const pill2W = ctx.measureText(verText).width + 50;
+      const pill2X = labelX + pill1W + 15;
 
-      ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
+      ctx.fillStyle = "#FFFFFF";
       ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(rankPillX, bgPillY, rankPillW, bgPillH, pillR) : drawFallbackRoundRect(ctx, rankPillX, bgPillY, rankPillW, bgPillH, pillR);
+      ctx.roundRect 
+        ? ctx.roundRect(pill2X, pillY, pill2W, pillH, 20) 
+        : drawFallbackRoundRect(ctx, pill2X, pillY, pill2W, pillH, 20);
       ctx.fill();
 
-      // Green shield node
-      ctx.strokeStyle = "#10B981"; // emerald-500
-      ctx.lineWidth = 2;
+      // Shield active emerald outline logo inside Verified Pill
+      ctx.strokeStyle = "#10B981";
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
       ctx.beginPath();
-      ctx.moveTo(rankPillX + 12, bgPillY + 12);
-      ctx.lineTo(rankPillX + 18, bgPillY + 8);
-      ctx.lineTo(rankPillX + 24, bgPillY + 12);
-      ctx.lineTo(rankPillX + 24, bgPillY + 19);
-      ctx.quadraticCurveTo(rankPillX + 18, bgPillY + 26, rankPillX + 18, bgPillY + 26);
-      ctx.quadraticCurveTo(rankPillX + 12, bgPillY + 19, rankPillX + 12, bgPillY + 19);
+      ctx.moveTo(pill2X + 15, pillY + 15);
+      ctx.lineTo(pill2X + 21, pillY + 11);
+      ctx.lineTo(pill2X + 27, pillY + 15);
+      ctx.lineTo(pill2X + 27, pillY + 21);
+      ctx.quadraticCurveTo(pill2X + 21, pillY + 28, pill2X + 21, pillY + 28);
+      ctx.quadraticCurveTo(pill2X + 15, pillY + 22, pill2X + 15, pillY + 22);
       ctx.closePath();
       ctx.stroke();
 
-      ctx.fillStyle = "#059669"; // emerald-600 font
-      ctx.font = "900 13px 'Space Grotesk', sans-serif";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "middle"; // PERFECT ALIGNMENT
-      ctx.fillText("Verified Donor", rankPillX + 32, bgPillY + 17);
-
-      // 7. Last Donation, Location, and Availability Rows
-      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-      ctx.font = "bold 15px 'Space Grotesk', 'Inter', sans-serif";
-
-      // Row A: Map Pin Icon & Location details
-      const rowY1 = 265;
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillText("📍", labelX, rowY1 + 13);
-      ctx.font = "bold 16px 'Space Grotesk', sans-serif";
-      ctx.fillText(`${profile.thana || "Cox's Bazar"}, ${profile.district || "Cox's Bazar"}, BD`, labelX + 22, rowY1 + 14);
-
-      // Row B: Calendar Icon & Info
-      const rowY2 = 315;
-      ctx.font = "bold 15px sans-serif";
-      ctx.fillText("📅", labelX, rowY2 + 13);
-      ctx.font = "bold 16px 'Space Grotesk', sans-serif";
-      ctx.fillText(`Last Donation: ${formatDisplayDate(profile.lastDonationDate)}`, labelX + 22, rowY2 + 14);
-
-      // Row C: Pulse Active Status Node
-      const rowY3 = 365;
-      ctx.fillStyle = "#4ADE80"; // emerald-400 indicator node
       ctx.beginPath();
-      ctx.arc(labelX + 8, rowY3 + 12, 6, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.font = "900 16px 'Space Grotesk', sans-serif";
-      ctx.fillText("Online • Available for donor search", labelX + 22, rowY3 + 17);
-
-      // 8. Load and render circular avatar of the donor with robust CORS handling
-      const avatarBoxX = 130;
-      const avatarBoxY = 262; // vertical center circle
-      const avatarR = 80;
-
-      // Draw circular avatar with premium 2.5D white framing
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(avatarBoxX, avatarBoxY, avatarR + 2, 0, Math.PI * 2);
+      ctx.moveTo(pill2X + 18, pillY + 19);
+      ctx.lineTo(pill2X + 20, pillY + 21);
+      ctx.lineTo(pill2X + 24, pillY + 17);
       ctx.stroke();
 
-      // Try reading user profile image directly
+      ctx.fillStyle = "#059669"; // emerald dark
+      ctx.fillText(verText, pill2X + 37, pillY + 20);
+
+      // Location details line — Optimized to prevent overlapping with any QR Code box on the right (starts at X=705)
+      const localThana = profile.thana || "Cox's Bazar Sadar";
+      const localDistrict = profile.district || "Cox's Bazar";
+      const locationText = `📍 Location: ${localThana}, ${localDistrict}`;
+      ctx.fillStyle = "#FFFFFF";
+      
+      let locFontSize = 18;
+      ctx.font = `900 ${locFontSize}px 'Space Grotesk', sans-serif`;
+      while (ctx.measureText(locationText).width > 440 && locFontSize > 13) {
+        locFontSize -= 1;
+        ctx.font = `900 ${locFontSize}px 'Space Grotesk', sans-serif`;
+      }
+      ctx.fillText(locationText, labelX, 285);
+
+      // Height and Weight metrics row — Optimized to ensure Height is fully visible and not hidden/cut-off in the QR area
+      const heightStr = profile.heightFeet ? `${profile.heightFeet} Ft ${profile.heightInches || 0} In` : "5 Ft 9 In";
+      const weightStr = profile.weight ? `${profile.weight} KG` : "68 KG";
+      const statsRowText = `⚖️ Weight: ${weightStr}  |  📏 Height: ${heightStr}`;
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      
+      let statsFontSize = 16;
+      ctx.font = `900 ${statsFontSize}px 'Space Grotesk', sans-serif`;
+      while (ctx.measureText(statsRowText).width > 440 && statsFontSize > 12) {
+        statsFontSize -= 1;
+        ctx.font = `900 ${statsFontSize}px 'Space Grotesk', sans-serif`;
+      }
+      ctx.fillText(statsRowText, labelX, 335);
+
+      // Date parsing to visual style
+      const formattedDonationDate = formatDisplayDate(profile.lastDonationDate);
+      let displayDateText = formattedDonationDate;
+      if (formattedDonationDate && formattedDonationDate.includes("-")) {
+        try {
+          const parts = formattedDonationDate.split("-");
+          if (parts.length === 3) {
+            const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+            const year = parts[0];
+            const month = months[parseInt(parts[1], 10) - 1] || "Apr";
+            const day = parseInt(parts[2], 10);
+            displayDateText = `${day} ${month} ${year}`;
+          }
+        } catch (e) {}
+      }
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "900 20px 'Space Grotesk', sans-serif";
+      ctx.fillText(`🗓️ Last Donation: ${displayDateText || "20 Apr 2024"}`, labelX, 380);
+
+      // Active status dot and text
+      ctx.fillStyle = "#10B981"; // Emerald
+      ctx.beginPath();
+      ctx.arc(labelX + 8, 420, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "900 18px 'Space Grotesk', sans-serif";
+      ctx.fillText("Online • Available for donation", labelX + 24, 420);
+
+      // 5. Draw Unified White Bar inside Red Card at the bottom
+      const whiteBarX = redCardX + 25;
+      const whiteBarY = 475;
+      const whiteBarW = redCardW - 50;
+      const whiteBarH = 150;
+      const whiteBarR = 28;
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.beginPath();
+      ctx.roundRect 
+        ? ctx.roundRect(whiteBarX, whiteBarY, whiteBarW, whiteBarH, whiteBarR) 
+        : drawFallbackRoundRect(ctx, whiteBarX, whiteBarY, whiteBarW, whiteBarH, whiteBarR);
+      ctx.fill();
+
+      // Separate 4 stats blocks horizontally inside the white bar
+      const statCols = [
+        {
+          value: String(profile.donationCount || 25),
+          label1: "TOTAL",
+          label2: "DONATIONS",
+          bgColor: "#EFF6FF",
+          iconColor: "#3B82F6",
+          drawIcon: (cx: number, cy: number) => drawDroplet(ctx, cx, cy, 14)
+        },
+        {
+          value: String((profile.donationCount || 25) * 3),
+          label1: "LIVES",
+          label2: "SAVED",
+          bgColor: "#FFF1F2",
+          iconColor: "#EF4444",
+          drawIcon: (cx: number, cy: number) => drawHeart(ctx, cx, cy, 13)
+        },
+        {
+          value: "4.9",
+          label1: "STAR",
+          label2: "RATING",
+          bgColor: "#FEF3C7",
+          iconColor: "#F59E0B",
+          drawIcon: (cx: number, cy: number) => drawStar(ctx, cx, cy, 13)
+        },
+        {
+          value: "98%",
+          label1: "RESPONSE",
+          label2: "RATE",
+          bgColor: "#FDF2F8",
+          iconColor: "#EC4899",
+          drawIcon: (cx: number, cy: number) => {
+            ctx.strokeStyle = "#EC4899";
+            ctx.lineWidth = 3;
+            ctx.lineCap = "round";
+            ctx.lineJoin = "round";
+            drawPulse(ctx, cx, cy, 14);
+          }
+        }
+      ];
+
+      statCols.forEach((col, i) => {
+        const cx = whiteBarX + 112.5 + i * 225;
+        const iconY = whiteBarY + 38;
+
+        // Soft circle background
+        ctx.fillStyle = col.bgColor;
+        ctx.beginPath();
+        ctx.arc(cx, iconY, 22, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw the exact vector icon
+        ctx.fillStyle = col.iconColor;
+        col.drawIcon(cx, iconY);
+
+        // Big value number
+        ctx.fillStyle = "#0F172A";
+        ctx.font = "900 32px 'Space Grotesk', sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(col.value, cx, whiteBarY + 85);
+
+        // Underneath labels
+        ctx.fillStyle = "#64748B";
+        ctx.font = "900 11px 'Space Grotesk', sans-serif";
+        ctx.fillText(col.label1, cx, whiteBarY + 114);
+        ctx.fillText(col.label2, cx, whiteBarY + 130);
+      });
+
+      // Draw dividing vertical line accents between bento sections
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.05)";
+      ctx.lineWidth = 2;
+      for (let i = 1; i <= 3; i++) {
+        const lx = whiteBarX + i * 225;
+        ctx.beginPath();
+        ctx.moveTo(lx, whiteBarY + 25);
+        ctx.lineTo(lx, whiteBarY + whiteBarH - 25);
+        ctx.stroke();
+      }
+
+      // 6. Avatar Circle Image Placement
+
       const photoSrc = profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName)}&size=200&background=F1F5F9&color=0F172A&bold=true`;
 
-      const avatarImg = new Image();
-      avatarImg.crossOrigin = "anonymous";
-      avatarImg.src = photoSrc;
+      // Draw premium thick white circle profile border
+      ctx.save();
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.arc(avatarBoxX, avatarBoxY, avatarR + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
 
       const drawDefaultFallbackAvatar = () => {
         ctx.save();
@@ -312,15 +479,13 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
         ctx.arc(avatarBoxX, avatarBoxY, avatarR, 0, Math.PI * 2);
         ctx.clip();
 
-        // Gorgeous slate fill
         ctx.fillStyle = "#F1F5F9";
         ctx.fillRect(avatarBoxX - avatarR, avatarBoxY - avatarR, avatarR * 2, avatarR * 2);
 
-        // Draw big gorgeous letter initials representing name
         ctx.fillStyle = "#0F172A";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = "900 54px 'Space Grotesk', sans-serif";
+        ctx.font = "900 60px 'Space Grotesk', sans-serif";
         const initials = profile.displayName
           .split(" ")
           .map((n) => n[0])
@@ -334,6 +499,10 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
         setGenerating(false);
       };
 
+      const avatarImg = new Image();
+      avatarImg.crossOrigin = "anonymous";
+      avatarImg.src = photoSrc;
+
       avatarImg.onload = () => {
         try {
           ctx.save();
@@ -346,7 +515,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
           drawStatusIndicator(ctx, avatarBoxX, avatarBoxY, avatarR);
           setGenerating(false);
         } catch (e) {
-          console.warn("Canvas Tainted, using slate avatar backup:", e);
+          console.warn("Canvas Tainted, using slate fallback avatar:", e);
           drawDefaultFallbackAvatar();
         }
       };
@@ -361,18 +530,80 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
     renderCard();
   }, [isOpen, profile]);
 
+  const drawFinderPattern = (ctx: CanvasRenderingContext2D, x: number, y: number, size: number) => {
+    ctx.fillStyle = "#1E293B";
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x, y, size, size, 10) : ctx.fillRect(x, y, size, size);
+    ctx.fill();
+
+    ctx.fillStyle = "#FFFFFF";
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x + 5, y + 5, size - 10, size - 10, 6) : ctx.fillRect(x + 5, y + 5, size - 10, size - 10);
+    ctx.fill();
+
+    ctx.fillStyle = "#1E293B";
+    ctx.beginPath();
+    ctx.roundRect ? ctx.roundRect(x + 10, y + 10, size - 20, size - 20, 4) : ctx.fillRect(x + 10, y + 10, size - 20, size - 20);
+    ctx.fill();
+  };
+
+  const drawDroplet = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size);
+    ctx.quadraticCurveTo(cx + size, cy + size / 4, cx, cy + size);
+    ctx.quadraticCurveTo(cx - size, cy + size / 4, cx, cy - size);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawHeart = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - size / 4);
+    ctx.bezierCurveTo(cx - size, cy - size, cx - size, cy + size / 2, cx, cy + size);
+    ctx.bezierCurveTo(cx + size, cy + size / 2, cx + size, cy - size, cx, cy - size / 4);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawStar = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+      ctx.lineTo(
+        cx + Math.cos(((18 + i * 72) * Math.PI) / 180) * size,
+        cy - Math.sin(((18 + i * 72) * Math.PI) / 180) * size
+      );
+      ctx.lineTo(
+        cx + Math.cos(((54 + i * 72) * Math.PI) / 180) * (size / 2.2),
+        cy - Math.sin(((54 + i * 72) * Math.PI) / 180) * (size / 2.2)
+      );
+    }
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawPulse = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number) => {
+    ctx.beginPath();
+    ctx.moveTo(cx - size, cy);
+    ctx.lineTo(cx - size * 0.4, cy);
+    ctx.lineTo(cx - size * 0.2, cy - size * 0.6);
+    ctx.lineTo(cx, cy + size * 0.7);
+    ctx.lineTo(cx + size * 0.2, cy - size * 0.4);
+    ctx.lineTo(cx + size * 0.4, cy);
+    ctx.lineTo(cx + size, cy);
+    ctx.stroke();
+  };
+
   const drawStatusIndicator = (ctx: CanvasRenderingContext2D, centerX: number, centerY: number, radius: number) => {
-    // Beautiful green indicator
     ctx.save();
-    const indX = centerX + radius * Math.cos(Math.PI / 4);
-    const indY = centerY + radius * Math.sin(Math.PI / 4);
-    
+    const indX = centerX + radius * Math.cos(Math.PI / 4) - 2;
+    const indY = centerY + radius * Math.sin(Math.PI / 4) - 2;
+
     ctx.fillStyle = "#10B981"; // Status circle emerald
     ctx.strokeStyle = "#FFFFFF"; // Frame padding
-    ctx.lineWidth = 3;
-    
+    ctx.lineWidth = 10;
+
     ctx.beginPath();
-    ctx.arc(indX, indY, 15, 0, Math.PI * 2);
+    ctx.arc(indX, indY, 19, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -408,9 +639,14 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
 
   // Safe copy links to clipboard
   const handleCopyLink = () => {
-    const shareUrl = profile.username 
-      ? `${window.location.origin}/${profile.username.toLowerCase()}` 
-      : `${window.location.origin}?profile=${profile.uid}`;
+    const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
+    const userIndex = sortedAll.findIndex(u => u.uid === profile.uid);
+    const serialNoStr = String(userIndex !== -1 ? userIndex + 1 : 1).padStart(2, '0');
+    
+    // Copy URL will be domain/username if username exists, else bdnr-XX representation
+    const path = profile.username ? profile.username.toLowerCase().trim() : `bdnr-${serialNoStr}`;
+    const shareUrl = `${window.location.origin}/${path}`;
+    
     navigator.clipboard.writeText(shareUrl).then(() => {
       setCopied(true);
       addToast("Card Link Copied!", "Shareable profile registry link copied to your clipboard.", "success");
@@ -517,7 +753,7 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
                   <QrCode className="w-4.5 h-4.5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Lifesaving Donor Card</h3>
+                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">{profile.displayName}'s Donor Card</h3>
                   <p className="text-[10px] text-slate-400 font-bold leading-none">Share & Spread the Voluntary Blood Movement</p>
                 </div>
               </div>
@@ -533,15 +769,15 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
             <div className="p-6 flex flex-col items-center justify-center bg-slate-50/20 text-center gap-4">
               <p className="text-[11px] text-slate-500 font-extrabold flex items-center gap-1 leading-none select-none">
                 <span>🌟</span>
-                <span>Generating High-Definition shareable badge card...</span>
+                <span>Generating High-Definition shareable badge card for {profile.displayName}...</span>
               </p>
 
               {/* Responsive container bounding widescreen canvas */}
-              <div className="w-full relative rounded-2xl overflow-hidden aspect-[1000/524] shadow-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-red-50 flex items-center justify-center max-w-[480px]">
+              <div className="w-full relative rounded-2xl overflow-hidden aspect-[1000/680] shadow-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-red-50 flex items-center justify-center max-w-[480px]">
                 {generating && (
                   <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center gap-2.5 z-10">
                     <div className="w-8 h-8 rounded-full border-3 border-rose-500 border-t-transparent animate-spin" />
-                    <span className="text-[10px] text-rose-600 font-black uppercase tracking-widest animate-pulse">Rendering Vector...</span>
+                    <span className="text-[10px] text-rose-600 font-black uppercase tracking-widest animate-pulse">Rendering {profile.displayName}'s Card...</span>
                   </div>
                 )}
                 {/* Visual rendering target canvas */}
