@@ -428,6 +428,21 @@ export default function App() {
         const hashParams = new URLSearchParams(window.location.hash.split('?')[1] || '');
         if (hashParams.has('uid')) return hashParams.get('uid');
       }
+      
+      const pathParam = window.location.pathname.replace(/^\//, '');
+      if (pathParam) {
+        const segments = pathParam.split('/');
+        const viewKey = segments[0];
+        const validViews = [
+          'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
+          'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
+          'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
+          'terms', 'faq', 'story'
+        ];
+        if (viewKey && !validViews.includes(viewKey)) {
+          return viewKey;
+        }
+      }
     } catch (e) {}
     return null;
   });
@@ -575,6 +590,8 @@ export default function App() {
 
         if (validViews.includes(mappedView)) {
           return mappedView as any;
+        } else {
+          return 'public-profile';
         }
       }
     } catch (e) {
@@ -2422,7 +2439,7 @@ export default function App() {
 
   // Admin/Chat: Users Listener
   useEffect(() => {
-    if (!user) return;
+    if (!user && !isGuest) return;
     // We need users for the Chat system as well, not just AdminPanel
     // Optimize: fetch users once statically to avoid highly intensive background real-time updates and multiple re-renders
     let isMounted = true;
@@ -13431,21 +13448,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
       return;
     }
 
-    // 7-day cooldown save check
-    if (initialProfile?.lastProfileSaveDate) {
-      const lastSaveTime = new Date(initialProfile.lastProfileSaveDate).getTime();
-      const diffTime = Date.now() - lastSaveTime;
-      const cooldownMs = 7 * 24 * 60 * 60 * 1000;
-      if (diffTime < cooldownMs) {
-        const remainingDays = Math.ceil((cooldownMs - diffTime) / (24 * 60 * 60 * 1000));
-        addToast(
-          "Profile Locked",
-          `Once saved, you can only change your profile after 7 days! Remaining time: ${remainingDays} day(s).`,
-          "warning"
-        );
-        return;
-      }
-    }
+    // Profile save restrictions removed successfully for fully convenient edits
 
     if (formData.username) {
       const cleanUsername = formData.username.trim().toLowerCase();
@@ -16564,17 +16567,64 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
     const loadData = async () => {
       setLoading(true);
       
-      // Load Profile
-      const profileRef = doc(db, 'users', uid);
+      let targetUid = uid;
+      
+      if (uid) {
+        // 1. Try checking if a doc exists with document ID == uid
+        try {
+          const directDoc = await getDoc(doc(db, 'users', uid));
+          if (directDoc.exists()) {
+            targetUid = uid;
+          } else {
+            // Document with ID == uid does not exist. Let's try querying by username metric
+            const usernameQuery = query(collection(db, 'users'), where('username', '==', uid.toLowerCase().trim()));
+            const qSnapshot = await getDocs(usernameQuery);
+            if (!qSnapshot.empty) {
+              targetUid = qSnapshot.docs[0].id;
+            } else {
+              // 3. Fallback: match by bdnr-XX serial if needed or from allUsers search
+              const foundUser = allUsers.find(u => u.username?.toLowerCase() === uid.toLowerCase().trim() || u.uid === uid);
+              if (foundUser) {
+                targetUid = foundUser.uid;
+              } else {
+                // Check if it matches bdnr-(\d+) in formatted serial
+                const bdnrMatch = uid.match(/^bdnr-(\d+)$/i);
+                if (bdnrMatch) {
+                  const indexValue = parseInt(bdnrMatch[1], 10) - 1;
+                  const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
+                  if (indexValue >= 0 && indexValue < sortedAll.length) {
+                    targetUid = sortedAll[indexValue].uid;
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error direct querying directUid:", err);
+          // Fallback to allUsers search
+          const foundUser = allUsers.find(u => u.username?.toLowerCase() === uid.toLowerCase().trim() || u.uid === uid);
+          if (foundUser) {
+            targetUid = foundUser.uid;
+          }
+        }
+      }
+
+      if (!targetUid) {
+        setLoading(false);
+        return;
+      }
+
+      // Now set up snapshot listeners using the correct resolved targetUid!
+      const profileRef = doc(db, 'users', targetUid);
       unsubscribeProfile = onSnapshot(profileRef, (doc) => {
         if (doc.exists()) {
           setProfile(doc.data() as UserProfile);
         }
       });
 
-      // Load Requests (Need History)
+      // Load Requests (Need History) using resolved targetUid
       const requestsRef = collection(db, 'requests');
-      const q = query(requestsRef, where('requesterUid', '==', uid), orderBy('createdAt', 'desc'));
+      const q = query(requestsRef, where('requesterUid', '==', targetUid), orderBy('createdAt', 'desc'));
       unsubscribeRequests = onSnapshot(q, (snapshot) => {
         setUserRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as BloodRequest)));
       }, (err) => {
@@ -16582,7 +16632,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       });
 
       // Load Donations History
-      const donationsRef = collection(db, 'users', uid, 'donations');
+      const donationsRef = collection(db, 'users', targetUid, 'donations');
       const dq = query(donationsRef, orderBy('date', 'desc'));
       unsubscribeDonations = onSnapshot(dq, (snapshot) => {
         setDonations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DonationRecord)));
@@ -16592,7 +16642,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
 
       // Load Posts
       const postsRef = collection(db, 'posts');
-      const pq = query(postsRef, where('authorUid', '==', uid));
+      const pq = query(postsRef, where('authorUid', '==', targetUid));
       unsubscribePosts = onSnapshot(pq, (snapshot) => {
         const postsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)) as CommunityPost[];
         postsList.sort((a, b) => {
@@ -16727,6 +16777,19 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
                     <Check className="w-2.5 h-2.5 stroke-[4]" />
                   </span>
                 )}
+              </div>
+
+              {/* Public Link Badge */}
+              <div 
+                onClick={() => {
+                  const linkSuffix = profile.username ? profile.username.trim().toLowerCase() : uid;
+                  copyToClipboard(`https://bloodlink.bd/${linkSuffix}`);
+                }}
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/15 text-white/95 text-[9.5px] font-mono cursor-pointer border border-white/10 select-all transition-colors max-w-fit"
+                title="Click to copy direct profile link"
+              >
+                <span>🔗</span>
+                <span className="underline tracking-tight">bloodlink.bd/{profile.username || 'username'}</span>
               </div>
 
               {/* Badges Flow Row */}
