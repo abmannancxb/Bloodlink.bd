@@ -735,12 +735,18 @@ export default function App() {
         pageTitle = 'Search Voluntary Blood Donors in Bangladesh | Dhaka, CTG, Sylhet';
         pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
       } else if (view === 'public-profile' && selectedUserId) {
-        const targetUser = allUsers.find(u => u.uid === selectedUserId);
+        const targetUser = allUsers.find(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
         const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
-        const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId);
+        const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
         const serialNo = indexValue !== -1 ? indexValue + 1 : 1;
         const padded = String(serialNo).padStart(2, '0');
-        pathName = `/bdnr-${padded}`;
+        if (targetUser?.username && targetUser.username.trim()) {
+          pathName = `/${targetUser.username.trim().toLowerCase()}`;
+        } else if (selectedUserId.startsWith('bdnr-')) {
+          pathName = `/${selectedUserId.toLowerCase()}`;
+        } else {
+          pathName = `/bdnr-${padded}`;
+        }
         searchStr = '';
         if (targetUser) {
           pageTitle = `Voluntary Blood Donor: ${targetUser.displayName} (${targetUser.bloodGroup}) | BloodLink BD`;
@@ -16777,19 +16783,6 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
                     <Check className="w-2.5 h-2.5 stroke-[4]" />
                   </span>
                 )}
-              </div>
-
-              {/* Public Link Badge */}
-              <div 
-                onClick={() => {
-                  const linkSuffix = profile.username ? profile.username.trim().toLowerCase() : uid;
-                  copyToClipboard(`https://bloodlink.bd/${linkSuffix}`);
-                }}
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-white/10 hover:bg-white/15 text-white/95 text-[9.5px] font-mono cursor-pointer border border-white/10 select-all transition-colors max-w-fit"
-                title="Click to copy direct profile link"
-              >
-                <span>🔗</span>
-                <span className="underline tracking-tight">bloodlink.bd/{profile.username || 'username'}</span>
               </div>
 
               {/* Badges Flow Row */}
