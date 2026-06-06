@@ -735,17 +735,23 @@ export default function App() {
         pageTitle = 'Search Voluntary Blood Donors in Bangladesh | Dhaka, CTG, Sylhet';
         pageDesc = 'Search and filter active voluntary blood donors in Bangladesh by blood group, district, thana, and availability. Direct phone call connection.';
       } else if (view === 'public-profile' && selectedUserId) {
-        const targetUser = allUsers.find(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
-        const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
-        const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
-        const serialNo = indexValue !== -1 ? indexValue + 1 : 1;
-        const padded = String(serialNo).padStart(2, '0');
-        if (targetUser?.username && targetUser.username.trim()) {
-          pathName = `/${targetUser.username.trim().toLowerCase()}`;
-        } else if (selectedUserId.startsWith('bdnr-')) {
-          pathName = `/${selectedUserId.toLowerCase()}`;
+        let targetUser: UserProfile | undefined = undefined;
+        if (allUsers.length === 0) {
+          // Keep the current pathname while loading list of users to prevent incorrect /bdnr-01 redirect
+          pathName = window.location.pathname;
         } else {
-          pathName = `/bdnr-${padded}`;
+          targetUser = allUsers.find(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
+          const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
+          const indexValue = sortedAll.findIndex(u => u.uid === selectedUserId || u.username?.toLowerCase() === selectedUserId.toLowerCase());
+          const serialNo = indexValue !== -1 ? indexValue + 1 : 1;
+          const padded = String(serialNo).padStart(2, '0');
+          if (targetUser?.username && targetUser.username.trim()) {
+            pathName = `/${targetUser.username.trim().toLowerCase()}`;
+          } else if (selectedUserId.startsWith('bdnr-')) {
+            pathName = `/${selectedUserId.toLowerCase()}`;
+          } else {
+            pathName = `/bdnr-${padded}`;
+          }
         }
         searchStr = '';
         if (targetUser) {
@@ -16671,7 +16677,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       if (unsubscribeDonations) unsubscribeDonations();
       if (unsubscribePosts) unsubscribePosts();
     };
-  }, [uid]);
+  }, [uid, allUsers]);
 
   if (loading) {
     return (
