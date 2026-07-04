@@ -11770,7 +11770,7 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
                     onDonationDone(request);
                   }}
                   type="button"
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl active:scale-95 transition-all shadow-md shadow-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full bg-green-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl active:scale-95 transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-100" /> Confirm I Donated
                 </button>
@@ -12031,7 +12031,7 @@ function RequestCardRedesigned({
                       onDonationDone(request);
                     }}
                     type="button"
-                    className="flex-1 bg-emerald-650 hover:bg-emerald-700 text-white text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-md shadow-emerald-100 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="flex-1 bg-green-600 text-white text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-100" /> Confirm I Donated
                   </button>
