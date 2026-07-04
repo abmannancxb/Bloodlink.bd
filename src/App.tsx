@@ -4645,7 +4645,7 @@ export default function App() {
               exit={{ opacity: 0, y: -15 }}
               className="h-full overflow-y-auto pt-24 pb-28 px-4 md:px-6 bg-slate-50/40"
             >
-              <div className="w-full max-w-[480px] md:max-w-6xl mx-auto space-y-5">
+              <div className="w-full max-w-[480px] md:max-w-2xl lg:max-w-3xl mx-auto space-y-5">
                 
                 {/* 1. HEADER SECTION (with Filter Icon on top right) */}
                 <div className="flex items-center justify-between select-none">
@@ -5076,7 +5076,7 @@ export default function App() {
                       )}
 
                       {/* REGULAR LIST OF MATCHING DONORS */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-3">
                         {filtered.length === 0 ? (
                           <div className="bg-white border border-slate-100 rounded-[24px] p-8 text-center select-none shadow-xs">
                             <div className="w-12 h-12 rounded-full bg-red-50 text-[#FF1744] flex items-center justify-center mx-auto mb-3">
@@ -5245,7 +5245,7 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="h-full overflow-y-auto pt-20 pb-20 p-4 bg-slate-50/50"
             >
-              <div className="w-full max-w-2xl md:max-w-5xl mx-auto pb-8">
+              <div className="w-full max-w-2xl md:max-w-3xl mx-auto pb-8">
                 {selectedStoryId ? (
                   <StoryDetailView 
                     postId={selectedStoryId} 
@@ -5265,10 +5265,8 @@ export default function App() {
                     allUsers={allUsers}
                   />
                 ) : (
-                  <div className="flex flex-col md:grid md:grid-cols-12 md:gap-6">
-                    {/* Left Column (Main Feed list) */}
-                    <div className="md:col-span-8">
-                      {/* Community Header Card & Slogan matching screenshot */}
+                  <>
+                    {/* Community Header Card & Slogan matching screenshot */}
                     <div className="flex items-center justify-between mb-6 pt-2">
                   <div>
                     <h1 className="text-3xl font-black text-slate-800 tracking-tight">Community</h1>
@@ -5771,56 +5769,7 @@ export default function App() {
                 </div>
 
                 <SeoFooter setView={setView} />
-                    </div>
-
-                    {/* Right Column (col-span-4) - Beautiful Desktop Widgets */}
-                    <div className="hidden md:flex md:flex-col md:col-span-4 gap-6">
-                      {/* 1. Contribution Stats Card */}
-                      <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-sm text-left">
-                        <div className="flex items-center gap-2 mb-3.5 select-none">
-                          <Trophy className="w-5 h-5 text-amber-500" />
-                          <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">Life-Savers Club</h4>
-                        </div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 select-none">Top Districts This Week</p>
-                        <div className="space-y-2 select-none">
-                          <div className="flex justify-between text-xs font-bold text-slate-700">
-                            <span>Dhaka</span>
-                            <span className="text-[#ff1744]">450+ Donors</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-bold text-slate-700">
-                            <span>Cox's Bazar</span>
-                            <span className="text-[#ff1744]">320+ Donors</span>
-                          </div>
-                          <div className="flex justify-between text-xs font-bold text-slate-700">
-                            <span>Chattogram</span>
-                            <span className="text-[#ff1744]">280+ Donors</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 2. Urgent Safety Reminders */}
-                      <div className="bg-gradient-to-br from-[#FF1744]/2 via-rose-500/5 to-transparent border border-[#FF1744]/10 rounded-3xl p-5 shadow-sm text-left">
-                        <div className="flex items-center gap-2 mb-3 select-none">
-                          <span className="text-base">🛡️</span>
-                          <h4 className="text-xs font-black text-[#95001a] uppercase tracking-widest">Donor Safety Tips</h4>
-                        </div>
-                        <ul className="space-y-2 text-[10px] font-bold text-slate-550 leading-relaxed select-none">
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-[#ff1744]">•</span>
-                            <span>Drink at least 500ml of water before donating blood.</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-[#ff1744]">•</span>
-                            <span>Eat a healthy, low-fat meal before your appointment.</span>
-                          </li>
-                          <li className="flex items-start gap-1.5">
-                            <span className="text-[#ff1744]">•</span>
-                            <span>Avoid lifting heavy weights for at least 5 hours after.</span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
+                  </>
             )}
               </div>
             </motion.div>
@@ -13612,7 +13561,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.99 }}
       transition={{ duration: 0.3 }}
-      className="w-full max-w-[430px] md:max-w-4xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] md:rounded-[2rem] shadow-2xl overflow-hidden border border-slate-150/50 relative text-slate-800 font-sans pb-8 animate-fade-in"
+      className="w-full max-w-[430px] md:max-w-xl lg:max-w-2xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-150/50 relative text-slate-800 font-sans pb-8 animate-fade-in"
     >
       {/* Cover Photo Banner */}
       <div className="h-32 bg-slate-900 relative overflow-hidden">
@@ -16802,11 +16751,8 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="w-full max-w-[430px] md:max-w-5xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] md:rounded-[2rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8"
+      className="w-full max-w-[430px] md:max-w-xl lg:max-w-2xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8"
     >
-      <div className="flex flex-col md:grid md:grid-cols-12 md:gap-6 md:items-start md:p-6">
-        {/* Sibling 1 (Left column: Header & Stats) */}
-        <div className="md:col-span-5 md:space-y-4">
           {/* 1. Red Curvaceous Header */}
       <div className="bg-gradient-to-b from-[#E53935] via-[#FF1744] to-[#E31B23] text-white rounded-b-[2.5rem] relative overflow-hidden pb-10 shadow-lg">
         {/* Elegant light blobs and modern ambient effects */}
@@ -16929,12 +16875,9 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
           <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Response Rate</span>
         </div>
       </div>
-      </div> {/* Close Sibling 1 wrapper */}
 
-      {/* Sibling 2 (Right column: Detailed Info & Donations) */}
-      <div className="md:col-span-7 md:space-y-4 md:mt-0">
-        {/* 3. Divided Detailed Info Area + Dynamic BMI Calculator and Tips */}
-        <div className="mt-3.5 mx-4 md:mx-0 bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex flex-col gap-3">
+      {/* 3. Divided Detailed Info Area + Dynamic BMI Calculator and Tips */}
+      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex flex-col gap-3">
         <div className="flex gap-4">
           {/* Left column info items list */}
           <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-2.5 text-left">
@@ -17147,12 +17090,9 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         </div>
 
       </div>
-      </div> {/* Close Sibling 2 wrapper */}
 
-      {/* Sibling 3 (Left column: Toggle & Triple Stats) */}
-      <div className="md:col-span-5 md:space-y-4 md:mt-4">
-        {/* 5. Mobile Toggle Row Option */}
-        <div className="mt-3.5 mx-4 md:mx-0 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-3 relative overflow-hidden">
+      {/* 5. Mobile Toggle Row Option */}
+      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-3 relative overflow-hidden">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-pink-100 rounded-xl flex items-center justify-center text-rose-500 shrink-0">
             <ShieldCheck className="w-4.5 h-4.5 stroke-[2.3]" />
@@ -17232,12 +17172,8 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         </div>
       </div>
 
-      </div> {/* Close Sibling 3 wrapper */}
-
-      {/* Sibling 4 (Right column: CTA Hub & Nearby Hospitals) */}
-      <div className="md:col-span-7 md:space-y-4 md:mt-4">
-        {/* 7. Redesigned Unified Donor Action & Connection Hub - Fully integrated, non-overlapping & modular */}
-        <div className="mt-4 mx-4 md:mx-0 bg-white rounded-3xl p-4.5 shadow-sm border border-slate-100 flex flex-col gap-3.5 text-left">
+      {/* 7. Redesigned Unified Donor Action & Connection Hub - Fully integrated, non-overlapping & modular */}
+      <div className="mt-4 mx-4 bg-white rounded-3xl p-4.5 shadow-sm border border-slate-100 flex flex-col gap-3.5 text-left">
         <div className="flex items-center justify-between">
           <span className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-widest">
             {currentUser?.uid === profile.uid ? "Profile Actions" : "Donor Connection Hub"}
@@ -17368,8 +17304,6 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
           </a>
         </div>
       </div> {/* Close Section 8 wrapper */}
-    </div> {/* Close Sibling 4 wrapper */}
-  </div> {/* Close main grid wrapper */}
 
     <DonorCardModal
       isOpen={showCardModal}
