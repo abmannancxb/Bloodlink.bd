@@ -1654,6 +1654,8 @@ export default function App() {
   const [mapResetKey, setMapResetKey] = useState<number>(0);
   const [filterDistrict, setFilterDistrict] = useState<string>('');
   const [filterThana, setFilterThana] = useState<string>('');
+  const [requestFilterDistrict, setRequestFilterDistrict] = useState<string>('');
+  const [requestFilterThana, setRequestFilterThana] = useState<string>('');
   const [filterBloodGroup, setFilterBloodGroup] = useState<string>('');
   const [hideFulfilled, setHideFulfilled] = useState(true);
   const [activeRequestSubTab, setActiveRequestSubTab] = useState<'all' | 'urgent' | 'nearby' | 'my'>('all');
@@ -1678,15 +1680,34 @@ export default function App() {
 
   const filteredRequests = useMemo(() => {
     let filtered = requests.filter(r => {
-      if (filterDistrict && r.district !== filterDistrict) return false;
-      if (filterThana && r.thana !== filterThana) return false;
+      // Blood Group filter and Hide Fulfilled filter should apply to all sub-tabs
       if (filterBloodGroup && r.bloodGroup !== filterBloodGroup) return false;
       if (hideFulfilled && r.status !== 'Pending') return false;
 
-      if (activeRequestSubTab === 'urgent' && r.urgency !== 'Urgent') return false;
-      if (activeRequestSubTab === 'my' && r.requesterUid !== user?.uid) return false;
-      if (activeRequestSubTab === 'nearby') {
-        if (profile?.district && r.district !== profile.district) return false;
+      // Sub-tab specific filtering:
+      if (activeRequestSubTab === 'all') {
+        // "All Requests show all requests from all district. Anyone can see."
+        // We only filter by district/thana if the user manually selected them
+        if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
+        if (requestFilterThana && r.thana !== requestFilterThana) return false;
+      } else if (activeRequestSubTab === 'urgent') {
+        // "Urgent" tab shows urgent requests from all districts by default
+        if (r.urgency !== 'Urgent') return false;
+        if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
+        if (requestFilterThana && r.thana !== requestFilterThana) return false;
+      } else if (activeRequestSubTab === 'nearby') {
+        // "If click nearby show his own district"
+        if (profile?.district) {
+          if (r.district !== profile.district) return false;
+          // Filter by thana if explicitly selected
+          if (requestFilterThana && r.thana !== requestFilterThana) return false;
+        } else {
+          // If guest, show manual requestFilterDistrict
+          if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
+          if (requestFilterThana && r.thana !== requestFilterThana) return false;
+        }
+      } else if (activeRequestSubTab === 'my') {
+        if (r.requesterUid !== user?.uid) return false;
       }
       return true;
     });
@@ -1704,7 +1725,7 @@ export default function App() {
         return timeB - timeA;
       }
     });
-  }, [requests, filterDistrict, filterThana, filterBloodGroup, hideFulfilled, activeRequestSubTab, user?.uid, profile?.district, requestSortBy]);
+  }, [requests, requestFilterDistrict, requestFilterThana, filterBloodGroup, hideFulfilled, activeRequestSubTab, user?.uid, profile?.district, requestSortBy]);
 
   const filteredPosts = useMemo(() => {
     let filtered = posts.filter(post => {
@@ -4352,7 +4373,7 @@ export default function App() {
                         <button 
                           onClick={() => setShowFilterDrawer(!showFilterDrawer)}
                           className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition-all cursor-pointer select-none border border-slate-200/85 ${
-                            showFilterDrawer || filterDistrict || filterThana || filterBloodGroup
+                            showFilterDrawer || requestFilterDistrict || requestFilterThana || filterBloodGroup
                               ? 'bg-[#ff2247] hover:bg-[#e01e40] text-white border-transparent shadow-xs'
                               : 'bg-white hover:bg-slate-50 text-slate-700'
                           }`}
@@ -4371,8 +4392,8 @@ export default function App() {
                           <div className="relative">
                             <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">District</label>
                             <select 
-                              value={filterDistrict}
-                              onChange={(e) => { setFilterDistrict(e.target.value); setFilterThana(''); }}
+                              value={requestFilterDistrict}
+                              onChange={(e) => { setRequestFilterDistrict(e.target.value); setRequestFilterThana(''); }}
                               className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-xs"
                             >
                               <option value="">All Districts</option>
@@ -4387,13 +4408,13 @@ export default function App() {
                           <div className="relative">
                             <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">Thana / Area</label>
                             <select 
-                              value={filterThana}
-                              onChange={(e) => setFilterThana(e.target.value)}
-                              disabled={!filterDistrict}
+                              value={requestFilterThana}
+                              onChange={(e) => setRequestFilterThana(e.target.value)}
+                              disabled={!requestFilterDistrict}
                               className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-xs disabled:opacity-50"
                             >
                               <option value="">All Thanas</option>
-                              {filterDistrict && BANGLADESH_LOCATIONS[filterDistrict].sort().map(t => <option key={t} value={t}>{t}</option>)}
+                              {requestFilterDistrict && BANGLADESH_LOCATIONS[requestFilterDistrict].sort().map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                             <div className="absolute bottom-2.5 right-2 flex items-center pointer-events-none text-slate-400">
                               <ChevronRight className="w-3.5 h-3.5 rotate-90 stroke-[2.5]" />
@@ -4428,10 +4449,12 @@ export default function App() {
                             Hide Fulfilled Requests
                           </label>
 
-                          {(filterDistrict || filterThana || filterBloodGroup || !hideFulfilled) && (
+                          {(requestFilterDistrict || requestFilterThana || filterBloodGroup || !hideFulfilled) && (
                             <button
                               onClick={() => {
-                                resetFilters();
+                                setRequestFilterDistrict('');
+                                setRequestFilterThana('');
+                                setFilterBloodGroup('');
                                 setHideFulfilled(true);
                               }}
                               type="button"
