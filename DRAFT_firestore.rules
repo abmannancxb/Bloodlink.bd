@@ -47,7 +47,7 @@ service cloud.firestore {
           && data.district is string
           && data.thana is string
           && data.hospital is string
-          && data.urgency in ['Urgent', 'Normal']
+          && data.urgency in ['Urgent', 'Normal', 'Critical']
           && data.status in ['Pending', 'Fulfilled', 'Cancelled']
           && data.contactPhone is string;
       }

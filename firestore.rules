@@ -101,7 +101,7 @@ service cloud.firestore {
           && (!('bloodGroup' in data) || data.bloodGroup is string)
           && (!('district' in data) || (data.district is string && data.district.size() <= 100))
           && (!('thana' in data) || (data.thana is string && data.thana.size() <= 100))
-          && (!('urgency' in data) || (data.urgency in ['Urgent', 'Normal']))
+          && (!('urgency' in data) || (data.urgency in ['Urgent', 'Normal', 'Critical']))
           && (!('status' in data) || (data.status in ['Pending', 'Fulfilled', 'Cancelled']))
           && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 20));
       }

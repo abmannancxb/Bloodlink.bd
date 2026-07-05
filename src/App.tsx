@@ -2749,208 +2749,42 @@ export default function App() {
   if (loading || loadProgress < 100) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 relative overflow-hidden">
-        {/* Style block for highly specific, premium animation effects */}
-        <style dangerouslySetInnerHTML={{ __html: `
-          @keyframes emptyLiquid {
-            0% {
-              transform: translateY(-5px);
-            }
-            80% {
-              transform: translateY(115px);
-            }
-            90% {
-              transform: translateY(135px);
-            }
-            100% {
-              transform: translateY(-5px);
-            }
-          }
-          @keyframes dripBlood {
-            0% {
-              transform: translateY(0) scale(0);
-              opacity: 0;
-            }
-            15% {
-              transform: translateY(0) scale(1);
-              opacity: 1;
-            }
-            85% {
-              transform: translateY(75px) scale(0.9);
-              opacity: 1;
-            }
-            100% {
-              transform: translateY(85px) scale(0.2);
-              opacity: 0;
-            }
-          }
-          @keyframes waveMotion {
-            0% {
-              transform: translateX(0);
-            }
-            50% {
-              transform: translateX(-15px);
-            }
-            100% {
-              transform: translateX(0);
-            }
-          }
-          @keyframes floatBag {
-            0%, 100% {
-              transform: translateY(0) rotate(0deg);
-            }
-            50% {
-              transform: translateY(-5px) rotate(1deg);
-            }
-          }
-          @keyframes pulseLabel {
-            0%, 100% {
-              opacity: 0.6;
-            }
-            50% {
-              opacity: 1;
-            }
-          }
-        `}} />
-
-        {/* Ambient background glows for gorgeous aesthetic */}
+        {/* Ambient background glows for elegant look */}
         <div className="absolute top-0 right-0 w-80 h-80 bg-red-100/35 rounded-full blur-3xl -mr-36 -mt-36" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-rose-100/35 rounded-full blur-3xl -ml-36 -mb-36" />
         
         <motion.div 
-          initial={{ scale: 0.9, opacity: 0 }}
+          initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col items-center gap-6 relative z-10 w-full max-w-xs"
+          className="flex flex-col items-center gap-6 relative z-10 w-full max-w-xs text-center"
         >
-          {/* Animated 3D-feel Blood Bag Representation */}
-          <div className="relative flex items-center justify-center" style={{ animation: 'floatBag 4.5s ease-in-out infinite' }}>
-            <svg viewBox="0 0 160 220" className="w-36 h-48 drop-shadow-2xl relative select-none">
-              <defs>
-                {/* Inner fluid clipper */}
-                <clipPath id="blood-bag-inner">
-                  <path d="M 46,24 h 68 c 12,0 20,8 20,20 v 108 c 0,14 -10,24 -24,24 h -60 c -14,0 -24,-10 -24,-24 v -108 c 0,-12 8,-20 20,-20 z" />
-                </clipPath>
-                
-                {/* Rich red fluid gradient representing arterial blood */}
-                <linearGradient id="blood-grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#ef4444" />
-                  <stop offset="40%" stopColor="#dc2626" />
-                  <stop offset="100%" stopColor="#991b1b" />
-                </linearGradient>
-
-                {/* Translucent white gloss overlay */}
-                <linearGradient id="gloss-grad" x1="0" y1="0" x2="1" y2="1">
-                  <stop offset="0%" stopColor="rgba(255,255,255,0.45)" stopOpacity="0.8" />
-                  <stop offset="30%" stopColor="rgba(255,255,255,0.15)" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="rgba(255,255,255,0)" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-
-              {/* Outer transparent protective blood bag casing */}
-              <path 
-                d="M 42,20 h 76 c 15,0 24,9 24,24 v 114 c 0,18 -12,28 -28,28 h -68 c -16,0 -28,-10 -28,-28 v -114 c 0,-15 9,-24 24,-24 z" 
-                fill="rgba(255, 255, 255, 0.65)" 
-                stroke="#cbd5e1" 
-                strokeWidth="2.5" 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-              />
-
-              {/* Hanger slot top rim reinforcement */}
-              <rect x="62" y="8" width="36" height="4" rx="2" fill="#94a3b8" opacity="0.4" />
-              <circle cx="80" cy="12" r="4.5" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1.5" />
-
-              {/* Embedded Fluid volume ML marking ticks (printed scale on plastic) */}
-              <g opacity="0.4" stroke="#475569" strokeWidth="1.2" strokeLinecap="round">
-                <line x1="32" y1="45" x2="40" y2="45" />
-                <line x1="32" y1="70" x2="40" y2="70" />
-                <line x1="32" y1="95" x2="40" y2="95" />
-                <line x1="32" y1="120" x2="40" y2="120" />
-                <line x1="32" y1="145" x2="40" y2="145" />
-              </g>
-              <g opacity="0.45" fill="#475569" fontSize="6.5" fontWeight="900" fontFamily="sans-serif">
-                <text x="44" y="48">500ml</text>
-                <text x="44" y="73">400ml</text>
-                <text x="44" y="98">300ml</text>
-                <text x="44" y="123">200ml</text>
-                <text x="44" y="148">100ml</text>
-              </g>
-
-              {/* Inside Liquid Area with clipping boundaries */}
-              <g clipPath="url(#blood-bag-inner)">
-                {/* Animating Blood Liquid block */}
-                <g style={{ animation: 'emptyLiquid 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
-                  {/* Wave shape on top of the liquid block */}
-                  <path 
-                    d="M -20,24 q 12,-4 25,0 t 25,0 t 25,0 t 25,0 t 25,0 t 25,0 t 25,0 v 170 h -200 z" 
-                    fill="url(#blood-grad)" 
-                    style={{ animation: 'waveMotion 1.8s linear infinite' }}
-                  />
-                </g>
-              </g>
-
-              {/* Outer gloss highlight line for the plastic bag to feel 3D */}
-              <path 
-                d="M 45,23 h 70 c 12,0 20,8 20,20 v 110" 
-                fill="none" 
-                stroke="url(#gloss-grad)" 
-                strokeWidth="3.5" 
-                strokeLinecap="round" 
-                opacity="0.8"
-              />
-
-              {/* Bottom Ports where tubes connect */}
-              {/* Left port */}
-              <rect x="58" y="185" width="12" height="12" rx="2" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1" />
-              <line x1="64" y1="197" x2="64" y2="204" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
-
-              {/* Right active extraction port */}
-              <rect x="90" y="185" width="12" height="14" rx="2" fill="#ef4444" stroke="#dc2626" strokeWidth="1.5" />
-              <path d="M 96,197 v 8" stroke="#dc2626" strokeWidth="3.5" strokeLinecap="round" />
-
-              {/* Pulsing red core light in port showing active flow */}
-              <circle cx="96" cy="191" r="2" fill="#ffffff" opacity="0.8" />
-
-              {/* Dynamic Drip coming out from under the active port right at 205px */}
-              <g style={{ animation: 'dripBlood 1.4s linear infinite' }}>
-                <path 
-                  d="M 96,206 c -2.5,0 -4.5,2.5 -4.5,5 0,3 2,5 4.5,5 s 4.5,-2 4.5,-5 c 0,-2.5 -2,-5 -4.5,-5 z" 
-                  fill="#dc2626" 
-                />
-              </g>
-            </svg>
-
-            {/* Pulsing ambient glow */}
-            <div className="absolute inset-0 bg-red-500/5 rounded-full filter blur-2xl -z-10" />
+          <div className="space-y-1 select-none">
+            <h1 className="text-4xl font-black tracking-tight">
+              <span className="text-red-600">Blood</span>
+              <span className="text-slate-900">Link</span>
+            </h1>
+            <p className="text-red-500 text-[11px] font-black uppercase tracking-[0.35em] leading-none">Bangladesh</p>
           </div>
 
-          {/* Redesigned Text & Typography Container */}
-          <div className="flex flex-col items-center gap-4 text-center">
-            <div className="space-y-1">
-              <h1 className="text-3xl font-black tracking-tighter select-none">
-                <span className="text-red-600">Blood</span>
-                <span className="text-slate-900">Link</span>
-              </h1>
-              <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] leading-none mb-1">Bangladesh</p>
-              <p className="text-slate-400 text-[8px] font-bold uppercase tracking-widest select-none">Saving Lives Together</p>
-            </div>
-
-            {/* Custom Interactive Progress Bar & Status Text */}
-            <div className="flex flex-col items-center gap-2 mt-2 w-48">
-              <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden p-0.5">
-                <motion.div 
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${loadProgress}%` }}
-                  transition={{ ease: "easeOut" }}
-                  className="h-full bg-red-600 rounded-full"
-                />
-              </div>
-
-              <div className="flex justify-between items-center w-full px-0.5 mt-0.5 text-[10px] font-black select-none">
-                <span className="text-slate-500 lowercase tracking-tight animate-pulse" style={{ animation: 'pulseLabel 1.8s infinite' }}>সংযুক্ত করা হচ্ছে...</span>
-                <span className="text-slate-800 font-extrabold">{Math.round(loadProgress)}%</span>
-              </div>
-            </div>
+          {/* Simple 4-dot animation */}
+          <div className="flex gap-2.5 justify-center mt-3">
+            {[0, 1, 2, 3].map((index) => (
+              <motion.div
+                key={index}
+                animate={{
+                  y: [0, -8, 0],
+                  opacity: [0.35, 1, 0.35],
+                }}
+                transition={{
+                  duration: 1.1,
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                  delay: index * 0.16,
+                }}
+                className="w-3 h-3 bg-red-600 rounded-full shadow-xs"
+              />
+            ))}
           </div>
         </motion.div>
       </div>
@@ -11770,9 +11604,9 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
                     onDonationDone(request);
                   }}
                   type="button"
-                  className="w-full bg-green-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl active:scale-95 transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="group w-full bg-slate-100 hover:bg-green-600 text-slate-700 hover:text-white border border-slate-200/50 hover:border-transparent text-[10px] font-black uppercase tracking-widest px-4 py-3 rounded-xl active:scale-95 transition-all shadow-xs hover:shadow-md hover:shadow-green-100/50 flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-100" /> Confirm I Donated
+                  <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-500 group-hover:text-rose-100 transition-colors" /> Confirm I Donated
                 </button>
               )
             )}
@@ -11954,11 +11788,7 @@ function RequestCardRedesigned({
             <span>Any Gender</span>
           </span>
 
-          {/* Age Group Chip */}
-          <span className="flex items-center gap-1 px-2.5 py-1 bg-slate-50/60 rounded-lg text-[9px] font-bold text-slate-600 border border-slate-100/40 select-none">
-            <Calendar className="w-3 h-3 text-emerald-500" />
-            <span>{isUrgent ? 'Any Age' : '18-45 Years'}</span>
-          </span>
+
         </div>
 
         {/* Action Button Block */}
@@ -12031,9 +11861,9 @@ function RequestCardRedesigned({
                       onDonationDone(request);
                     }}
                     type="button"
-                    className="flex-1 bg-green-600 text-white text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-md shadow-green-100 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="group flex-1 bg-slate-100 hover:bg-green-600 text-slate-700 hover:text-white border border-slate-200/50 hover:border-transparent text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-xs hover:shadow-md hover:shadow-green-100/50 flex items-center justify-center gap-1.5 cursor-pointer"
                   >
-                    <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-100" /> Confirm I Donated
+                    <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-500 group-hover:text-rose-100 transition-colors" /> Confirm I Donated
                   </button>
                 )
               )}
@@ -14278,7 +14108,7 @@ function NotificationsView({ requests, globalAlerts, profile, addToast, onDonati
                             e.stopPropagation();
                             onDonationDone(req);
                           }}
-                          className="bg-green-600 text-white text-[11px] font-black uppercase tracking-widest px-6 py-2.5 rounded-xl active:scale-95 transition-all shadow-md shadow-green-200 hover:bg-green-700"
+                          className="bg-slate-100 hover:bg-green-600 text-slate-700 hover:text-white border border-slate-200/50 hover:border-transparent text-[11px] font-black uppercase tracking-widest px-6 py-2.5 rounded-xl active:scale-95 transition-all shadow-xs hover:shadow-md hover:shadow-green-100/50"
                         >
                           I Donated
                         </button>

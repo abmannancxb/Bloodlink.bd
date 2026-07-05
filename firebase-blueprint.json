@@ -45,7 +45,7 @@
         "lat": { "type": "number" },
         "lng": { "type": "number" },
         "unitsNeeded": { "type": "number" },
-        "urgency": { "type": "string", "enum": ["Urgent", "Normal"] },
+        "urgency": { "type": "string", "enum": ["Urgent", "Normal", "Critical"] },
         "medicalReason": { "type": "string" },
         "contactPhone": { "type": "string" },
         "contactCount": { "type": "number" },
