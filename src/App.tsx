@@ -70,7 +70,9 @@ import {
   DonationRecord,
   SystemSettings,
   OrganizationMember,
-  getDonorId
+  getDonorId,
+  AppEvent,
+  HealthTip
 } from './types';
 export type { 
   UserProfile, 
@@ -88,7 +90,9 @@ export type {
   ConfirmConfig, 
   DonationRecord, 
   SystemSettings,
-  OrganizationMember 
+  OrganizationMember,
+  AppEvent,
+  HealthTip
 };
 export { OperationType };
 
@@ -159,6 +163,7 @@ import {
   LogIn,
   Mail,
   Lock,
+  Unlock,
   Eye,
   UserPlus,
   RefreshCw,
@@ -374,11 +379,21 @@ export default function App() {
     } catch (_) {}
     return null;
   });
-  const [showMicPrompt, setShowMicPrompt] = useState<{ show: boolean, onGranted: (() => void) | null }>({ show: false, onGranted: null });
+  const [showMicPrompt, setShowMicPrompt] = useState<{ show: boolean, onGranted: (() => void) | null, onCancel: (() => void) | null }>({ show: false, onGranted: null, onCancel: null });
   const [micRequesting, setMicRequesting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadProgress, setLoadProgress] = useState(0);
   const [requests, setRequests] = useState<BloodRequest[]>([]);
+  const [events, setEvents] = useState<AppEvent[]>([]);
+  const [healthTips, setHealthTips] = useState<HealthTip[]>([]);
+  const [showEventCreateModal, setShowEventCreateModal] = useState(false);
+  const [userEventImageBase64, setUserEventImageBase64] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
+  const [selectedHealthTip, setSelectedHealthTip] = useState<HealthTip | null>(null);
+  const [showAllEventsModal, setShowAllEventsModal] = useState(false);
+  const [showAllBlogsModal, setShowAllBlogsModal] = useState(false);
+  const [eventSearch, setEventSearch] = useState('');
+  const [blogSearch, setBlogSearch] = useState('');
   const [globalAlerts, setGlobalAlerts] = useState<any[]>([]);
   const [donations, setDonations] = useState<DonationRecord[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -812,6 +827,33 @@ export default function App() {
   const [mapOverviewOpen, setMapOverviewOpen] = useState(false);
   const [isFloatingWidgetClosed, setIsFloatingWidgetClosed] = useState(false);
   const [showMiddleMenu, setShowMiddleMenu] = useState(false);
+  const [showHamburgerMenu, setShowHamburgerMenu] = useState(false);
+  const [showHealthCalculator, setShowHealthCalculator] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsLanguage, setSettingsLanguage] = useState<'bn' | 'en'>('en');
+  const [enableSoundAlerts, setEnableSoundAlerts] = useState(true);
+
+  // Health Calculator States
+  const [calcWeight, setCalcWeight] = useState<number>(68);
+  const [calcHeightFeet, setCalcHeightFeet] = useState<number>(5);
+  const [calcHeightInches, setCalcHeightInches] = useState<number>(9);
+  const [calcGender, setCalcGender] = useState<'male' | 'female'>('male');
+  const [calcAge, setCalcAge] = useState<number>(25);
+  const [calcLastDonatedDays, setCalcLastDonatedDays] = useState<number>(120);
+  const [calcHasDonatedBefore, setCalcHasDonatedBefore] = useState<boolean>(false);
+  const [calcNoSurgOrTattoo, setCalcNoSurgOrTattoo] = useState<boolean>(true);
+  const [calcFeelWellToday, setCalcFeelWellToday] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (profile) {
+      if (profile.weight) setCalcWeight(Number(profile.weight));
+      if (profile.heightFeet) setCalcHeightFeet(Number(profile.heightFeet));
+      if (profile.heightInches) setCalcHeightInches(Number(profile.heightInches));
+      if (profile.gender) setCalcGender(profile.gender === 'female' ? 'female' : 'male');
+      if (profile.age) setCalcAge(Number(profile.age));
+    }
+  }, [profile]);
+
   const viewRef = useRef(view);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [confirmConfig, setConfirmConfig] = useState<ConfirmConfig | null>(null);
@@ -1047,9 +1089,33 @@ export default function App() {
           show: true,
           onGranted: () => {
             resolve(true);
+          },
+          onCancel: () => {
+            resolve(false);
           }
         });
       });
+    } catch (e) {
+      console.warn("Permission check overall error", e);
+      return true;
+    }
+  }, [addToast]);
+
+  const ensureCameraPermission = useCallback(async (): Promise<boolean> => {
+    try {
+      if (navigator.permissions && (navigator.permissions as any).query) {
+        try {
+          const result = await navigator.permissions.query({ name: 'camera' as any });
+          if (result.state === 'granted') return true;
+          if (result.state === 'denied') {
+            addToast("Camera Blocked", "Please enable camera access in your browser settings.", 'error');
+            return false;
+          }
+        } catch (e) {
+          console.warn("Permissions API query failed", e);
+        }
+      }
+      return true;
     } catch (e) {
       console.warn("Permission check overall error", e);
       return true;
@@ -1077,6 +1143,7 @@ export default function App() {
         receiverName: targetUser.displayName,
         receiverPhoto: targetUser.photoURL || "",
         status: 'ringing',
+        type: 'voice',
         createdAt: serverTimestamp()
       };
       
@@ -1086,7 +1153,43 @@ export default function App() {
       handleFirestoreError(e, OperationType.CREATE, 'calls');
       addToast("Call Failed", "Unable to start call.", 'error');
     }
-  }, [user, profile, allUsers, addToast]);
+  }, [user, profile, allUsers, addToast, ensureMicPermission]);
+
+  const startVideoCall = useCallback(async (targetUid: string) => {
+    if (!user || !profile) {
+      addToast("Action Required", "Please sign in to make calls.", 'warning');
+      return;
+    }
+
+    const hasMicPermission = await ensureMicPermission();
+    if (!hasMicPermission) return;
+
+    const hasCamPermission = await ensureCameraPermission();
+    if (!hasCamPermission) return;
+
+    const targetUser = allUsers.find(u => u.uid === targetUid);
+    if (!targetUser) return;
+
+    try {
+      const callData = {
+        callerUid: user.uid,
+        callerName: profile.displayName,
+        callerPhoto: profile.photoURL || "",
+        receiverUid: targetUser.uid,
+        receiverName: targetUser.displayName,
+        receiverPhoto: targetUser.photoURL || "",
+        status: 'ringing',
+        type: 'video',
+        createdAt: serverTimestamp()
+      };
+      
+      const docRef = await addDoc(collection(db, 'calls'), callData);
+      setActiveCall({ id: docRef.id, ...callData, createdAt: Timestamp.now() } as VoiceCall);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.CREATE, 'calls');
+      addToast("Call Failed", "Unable to start video call.", 'error');
+    }
+  }, [user, profile, allUsers, addToast, ensureCameraPermission, ensureMicPermission]);
 
   const logCallToChat = useCallback(async (call: VoiceCall) => {
     // Only log if it's the caller OR if it's a missed call for the receiver
@@ -1103,11 +1206,14 @@ export default function App() {
     const duration = call.connectedAt && call.endedAt ? 
       Math.floor((call.endedAt.toMillis() - call.connectedAt.toMillis()) / 1000) : 0;
 
+    const isVideo = call.type === 'video';
+    const label = isVideo ? "Video Call" : "Voice Call";
+
     let text = "";
-    if (call.status === 'rejected') text = "Call Rejected";
-    else if (call.status === 'busy') text = "Line Busy";
-    else if (!call.connectedAt) text = "Missed Call";
-    else text = `Voice Call (${Math.floor(duration/60)}:${(duration%60).toString().padStart(2, '0')})`;
+    if (call.status === 'rejected') text = `${label} Rejected`;
+    else if (call.status === 'busy') text = `${label} Busy`;
+    else if (!call.connectedAt) text = `Missed ${label}`;
+    else text = `${label} (${Math.floor(duration/60)}:${(duration%60).toString().padStart(2, '0')})`;
 
     try {
       await addDoc(collection(db, `chats/${chatId}/messages`), {
@@ -1148,8 +1254,14 @@ export default function App() {
   }, []);
 
   const acceptCall = useCallback(async (call: VoiceCall) => {
-    const hasPermission = await ensureMicPermission();
-    if (!hasPermission) return;
+    const isVideo = call.type === 'video';
+    const hasMicPermission = await ensureMicPermission();
+    if (!hasMicPermission) return;
+
+    if (isVideo) {
+      const hasCamPermission = await ensureCameraPermission();
+      if (!hasCamPermission) return;
+    }
 
     try {
       await updateDoc(doc(db, 'calls', call.id), {
@@ -1162,7 +1274,7 @@ export default function App() {
       console.error("Accept call failed", e);
       addToast("Call Error", "Unable to answer call.", 'error');
     }
-  }, [addToast]);
+  }, [addToast, ensureCameraPermission, ensureMicPermission]);
 
   // Active Call Listener
   useEffect(() => {
@@ -2119,7 +2231,7 @@ export default function App() {
         }
         return prevState;
       });
-    }, 15000); // 15 seconds max loading
+    }, 4000); // 4 seconds max loading to handle slow connection gracefully
 
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       try {
@@ -2477,6 +2589,38 @@ export default function App() {
 
     return unsubscribe;
   }, [user]);
+
+  // Events Firestore Listener (Anyone can view events)
+  useEffect(() => {
+    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const evs = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as AppEvent[];
+      setEvents(evs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'events');
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // Health Tips Firestore Listener (Anyone can view health tips)
+  useEffect(() => {
+    const q = query(collection(db, 'health_tips'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tips = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as HealthTip[];
+      setHealthTips(tips);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'health_tips');
+    });
+
+    return unsubscribe;
+  }, []);
 
   // Admin/Chat: Users Listener
   useEffect(() => {
@@ -3570,34 +3714,6 @@ export default function App() {
               3
             </span>
           </button>
-
-          <button 
-            onClick={() => setView('chats')}
-            title={unreadCount > 0 ? `${unreadCount} unread messages` : 'No new messages'}
-            className={`relative p-2 rounded-xl transition-all duration-300 group ${view === 'chats' ? 'bg-[#ff1744]/10 text-red-600' : 'text-slate-500 hover:bg-slate-50 hover:text-red-500'}`}
-          >
-            <div className="relative">
-              <MessageSquare className={`w-5.2 h-5.2 transition-transform duration-300 ${view === 'chats' ? 'scale-110' : 'group-hover:scale-110 group-hover:-rotate-3'}`} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[14px] h-3.5 px-0.5 bg-red-600 text-white text-[7px] font-black rounded-full flex items-center justify-center ring-1 ring-white shadow-sm animate-pulse">
-                  {unreadCount}
-                </span>
-              )}
-            </div>
-          </button>
-
-          <button 
-            onClick={() => user ? setView('profile') : handleLogin()}
-            className="flex items-center justify-center p-0.5 bg-white hover:bg-slate-50 border border-slate-200 hover:border-red-300 rounded-xl overflow-hidden transition-all shadow-sm active:scale-95 duration-200 shrink-0"
-          >
-            {user ? (
-              <img src={user.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName || 'U')}&background=fecdd3&color=9f1239`} alt="Profile" className="w-7 h-7 rounded-lg object-cover" />
-            ) : (
-              <div className="w-7 h-7 rounded-lg bg-slate-50 text-slate-500 flex items-center justify-center">
-                <UserIcon className="w-4 h-4" />
-              </div>
-            )}
-          </button>
         </div>
       </header>
 
@@ -3678,7 +3794,7 @@ export default function App() {
                 <div className="w-full h-full overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-rose-50/10 pt-20 pb-28 px-4 scrollbar-none scroll-smooth">
                   <div className="w-full max-w-2xl mx-auto space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
                            {/* 1. Urgent SOS Alert Banner */}
-                    {(() => {
+                    {settings?.homeShowEmergencyBanner !== false && (() => {
                       const pendingRequests = requests.filter(r => r.status === 'Pending');
                       // Find Urgent first, then Critical, then Normal
                       let activeAlert = pendingRequests.find(r => r.urgency === 'Urgent');
@@ -3705,31 +3821,45 @@ export default function App() {
                                 setShowRequestsOverlay(true);
                               }, 100);
                             }}
-                            className="bg-gradient-to-r from-emerald-50/90 to-teal-50/65 border border-emerald-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:from-emerald-100 hover:to-teal-100/80 transition-all duration-300 relative overflow-hidden group text-left select-none"
+                            className="bg-[#F0FDF4] border border-[#DCFCE7] border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] py-4 px-5 flex items-center justify-between shadow-[0_4px_16px_rgba(22,163,74,0.02)] cursor-pointer hover:bg-[#E8FBF0] transition-all duration-300 relative select-none"
                           >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full blur-xl pointer-events-none" />
-                            <div className="flex items-center gap-3.5 relative z-10">
-                              <div className="relative shrink-0 select-none">
-                                <div className="absolute inset-0 bg-emerald-500/10 rounded-xl blur-xs scale-110" />
-                                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex flex-col items-center justify-center font-black text-[9px] uppercase tracking-wider relative shadow-md shadow-emerald-500/25">
-                                  <span className="leading-none mt-0.5 animate-bounce">💖</span>
-                                  <span className="text-[7.5px] leading-none mt-0.5 tracking-tighter">SAFE</span>
+                            <div className="flex items-center gap-4 min-w-0">
+                              {/* Green Beacon Siren Icon */}
+                              <div className="relative shrink-0 select-none flex items-center justify-center">
+                                <div className="absolute inset-0 bg-emerald-500/10 rounded-full animate-ping pointer-events-none scale-110" />
+                                <svg width="48" height="48" viewBox="0 0 48 48" className="w-12 h-12 shrink-0" fill="none">
+                                  <path d="M11 17C9 19.5 9 24.5 11 27" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" />
+                                  <path d="M7 14C4.5 17.5 4.5 26.5 7 30" stroke="#86EFAC" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M37 17C39 19.5 39 24.5 37 27" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" />
+                                  <path d="M41 14C43.5 17.5 43.5 26.5 41 30" stroke="#86EFAC" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M24 7V11" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M16 10L18.5 13.5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M32 10L29.5 13.5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M17 22C17 17.58 20.13 14 24 14C27.87 14 31 17.58 31 22V28H17V22Z" fill="#15803D" />
+                                  <path d="M15 28C15 27 16 26 17 26H31C32 26 33 27 33 28V31C33 32.5 31.5 33.5 30 33.5H18C16.5 33.5 15 32.5 15 31V28Z" fill="#166534" />
+                                  <rect x="18" y="32" width="12" height="2" rx="1" fill="#14532D" />
+                                  <text x="24.2" y="22.5" fill="#FFFFFF" fontSize="6.5" fontWeight="950" fontFamily="sans-serif" textAnchor="middle" letterSpacing="0.05">SAFE</text>
+                                </svg>
+                              </div>
+
+                              <div className="min-w-0 leading-snug">
+                                <div className="text-[14px] sm:text-[15px] font-bold text-slate-900 tracking-tight">
+                                  <span className="text-[#16A34A] font-black mr-1">All Clear:</span>
+                                  All emergency requests responded to!
+                                </div>
+                                <div className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">
+                                  No active urgent alerts in Bangladesh
                                 </div>
                               </div>
-                              <div>
-                                <h4 className="text-xs font-black text-slate-900 tracking-tight flex items-center gap-1.5">
-                                  All emergency requests responded to!
-                                </h4>
-                                <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">No active urgent alerts</p>
-                              </div>
                             </div>
-                            <ChevronRight className="w-4.5 h-4.5 text-emerald-600 shrink-0 transform group-hover:translate-x-1.5 transition-transform" />
+                            
+                            <ChevronRight className="w-5 h-5 text-[#16A34A] shrink-0" />
                           </div>
                         );
                       }
 
                       const postedTime = activeAlert.createdAt ? formatLastSeen(activeAlert.createdAt) : 'some time ago';
-                      const alertSubtitle = `${activeAlert.unitsNeeded || 1} unit(s) needed at ${activeAlert.hospital || activeAlert.thana || 'Local Hospital'}`;
+                      const hospitalName = activeAlert.hospital || activeAlert.thana || activeAlert.district || 'Hospital';
 
                       return (
                         <div 
@@ -3742,105 +3872,117 @@ export default function App() {
                               setShowRequestsOverlay(true);
                             }, 100);
                           }}
-                          className="bg-gradient-to-r from-red-50/90 to-rose-50/65 border border-red-100/70 rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:from-red-100 hover:to-rose-100/80 transition-all duration-300 relative overflow-hidden group text-left animate-pulse select-none"
+                          className="bg-[#FFF5F5] border border-[#FFE3E3] border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] py-4 px-5 flex items-center justify-between shadow-[0_4px_16px_rgba(255,23,68,0.02)] cursor-pointer hover:bg-[#FFEAEA] transition-all duration-300 relative select-none"
                         >
-                          <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-xl pointer-events-none" />
-                          <div className="flex items-center gap-3.5 relative z-10">
-                            {/* Custom high-end SOS Alert Siren badge with animated rays */}
-                            <div className="relative shrink-0 select-none">
-                              <div className="absolute inset-0 bg-red-500/10 rounded-xl blur-xs scale-110" />
-                              <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#ff1744] to-rose-600 text-white flex flex-col items-center justify-center font-black text-[9px] uppercase tracking-wider relative shadow-md shadow-red-500/25">
-                                <span className="leading-none mt-0.5 animate-bounce">🚨</span>
-                                <span className="text-[7.5px] leading-none mt-0.5 tracking-tighter uppercase font-black">{activeAlert.bloodGroup}</span>
-                              </div>
+                          <div className="flex items-center gap-4 min-w-0">
+                            {/* Custom Red SOS Siren Icon */}
+                            <div className="relative shrink-0 select-none flex items-center justify-center">
+                              {/* Background pulsing ring */}
+                              <div className="absolute inset-0 bg-red-500/10 rounded-full animate-ping pointer-events-none scale-110" />
+                              <svg width="48" height="48" viewBox="0 0 48 48" className="w-12 h-12 shrink-0" fill="none">
+                                {/* Sound waves left */}
+                                <path d="M11 17C9 19.5 9 24.5 11 27" stroke="#E53935" strokeWidth="2.5" strokeLinecap="round" />
+                                <path d="M7 14C4.5 17.5 4.5 26.5 7 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
+                                {/* Sound waves right */}
+                                <path d="M37 17C39 19.5 39 24.5 37 27" stroke="#E53935" strokeWidth="2.5" strokeLinecap="round" />
+                                <path d="M41 14C43.5 17.5 43.5 26.5 41 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
+                                {/* Top beacon rays */}
+                                <path d="M24 7V11" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
+                                <path d="M16 10L18.5 13.5" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
+                                <path d="M32 10L29.5 13.5" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
+                                {/* Red dome light */}
+                                <path d="M17 22C17 17.58 20.13 14 24 14C27.87 14 31 17.58 31 22V28H17V22Z" fill="#D32F2F" />
+                                {/* Metal bottom base */}
+                                <path d="M15 28C15 27 16 26 17 26H31C32 26 33 27 33 28V31C33 32.5 31.5 33.5 30 33.5H18C16.5 33.5 15 32.5 15 31V28Z" fill="#C62828" />
+                                {/* Base highlights */}
+                                <rect x="18" y="32" width="12" height="2" rx="1" fill="#B71C1C" />
+                                {/* SOS Text inside red dome */}
+                                <text x="24.2" y="22.5" fill="#FFFFFF" fontSize="7.5" fontWeight="900" fontFamily="sans-serif" textAnchor="middle" letterSpacing="0.1">SOS</text>
+                              </svg>
                             </div>
 
-                            <div>
-                              <h4 className="text-xs font-black text-slate-900 tracking-tight flex flex-wrap items-center gap-1.5">
-                                {activeAlert.urgency || 'Urgent'}: {activeAlert.bloodGroup} Blood Needed in {activeAlert.thana || activeAlert.district || 'Hospital'}
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#ff1744] animate-ping shrink-0" />
-                              </h4>
-                              <p className="text-[9.5px] text-slate-400 font-bold uppercase mt-1 tracking-wider">
-                                {alertSubtitle} • Posted {postedTime}
-                              </p>
+                            <div className="min-w-0 leading-snug">
+                              <div className="text-[14px] sm:text-[15px] font-bold text-slate-900 tracking-tight">
+                                <span className="text-[#E53935] font-black mr-1">Urgent:</span>
+                                {activeAlert.bloodGroup} Blood Needed in {hospitalName}
+                              </div>
+                              <div className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">
+                                Posted {postedTime}
+                              </div>
                             </div>
                           </div>
                           
-                          <ChevronRight className="w-4.5 h-4.5 text-red-600 shrink-0 transform group-hover:translate-x-1.5 transition-transform" />
+                          <ChevronRight className="w-5 h-5 text-[#E53935] shrink-0" />
                         </div>
                       );
                     })()}
 
-                    {/* 2. Top Analytics Metrics Strip */}
-                    <div className="grid grid-cols-4 gap-2">
-                      {/* Metric 1: Active Donor Count (All Bangladesh) */}
-                      <div className="bg-white border border-slate-100/80 rounded-2xl p-2.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.015)] hover:border-red-100 transition-all select-none">
-                        <div className="w-8 h-8 rounded-full bg-red-50 text-[#ff1744] flex items-center justify-center mx-auto mb-1.5">
-                          <Users className="w-4 h-4" />
-                        </div>
-                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">
-                          {((allUsers?.filter(u => u.isAvailable !== false).length) || 0) + 2450}
-                        </p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Active Donors</p>
-                      </div>
+                    {/* 2. Standalone Premium Analytics Metrics Strip */}
+                    {settings?.homeShowMetrics !== false && (
+                      <div className="bg-white border border-slate-100 border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] p-3.5 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.02)] mb-5 select-none">
+                        <div className="grid grid-cols-4">
+                          {/* Metric 1: Active Donors */}
+                          <div className="text-center flex flex-col items-center justify-between border-r border-slate-100 px-1">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFF0F0] text-[#E53935] flex items-center justify-center shadow-sm">
+                              <Users className="w-4.5 h-4.5 sm:w-5 sm:h-5 stroke-[2.2]" />
+                            </div>
+                            <div className="mt-2 flex flex-col items-center">
+                              <p className="text-[15px] sm:text-[22px] font-black text-slate-900 leading-none tracking-tight">
+                                {(2450 + (allUsers?.filter(u => u.isAvailable !== false).length || 0)).toLocaleString()}
+                              </p>
+                              <p className="text-[10px] sm:text-[13px] text-slate-500 font-bold mt-1.5 leading-none">Active Donors</p>
+                              <p className="text-[9px] sm:text-[11px] font-extrabold text-[#2E7D32] mt-1.5 leading-none">+120 Today</p>
+                            </div>
+                          </div>
 
-                      {/* Metric 2: Blood Request Total */}
-                      <div className="bg-white border border-slate-100/80 rounded-2xl p-2.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.015)] hover:border-red-100 transition-all select-none">
-                        <div className="w-8 h-8 rounded-full bg-red-50 text-[#ff1744] flex items-center justify-center mx-auto mb-1.5">
-                          <Droplet className="w-4 h-4 fill-[#ff1744] stroke-[#ff1744]" />
-                        </div>
-                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">
-                          {((requests?.length) || 0) + 382}
-                        </p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Blood Requests</p>
-                      </div>
+                          {/* Metric 2: Blood Requests */}
+                          <div className="text-center flex flex-col items-center justify-between border-r border-slate-100 px-1">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFF0F0] text-[#E53935] flex items-center justify-center shadow-sm">
+                              <Droplet className="w-4.5 h-4.5 sm:w-5 sm:h-5 fill-[#E53935] stroke-[#E53935]" />
+                            </div>
+                            <div className="mt-2 flex flex-col items-center">
+                              <p className="text-[15px] sm:text-[22px] font-black text-slate-900 leading-none tracking-tight">
+                                {requests?.filter(r => r.status === 'Pending').length || 15}
+                              </p>
+                              <p className="text-[10px] sm:text-[13px] text-slate-500 font-bold mt-1.5 leading-none">Blood Requests</p>
+                              <p className="text-[9px] sm:text-[11px] font-extrabold text-[#E53935] mt-1.5 leading-none">+3 Urgent</p>
+                            </div>
+                          </div>
 
-                      {/* Metric 3: Total Hospital */}
-                      <div className="bg-white border border-slate-100/80 rounded-2xl p-2.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.015)] hover:border-red-100 transition-all select-none">
-                        <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-1.5">
-                          <Building className="w-4 h-4" />
-                        </div>
-                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">6000+</p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Total Hospital</p>
-                      </div>
+                          {/* Metric 3: Hospitals */}
+                          <div className="text-center flex flex-col items-center justify-between border-r border-slate-100 px-1">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#EBF5FF] text-[#1565C0] flex items-center justify-center shadow-sm">
+                              <Building className="w-4.5 h-4.5 sm:w-5 sm:h-5 stroke-[2.2]" />
+                            </div>
+                            <div className="mt-2 flex flex-col items-center">
+                              <p className="text-[15px] sm:text-[22px] font-black text-slate-900 leading-none tracking-tight">120</p>
+                              <p className="text-[10px] sm:text-[13px] text-slate-500 font-bold mt-1.5 leading-none">Hospitals</p>
+                              <p className="text-[9px] sm:text-[11px] font-extrabold text-[#1565C0] mt-1.5 leading-none">+8 Nearby</p>
+                            </div>
+                          </div>
 
-                      {/* Metric 4: Hospital Total in 64 district as per map */}
-                      <div className="bg-white border border-slate-100/80 rounded-2xl p-2.5 text-center shadow-[0_2px_10px_rgba(15,23,42,0.015)] hover:border-red-100 transition-all select-none">
-                        <div className="w-8 h-8 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center mx-auto mb-1.5">
-                          <MapPin className="w-4 h-4 stroke-rose-500" />
-                        </div>
-                        <p className="text-base font-black text-slate-850 leading-none tracking-tight">64</p>
-                        <p className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-wide mt-1 leading-none">Districts Cover</p>
-                      </div>
-                    </div>
-
-                    {/* 3. Interactive MapView Card with Legend & Filter */}
-                    <div className="relative bg-white rounded-[32px] p-2.5 premium-down-shadow overflow-hidden flex flex-col pointer-events-auto">
-                      <div className="px-3.5 py-3 flex items-center justify-between bg-white border-b border-rose-50/50">
-                        <div className="flex items-center gap-2 select-none">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-650" />
-                          </span>
-                          <h3 className="text-[11.5px] font-black text-slate-900 uppercase tracking-wider">Live Lifesavers Map</h3>
-                        </div>
-                        
-                        <div className="flex items-center gap-1.5 shadow-xs">
-                          <select 
-                            value={filterBloodGroup}
-                            onChange={(e) => setFilterBloodGroup(e.target.value)}
-                            className="bg-slate-50 border border-slate-200/80 text-slate-800 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider outline-none cursor-pointer hover:bg-slate-100 transition-all"
-                          >
-                            <option value="">Blood Group</option>
-                            {BLOOD_GROUPS.map(bg => <option key={bg} value={bg}>{bg}</option>)}
-                          </select>
+                          {/* Metric 4: Response Rate */}
+                          <div className="text-center flex flex-col items-center justify-between px-1">
+                            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-[#FFF0F0] text-[#E53935] flex items-center justify-center shadow-sm">
+                              <Heart className="w-4.5 h-4.5 sm:w-5 sm:h-5 stroke-[2.2] fill-[#E53935]" />
+                            </div>
+                            <div className="mt-2 flex flex-col items-center">
+                              <p className="text-[15px] sm:text-[22px] font-black text-slate-900 leading-none tracking-tight">98%</p>
+                              <p className="text-[10px] sm:text-[13px] text-slate-500 font-bold mt-1.5 leading-none">Response Rate</p>
+                              <p className="text-[9px] sm:text-[11px] font-extrabold text-[#2E7D32] mt-1.5 leading-none">Excellent</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
+                    )}
 
-                      {/* Actual Interactive Google Map Frame with controlled height */}
+                    {/* 3 & 4. Integrated Map Combination Container (Map Background + Bento Overlaid Bottom) */}
+                    <div className="relative -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full h-[480px] bg-slate-100 rounded-none sm:rounded-[36px] overflow-hidden border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between pointer-events-auto">
+                      
+                      {/* Background Google Map */}
                       <div className={isMapExpanded 
                         ? "fixed inset-0 w-screen h-screen z-[99999] bg-white border-none rounded-none overflow-hidden" 
-                        : "h-[390px] w-full rounded-[26px] overflow-hidden relative z-10 border border-slate-100"}>
+                        : "absolute inset-0 w-full h-full z-0"}>
                         <MapView 
                           requests={requests.filter(r => !filterBloodGroup || r.bloodGroup === filterBloodGroup)} 
                           donors={activeDonors.filter(d => !filterBloodGroup || d.bloodGroup === filterBloodGroup)} 
@@ -3861,8 +4003,23 @@ export default function App() {
                           onOverviewChange={setMapOverviewOpen}
                         />
 
-                        {/* Corner buttons: Full screen toggle (Maximize/Minimize) top-left inside viewport */}
-                        <div className="absolute top-4 left-4 z-40 flex items-center gap-2">
+                        {/* Compass floating button inside shorter map view */}
+                        <div className="absolute top-4 left-4 z-20">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMapResetKey?.(prev => prev + 1);
+                              addToast("Recentered Map", "Compass target centered with active lifesavers", "info");
+                            }}
+                            className="w-8 h-8 bg-white/90 backdrop-blur-sm hover:bg-white text-slate-700 active:scale-90 border border-slate-200/50 shadow-md rounded-full flex items-center justify-center transition-all group cursor-pointer"
+                            title="Recenter Map View"
+                          >
+                            <Compass className="w-4 h-4 text-red-600 group-hover:rotate-45 transition-transform duration-300" />
+                          </button>
+                        </div>
+
+                        {/* Full Screen Map toggle (Maximize/Minimize) button inside shorter map view */}
+                        <div className="absolute top-14 left-4 z-20 flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
@@ -3873,229 +4030,201 @@ export default function App() {
                                 "success"
                               );
                             }}
-                            className="w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200/80 shadow-lg rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 group font-black cursor-pointer"
+                            className="w-8 h-8 bg-white/90 backdrop-blur-sm hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/50 shadow-md rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 group font-black cursor-pointer"
                             title={isMapExpanded ? "Minimize Map View" : "Maximize Map View"}
                           >
                             {isMapExpanded ? (
-                              <Minimize2 className="w-5.5 h-5.5 text-slate-700 group-hover:scale-110 transition-all duration-200" />
+                              <Minimize2 className="w-4 h-4 text-slate-700 group-hover:scale-110 transition-all duration-200" />
                             ) : (
-                              <Maximize2 className="w-5.5 h-5.5 text-red-650 group-hover:scale-110 transition-all duration-200" />
+                              <Maximize2 className="w-4 h-4 text-red-650 group-hover:scale-110 transition-all duration-200" />
                             )}
                           </button>
-
-                          {/* Full View Header Overlay Banner */}
-                          {isMapExpanded && (
-                            <div className="bg-white/95 backdrop-blur-md rounded-2xl py-2 px-4 shadow-lg border border-slate-200/60 flex items-center gap-2 animate-fade-in shrink-0">
-                              <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
-                              <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Emergency Lifesavers Map (Full View)</span>
-                              <span className="text-[8px] text-slate-400 font-extrabold select-none pl-2 border-l border-slate-200 hidden sm:inline">Esc to restore</span>
-                            </div>
-                          )}
                         </div>
 
-                        {/* Floating compass crosshair target button on bottom left inside map viewport */}
-                        <div className="absolute bottom-4 left-4 z-40">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMapResetKey?.(prev => prev + 1);
-                              addToast("Recentered Map", "Compass target centered with active lifesavers", "info");
-                            }}
-                            className="w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 active:scale-90 border border-slate-200 shadow-lg rounded-full flex items-center justify-center transition-all group"
-                            title="Recenter Map View"
-                          >
-                            <Compass className="w-5.5 h-5.5 text-red-600 group-hover:rotate-45 transition-transform duration-300" />
-                          </button>
-                        </div>
-
-                        {/* Beautiful Floating Legend list stack overlay on top-right viewport */}
-                        <div className="absolute top-4 right-4 z-40 bg-white/90 backdrop-blur-md rounded-2xl p-2.5 border border-slate-200/60 shadow-lg flex flex-col gap-1.5 pointer-events-auto select-none">
-                          <div className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 pb-1 mb-0.5">Legend</div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#1e40af] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-755">O+ Type</span>
+                        {/* Full Screen Header Overlay Banner */}
+                        {isMapExpanded && (
+                          <div className="absolute top-4 left-16 z-[100000] bg-white/95 backdrop-blur-md rounded-2xl py-2 px-4 shadow-lg border border-slate-200/60 flex items-center gap-2 animate-fade-in shrink-0">
+                            <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
+                            <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Emergency Lifesavers Map (Full View)</span>
+                            <span className="text-[8px] text-slate-400 font-extrabold select-none pl-2 border-l border-slate-200 hidden sm:inline">Esc to restore</span>
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#15803d] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-755">A+ Type</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#d97706] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-755">B+ Type</span>
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-[#7c3aed] shrink-0" />
-                            <span className="text-[8.5px] font-black text-slate-755">AB+ Type</span>
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    </div>
 
-                    {/* 4. Quick Actions Bento Grid Row */}
-                    <div className="grid grid-cols-4 gap-2 bg-white rounded-3xl p-3 premium-down-shadow select-none">
-                      <button 
-                        onClick={() => setView('find')}
-                        className="flex flex-col items-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-colors group cursor-pointer"
-                        title="Search Active Donors"
-                      >
-                        <div className="w-12 h-12 rounded-full bg-[#eef2f6] text-blue-600 flex items-center justify-center shadow-inner group-hover:scale-105 duration-300">
-                          <Search className="w-5 h-5 text-blue-600" />
-                        </div>
-                        <span className="text-[10px] font-black text-slate-800 tracking-tight mt-2 block leading-none">Find Donor</span>
-                        <span className="text-[8.5px] font-bold text-slate-400 mt-1 block leading-none">Donor list</span>
-                      </button>
+                      {/* Foreground Overlays Wrapper (pointer-events-none so users can click map through it) */}
+                      <div className="absolute inset-0 flex flex-col justify-end p-2 pointer-events-none z-10">
+                        
+                        {/* C. Downsize Overlay: Quick Actions Bento Grid */}
+                        {settings?.homeShowQuickActions !== false && (
+                          <div className="bg-white/85 backdrop-blur-md border border-white/50 rounded-[20px] p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.04)] select-none pointer-events-auto">
+                            <div className="grid grid-cols-4 gap-1">
+                              <button 
+                                onClick={() => setView('find')}
+                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                title="Search Active Donors"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-blue-50/80 text-blue-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
+                                  <Search className="w-3.5 h-3.5 text-blue-600" />
+                                </div>
+                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Find Donor</span>
+                              </button>
 
-                      <button 
-                        onClick={() => {
-                          if (user) setView('request-form');
-                          else handleLogin();
-                        }}
-                        className="flex flex-col items-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-colors group cursor-pointer"
-                        title="Create New Blood Request"
-                      >
-                        <div className="w-12 h-12 rounded-full bg-red-50 text-[#FF1744] flex items-center justify-center shadow-inner group-hover:scale-105 duration-300">
-                          <Droplet className="w-5 h-5 text-red-600 fill-red-650" />
-                        </div>
-                        <span className="text-[10px] font-black text-slate-800 tracking-tight mt-2 block leading-none">blood Request</span>
-                        <span className="text-[8.5px] font-bold text-slate-400 mt-1 block leading-none font-bold">Post Request</span>
-                      </button>
+                              <button 
+                                onClick={() => {
+                                  if (user) setView('request-form');
+                                  else handleLogin();
+                                }}
+                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                title="Create New Blood Request"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-red-50/80 text-[#FF1744] flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
+                                  <Droplet className="w-3.5 h-3.5 text-red-650 fill-red-650" />
+                                </div>
+                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Request</span>
+                              </button>
 
-                      <button 
-                        onClick={() => {
-                          setView('hospitals');
-                          if (profile?.district) {
-                            setHospitalViewDistrict(profile.district);
-                            if (profile.thana) setHospitalViewThana(profile.thana);
-                          }
-                          addToast("Hospitals Finder", "Search hospitals & clinics by District and Thana", "info");
-                        }}
-                        className="flex flex-col items-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-colors group cursor-pointer"
-                        title="Search Hospitals & Clinics"
-                      >
-                        <div className="w-12 h-12 rounded-full bg-[#e6f4fc] text-teal-600 flex items-center justify-center shadow-inner group-hover:scale-105 duration-300">
-                          <Building className="w-5 h-5 text-teal-600" />
-                        </div>
-                        <span className="text-[10px] font-black text-slate-800 tracking-tight mt-2 block leading-none">Hospitals</span>
-                        <span className="text-[8.5px] font-bold text-slate-400 mt-1 block leading-none">Find clinics</span>
-                      </button>
+                              <button 
+                                onClick={() => {
+                                  setView('hospitals');
+                                  if (profile?.district) {
+                                    setHospitalViewDistrict(profile.district);
+                                    if (profile.thana) setHospitalViewThana(profile.thana);
+                                  }
+                                  addToast("Hospitals Finder", "Search hospitals & clinics by District and Thana", "info");
+                                }}
+                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                title="Search Hospitals & Clinics"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-teal-50/80 text-teal-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
+                                  <Building className="w-3.5 h-3.5 text-teal-600" />
+                                </div>
+                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Hospitals</span>
+                              </button>
 
-                      <button 
-                        onClick={() => {
-                          setView('emergency');
-                        }}
-                        className="flex flex-col items-center text-center p-2 rounded-2xl hover:bg-slate-50 transition-colors group cursor-pointer"
-                        title="Emergency Hotlines & Services"
-                      >
-                        <div className="w-12 h-12 rounded-full bg-[#fffbeb] text-amber-600 flex items-center justify-center shadow-inner group-hover:scale-105 duration-300">
-                           <Phone className="w-5 h-5 text-amber-600" />
-                        </div>
-                        <span className="text-[10px] font-black text-slate-800 tracking-tight mt-2 block leading-none">Emergency</span>
-                        <span className="text-[8.5px] font-bold text-slate-400 mt-1 block leading-none">Hotline</span>
-                      </button>
+                              <button 
+                                onClick={() => {
+                                  setView('emergency');
+                                }}
+                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                title="Emergency Hotlines & Services"
+                              >
+                                <div className="w-8 h-8 rounded-full bg-amber-50/80 text-amber-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
+                                   <Phone className="w-3.5 h-3.5 text-amber-600" />
+                                </div>
+                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none font-bold">Emergency</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        
+                      </div>
                     </div>
 
                     {/* 5. Nearest Donor Spotlight (One Premium Designable Card) */}
-                    <div className="bg-white rounded-[28px] p-5 premium-down-shadow relative overflow-hidden">
-                      {/* Subtly glowing top-right accent */}
-                      <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-rose-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
-                      
-                      <div className="flex items-center justify-between mb-4.5 pb-2 border-b border-rose-50/20 select-none">
-                        <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setView('find')}>
-                          <h3 className="text-xs font-black text-red-600 uppercase tracking-widest flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Nearest Active Donor
-                          </h3>
-                          <ChevronRight className="w-3.5 h-3.5 text-red-500 stroke-[2.5]" />
+                    {settings?.homeShowNearestDonor !== false && (
+                      <div className="bg-white rounded-[28px] p-5 premium-down-shadow relative overflow-hidden">
+                        {/* Subtly glowing top-right accent */}
+                        <div className="absolute top-0 right-0 w-36 h-36 bg-gradient-to-br from-rose-500/5 to-transparent rounded-full blur-2xl pointer-events-none" />
+                        
+                        <div className="flex items-center justify-between mb-4.5 pb-2 border-b border-rose-50/20 select-none">
+                          <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => setView('find')}>
+                            <h3 className="text-xs font-black text-red-600 uppercase tracking-widest flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> Nearest Active Donor
+                            </h3>
+                            <ChevronRight className="w-3.5 h-3.5 text-red-500 stroke-[2.5]" />
+                          </div>
+                          <span className="text-[8.5px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 bg-rose-50 border border-rose-100/60 rounded-full px-2 py-0.5">
+                            Live DB Sync
+                          </span>
                         </div>
-                        <span className="text-[8.5px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 bg-rose-50 border border-rose-100/60 rounded-full px-2 py-0.5">
-                          Live DB Sync
-                        </span>
-                      </div>
 
-                      {spotlightDonors.length > 0 ? (() => {
-                        const donor = spotlightDonors[0];
-                        const isDemo = 'isDemo' in donor && (donor as any).isDemo;
-                        return (
-                          <div className="space-y-4">
-                            {/* Premium Spotlight Card */}
-                            <div className="bg-gradient-to-b from-rose-50/20 to-transparent p-4.5 rounded-2xl border border-rose-100/30">
-                              <div className="flex items-start gap-4">
-                                <div className="relative shrink-0 select-none">
-                                  <div className="absolute inset-0 bg-red-500/10 rounded-2xl blur-xs scale-105 animate-pulse" />
-                                  <img 
-                                    src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
-                                    alt={donor.displayName}
-                                    className="relative w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-md"
-                                  />
-                                  <span className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-md border border-slate-50">
-                                    <span className="absolute h-2 w-2 rounded-full bg-emerald-500 animate-ping opacity-75" />
-                                    <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
-                                  </span>
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h4 className="text-[14px] font-black text-slate-900 leading-none truncate">{donor.displayName}</h4>
-                                    {donor.isVerified && (
-                                      <span className="bg-blue-50/80 text-[7.5px] text-blue-600 font-extrabold border border-blue-100/50 rounded px-1.5 py-0.5 uppercase tracking-wide shrink-0">Verified</span>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-1 mt-2 text-slate-500 font-extrabold text-[10px] select-none truncate">
-                                    <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
-                                    <span className="truncate">{donor.thana ? `${donor.thana}, ` : ''}{donor.district || 'Bangladesh'}</span>
+                        {spotlightDonors.length > 0 ? (() => {
+                          const donor = spotlightDonors[0];
+                          const isDemo = 'isDemo' in donor && (donor as any).isDemo;
+                          return (
+                            <div className="space-y-4">
+                              {/* Premium Spotlight Card */}
+                              <div className="bg-gradient-to-b from-rose-50/20 to-transparent p-4.5 rounded-2xl border border-rose-100/30">
+                                <div className="flex items-start gap-4">
+                                  <div className="relative shrink-0 select-none">
+                                    <div className="absolute inset-0 bg-red-500/10 rounded-2xl blur-xs scale-105 animate-pulse" />
+                                    <img 
+                                      src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
+                                      alt={donor.displayName}
+                                      className="relative w-14 h-14 rounded-2xl object-cover border-2 border-white shadow-md"
+                                    />
+                                    <span className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-md border border-slate-50">
+                                      <span className="absolute h-2 w-2 rounded-full bg-emerald-500 animate-ping opacity-75" />
+                                      <span className="relative h-2 w-2 rounded-full bg-emerald-500" />
+                                    </span>
                                   </div>
 
-                                  <div className="flex items-center gap-4 mt-3">
-                                    <div className="flex items-center gap-1 bg-white/70 px-2 py-0.5 rounded-lg border border-slate-100">
-                                      <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Group</span>
-                                      <span className="text-xs font-black text-red-650 bg-red-50 px-1.5 py-0.5 rounded">{donor.bloodGroup}</span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <h4 className="text-[14px] font-black text-slate-900 leading-none truncate">{donor.displayName}</h4>
+                                      {donor.isVerified && (
+                                        <span className="bg-blue-50/80 text-[7.5px] text-blue-600 font-extrabold border border-blue-100/50 rounded px-1.5 py-0.5 uppercase tracking-wide shrink-0">Verified</span>
+                                      )}
                                     </div>
-                                    <div className="flex items-center gap-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                      <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Available Now</span>
+                                    
+                                    <div className="flex items-center gap-1 mt-2 text-slate-500 font-extrabold text-[10px] select-none truncate">
+                                      <MapPin className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                                      <span className="truncate">{donor.thana ? `${donor.thana}, ` : ''}{donor.district || 'Bangladesh'}</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 mt-3">
+                                      <div className="flex items-center gap-1 bg-white/70 px-2 py-0.5 rounded-lg border border-slate-100">
+                                        <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider">Group</span>
+                                        <span className="text-xs font-black text-red-650 bg-red-50 px-1.5 py-0.5 rounded">{donor.bloodGroup}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Available Now</span>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
 
-                            {/* Direct Action Gateway Layout */}
-                            <div className="grid grid-cols-2 gap-2.5">
-                              <a
-                                href={`tel:${donor.phone || '+8801990000000'}`}
-                                onClick={() => {
-                                  addToast(`Calling ${donor.displayName}`, `Dialing direct secure gateway to ${donor.displayName}...`, "success");
-                                }}
-                                className="flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-rose-50/50 border border-slate-150 py-3 rounded-xl text-[11px] font-black text-slate-800 transition-all active:scale-[0.97] cursor-pointer shadow-xs"
-                              >
-                                <Phone className="w-3.5 h-3.5 text-slate-500 fill-slate-400 animate-bounce" />
-                                <span>Voice Call</span>
-                              </a>
+                              {/* Direct Action Gateway Layout */}
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <a
+                                  href={`tel:${donor.phone || '+8801990000000'}`}
+                                  onClick={() => {
+                                    addToast(`Calling ${donor.displayName}`, `Dialing direct secure gateway to ${donor.displayName}...`, "success");
+                                  }}
+                                  className="flex items-center justify-center gap-1.5 bg-slate-50 hover:bg-rose-50/50 border border-slate-150 py-3 rounded-xl text-[11px] font-black text-slate-800 transition-all active:scale-[0.97] cursor-pointer shadow-xs"
+                                >
+                                  <Phone className="w-3.5 h-3.5 text-slate-500 fill-slate-400 animate-bounce" />
+                                  <span>Voice Call</span>
+                                </a>
 
-                              <button
-                                onClick={() => {
-                                  if (isDemo) {
-                                    addToast("Demo Donor Spotlight", `This is a verified placeholder donor. Sign up other active accounts to test live messaging.`, "info");
-                                  } else {
-                                    addToast("Connecting direct chat...", `In-app chat initialized with ${donor.displayName}`, "info");
-                                    openChat(donor.uid);
-                                  }
-                                }}
-                                className="flex items-center justify-center gap-1.5 bg-[#ff1744] hover:bg-red-600 text-white py-3 rounded-xl text-[11px] font-black transition-all active:scale-[0.97] cursor-pointer shadow-md shadow-red-100"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5 text-white fill-white" />
-                                <span>Send Message</span>
-                              </button>
+                                <button
+                                  onClick={() => {
+                                    if (isDemo) {
+                                      addToast("Demo Donor Spotlight", `This is a verified placeholder donor. Sign up other active accounts to test live messaging.`, "info");
+                                    } else {
+                                      addToast("Connecting direct chat...", `In-app chat initialized with ${donor.displayName}`, "info");
+                                      openChat(donor.uid);
+                                    }
+                                  }}
+                                  className="flex items-center justify-center gap-1.5 bg-[#ff1744] hover:bg-red-600 text-white py-3 rounded-xl text-[11px] font-black transition-all active:scale-[0.97] cursor-pointer shadow-md shadow-red-100"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-white fill-white" />
+                                  <span>Send Message</span>
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })() : (
-                        <p className="text-slate-400 text-center text-xs py-4">No nearest donors available currently.</p>
-                      )}
-                    </div>
+                          );
+                        })() : (
+                          <p className="text-slate-400 text-center text-xs py-4">No nearest donors available currently.</p>
+                        )}
+                      </div>
+                    )}
 
                     {/* 6. Live Donation updates and matching Stream Activity Feed */}
-                    <div className="space-y-3">
+                    {settings?.homeShowLiveFeed !== false && (
+                      <div className="space-y-3">
                       <div className="flex items-center justify-between px-1 select-none">
                         <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-1.5">
                           Live Donation Outcomes Feed
@@ -4178,6 +4307,235 @@ export default function App() {
                         })}
                       </div>
                     </div>
+                  )}
+
+                  {/* 7. Events Section */}
+                  <div className="space-y-4 pt-5 select-none text-left">
+                    <div className="flex items-center justify-between px-0 select-none">
+                      <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-1">
+                        সকল ইভেন্টসমূহ (All Events)
+                      </h3>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setShowAllEventsModal(true)}
+                          className="text-xs font-black text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                        >
+                          সব দেখুন <ChevronRight className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (user) {
+                              setShowEventCreateModal(true);
+                            } else {
+                              handleLogin();
+                              addToast("Authentication Required", "Please log in to create an event.", "info");
+                            }
+                          }}
+                          className="text-[10px] font-black text-white uppercase tracking-wider bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-xl border border-red-700 shadow-sm cursor-pointer transition-all active:scale-95"
+                        >
+                          + তৈরি করুন
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Horizontal slider system matching image */}
+                    <div className="flex gap-4 overflow-x-auto pb-4 pt-1 snap-x scrollbar-none scroll-smooth">
+                      {(events.length > 0 ? events : [
+                        {
+                          id: 'event-1',
+                          title: 'জাতীয় রক্তদান কর্মসূচি ও ক্যাম্পেইন',
+                          description: 'জাতীয় যুব দিবস উপলক্ষে ঢাকার মিরপুরে একটি বিশেষ রক্তদান ক্যাম্পেইনের আয়োজন করা হয়েছে। ঢাকা মেডিকেল কলেজের দক্ষ চিকিৎসক দলের তত্ত্বাবধানে নিরাপদ ও উন্নত পরিবেশে রক্তদান প্রক্রিয়া সম্পন্ন হবে। রক্তদাতাদের জন্য থাকবে ফ্রি হেলথ চেকআপ, ব্লাড গ্রুপ টেস্ট এবং বিশেষ সম্মাননা সার্টিফিকেট ও গিফট হ্যাম্পার। সকলের উপস্থিতি ও সহযোগিতা একান্ত কাম্য।',
+                          location: 'মিরপুর-১০, পাবলিক লাইব্রেরি প্রাঙ্গণ, ঢাকা',
+                          eventDate: '2026-09-10T10:00',
+                          imageUrl: 'https://images.unsplash.com/photo-1579154204601-01588f351167?w=600&auto=format&fit=cover&q=80',
+                          status: 'Active',
+                          joinedUsers: [] as string[]
+                        },
+                        {
+                          id: 'event-2',
+                          title: 'জরুরী প্লাজমা ও রক্ত সংগ্রহ ক্যাম্প',
+                          description: 'ডেঙ্গু আক্রান্ত রোগীদের প্লেটলেট ও রক্ত সরবরাহে সহায়তা করতে স্বেচ্ছাসেবী ব্লাড ক্লাবের উদ্যোগে এই ক্যাম্পটি আয়োজিত হচ্ছে। এখানে সম্পূর্ণ জীবাণুমুক্ত উপায়ে পেশাদার টেকনিশিয়ানদের দ্বারা রক্ত সংগ্রহ করা হবে। আমাদের লক্ষ্য অন্তত ১০০ ব্যাগ রক্ত সংগ্রহ করে মুমূর্ষু রোগীদের পাশে দাঁড়ানো। আসুন, একটি প্রাণ বাঁচাতে আপনার হাত বাড়িয়ে দিন।',
+                          location: 'ধানমন্ডি লেক রবীন্দ্র সরোবর, ঢাকা',
+                          eventDate: '2026-09-25T14:30',
+                          imageUrl: 'https://images.unsplash.com/photo-1615461066841-6116ecdccd04?w=600&auto=format&fit=cover&q=80',
+                          status: 'Active',
+                          joinedUsers: [] as string[]
+                        }
+                      ]).map((ev) => {
+                        const isJoined = ev.joinedUsers?.includes(user?.uid || '');
+                        let monthStr = "SEP";
+                        let dayStr = "14";
+                        let isPassed = false;
+                        try {
+                          if (ev.eventDate) {
+                            const dateObj = new Date(ev.eventDate);
+                            if (!isNaN(dateObj.getTime())) {
+                              monthStr = dateObj.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+                              dayStr = dateObj.getDate().toString().padStart(2, '0');
+                              isPassed = dateObj.getTime() < Date.now();
+                            }
+                          }
+                        } catch (e) {}
+
+                        return (
+                          <div 
+                            key={ev.id}
+                            className="bg-white border border-slate-150 rounded-2xl overflow-hidden flex gap-4 p-3.5 w-[360px] md:w-[400px] shrink-0 snap-start shadow-sm transition-all duration-300 hover:border-red-200"
+                          >
+                            {/* Left side: Image and status badge */}
+                            <div className="relative w-28 h-28 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-slate-100">
+                              {ev.imageUrl ? (
+                                <img 
+                                  src={ev.imageUrl} 
+                                  alt={ev.title}
+                                  className="w-full h-full object-cover" 
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-rose-50 text-rose-500 font-black text-xs">
+                                  CAMP
+                                </div>
+                              )}
+                              {/* Status badge inside the image */}
+                              <span className={`absolute top-1.5 left-1.5 rounded-lg px-2 py-0.5 text-[7px] font-black tracking-wider uppercase backdrop-blur-xs text-white shadow-xs ${
+                                isPassed ? 'bg-rose-950/80' : 'bg-red-650'
+                              }`}>
+                                {isPassed ? 'PASSED' : 'ACTIVE'}
+                              </span>
+                            </div>
+
+                            {/* Right side: Title, Date, Location, Join button */}
+                            <div className="flex-1 min-w-0 flex flex-col justify-between text-left">
+                              <div>
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
+                                    📅 {monthStr} {dayStr}
+                                  </span>
+                                </div>
+                                <h4 
+                                  onClick={() => setSelectedEvent(ev as AppEvent)}
+                                  className="text-xs font-black text-slate-900 leading-snug tracking-tight line-clamp-2 mt-1 hover:text-red-650 transition-colors cursor-pointer"
+                                >
+                                  {ev.title}
+                                </h4>
+                                <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1 mt-1 truncate">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{ev.location}</span>
+                                </p>
+                              </div>
+
+                              <button
+                                onClick={async () => {
+                                  if (!user) {
+                                    handleLogin();
+                                    return;
+                                  }
+                                  if (ev.id.startsWith('event-')) {
+                                    addToast("ইভেন্ট যোগদান", "এটি একটি ডেমো ইভেন্ট। নিজের ইভেন্ট তৈরি করে যোগদান করতে পারেন!", "info");
+                                    return;
+                                  }
+                                  try {
+                                    const eventRef = doc(db, 'events', ev.id);
+                                    const currentJoined = ev.joinedUsers || [];
+                                    let updatedJoined = [];
+                                    if (isJoined) {
+                                      updatedJoined = currentJoined.filter(uid => uid !== user.uid);
+                                      addToast("ইভেন্ট থেকে বিদায়", "আপনি সফলভাবে ইভেন্টটি ত্যাগ করেছেন।", "info");
+                                    } else {
+                                      updatedJoined = [...currentJoined, user.uid];
+                                      addToast("ইভেন্টে যোগদান", "আপনি সফলভাবে ইভেন্টে যোগ দিয়েছেন!", "success");
+                                    }
+                                    await updateDoc(eventRef, { joinedUsers: updatedJoined });
+                                  } catch (err: any) {
+                                    addToast("Error", err.message || "Failed to update event status.", "error");
+                                  }
+                                }}
+                                className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all flex items-center justify-center border border-rose-100/50 cursor-pointer active:scale-95"
+                              >
+                                {isJoined ? 'Joined (বিদায় নিন)' : 'Join Event'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* 8. Health Tips (স্বাস্থ্য টিপস) Section */}
+                  <div className="space-y-4 pt-5 select-none text-left">
+                    <div className="flex items-center justify-between px-0 select-none">
+                      <h3 className="text-sm font-black text-slate-900 uppercase tracking-tight flex items-center gap-1.5">
+                        স্বাস্থ্য তথ্য ও ব্লগ (Health Tips & Blogs)
+                      </h3>
+                      <button
+                        onClick={() => setShowAllBlogsModal(true)}
+                        className="text-xs font-black text-rose-600 hover:text-rose-700 flex items-center gap-0.5 cursor-pointer"
+                      >
+                        সব দেখুন <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(healthTips.length > 0 ? healthTips : [
+                        {
+                          id: 'tip-1',
+                          title: 'রক্তদানের সাধারণ স্বাস্থ্য উপকারিতা',
+                          content: 'নিয়মিত রক্তদান করলে শরীরে নতুন লোহিত রক্তকণিকা বা রেড ব্লাড সেল তৈরির হার বাড়ে। গবেষণায় দেখা গেছে, রক্তদান রক্তে অতিরিক্ত আয়রনের মাত্রা কমাতে সাহায্য করে, যা হৃদরোগ ও স্ট্রোকের ঝুঁকি কমায়। তাছাড়া এটি শরীরের সামগ্রিক কোলেস্টেরল মাত্রা নিয়ন্ত্রণে রাখতে সহায়ক এবং রক্তকণিকা সুস্থ রাখে।',
+                          readTime: '৩ মিনিট রিড',
+                          imageUrl: 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600&auto=format&fit=cover&q=80',
+                          likes: [] as string[]
+                        },
+                        {
+                          id: 'tip-2',
+                          title: 'রক্তদানের পূর্বে ও পরে কী খাবেন?',
+                          content: 'রক্তদানের পূর্বে অন্তত ৩-৪ গ্লাস পানি বা ফলের রস পান করুন এবং একটি স্বাস্থ্যকর ও পুষ্টিকর খাবার খান। খালি পেটে রক্তদান করা যাবে না। রক্তদানের পর অন্তত ১৫-২০ মিনিট শুয়ে বা বসে বিশ্রাম নিন এবং প্রচুর তরল খাবার পান করুন।',
+                          readTime: '৪ মিনিট রিড',
+                          imageUrl: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=600&auto=format&fit=cover&q=80',
+                          likes: [] as string[]
+                        },
+                        {
+                          id: 'tip-3',
+                          title: 'রক্ত দিতে কারা যোগ্য এবং কারা অযোগ্য?',
+                          content: 'যেকোনো সুস্থ ব্যক্তি যার বয়স ১৮ থেকে ৬০ বছর, ওজন কমপক্ষে ৪৫ কেজি এবং রক্তের হিমোগ্লোবিন সঠিক মাত্রায় আছে, তিনি রক্তদান করতে পারবেন। কিন্তু জটিল রোগ থাকলে সতর্ক হতে হবে।',
+                          readTime: '৩ মিনিট রিড',
+                          imageUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=600&auto=format&fit=cover&q=80',
+                          likes: [] as string[]
+                        }
+                      ]).map((tip) => {
+                        const isLiked = tip.likes?.includes(user?.uid || '');
+                        return (
+                          <div 
+                            key={tip.id}
+                            onClick={() => setSelectedHealthTip(tip as HealthTip)}
+                            className="bg-white border border-slate-100 shadow-xs hover:border-slate-300 rounded-3xl p-3 flex gap-3.5 items-center cursor-pointer transition-all duration-300"
+                          >
+                            {tip.imageUrl && (
+                              <img 
+                                src={tip.imageUrl} 
+                                alt={tip.title} 
+                                className="w-20 h-20 object-cover rounded-2xl border border-slate-100 shrink-0 shadow-xs" 
+                              />
+                            )}
+                            <div className="flex-1 flex flex-col justify-between min-w-0 h-20 py-0.5 text-left">
+                              <div>
+                                <h4 className="text-[12px] font-black text-slate-900 leading-snug text-left truncate">{tip.title}</h4>
+                                <p className="text-[10px] text-slate-400 mt-1 leading-relaxed line-clamp-2 text-left font-sans">{tip.content}</p>
+                              </div>
+                              <div className="flex items-center justify-between mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span>{tip.readTime || '৩ মিনিট রিড'}</span>
+                                </span>
+                                <span className="text-rose-500 font-black">
+                                  ❤️ {tip.likes?.length || 0} Likes
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   </div>
                 </div>
               ) : (
@@ -4430,7 +4788,7 @@ export default function App() {
                   </div>
 
                   {/* Main List content */}
-                  <div className="px-5 space-y-4">
+                  <div className="px-0 sm:px-4 space-y-4">
                     {(() => {
                       const filtered = filteredRequests;
 
@@ -4500,12 +4858,12 @@ export default function App() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
-              className="h-full overflow-y-auto pt-24 pb-28 px-4 md:px-6 bg-slate-50/40"
+              className="h-full overflow-y-auto pt-24 pb-28 px-0 bg-slate-50/40"
             >
               <div className="w-full max-w-[480px] md:max-w-2xl lg:max-w-3xl mx-auto space-y-5">
                 
                 {/* 1. HEADER SECTION (with Filter Icon on top right) */}
-                <div className="flex items-center justify-between select-none">
+                <div className="px-4 flex items-center justify-between select-none">
                   <div>
                     <h2 className="text-[28px] font-black text-slate-900 tracking-tight leading-none">Find Donor</h2>
                     <p className="text-xs font-semibold text-slate-405 mt-1.5 leading-none">Find blood donors near you</p>
@@ -4523,8 +4881,8 @@ export default function App() {
                 </div>
 
                 {/* 2. SEARCH BAR SECTION (with Mic indicator) */}
-                <div className="relative select-none">
-                  <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                <div className="px-4 relative select-none">
+                  <Search className="w-5 h-5 text-slate-400 absolute left-8 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     placeholder="Search by donor name, location, blood group..."
@@ -4537,7 +4895,7 @@ export default function App() {
                       addToast("Voice Search Active", "Listening to voice input... Filled state with 'Cox's Bazar'", "info");
                       setDonorSearchQuery("Cox's Bazar");
                     }}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 hover:text-[#ff1744] transition-colors"
+                    className="absolute right-8 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 hover:text-[#ff1744] transition-colors"
                     title="Voice Search"
                   >
                     <Mic className="w-5 h-5" />
@@ -4545,13 +4903,13 @@ export default function App() {
                 </div>
 
                 {/* 3. BLOOD GROUP CHIPS ROW (Scrollable with active/inactive states) */}
-                <div className="space-y-1.5 select-none">
+                <div className="px-4 space-y-1.5 select-none">
                   <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5 px-0.5">
                     {['All', 'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((bg) => {
                       const isActive = bg === 'All' ? (!filterBloodGroup || filterBloodGroup === '') : (filterBloodGroup === bg);
                       return (
                         <button
-                          key={bg}
+                           key={bg}
                           onClick={() => setFilterBloodGroup(bg === 'All' ? '' : bg)}
                           className={`shrink-0 px-5.5 py-2 rounded-full text-xs font-black transition-all cursor-pointer ${
                             isActive
@@ -4567,7 +4925,7 @@ export default function App() {
                 </div>
 
                 {/* 4. QUICK FILTERS ROW */}
-                <div className="space-y-1 select-none">
+                <div className="px-4 space-y-1 select-none">
                   <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 px-0.5">
                     {[
                       { label: 'Available Now', active: quickFilterAvailable, toggle: () => setQuickFilterAvailable(!quickFilterAvailable) },
@@ -4673,18 +5031,20 @@ export default function App() {
                   const verified = combined.filter(u => u.isVerified).length;
 
                   return (
-                    <div className="bg-white border border-slate-100 rounded-[22px] p-3 shadow-[0_2px_12px_rgba(15,23,42,0.015)] select-none grid grid-cols-3 gap-2 text-center">
-                      <div>
-                        <p className="text-sm font-black text-slate-800 leading-none">{total}</p>
-                        <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Total Donors</p>
-                      </div>
-                      <div className="border-x border-slate-100">
-                        <p className="text-sm font-black text-[#FF1744] leading-none">{available}</p>
-                        <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Available Now</p>
-                      </div>
-                      <div>
-                        <p className="text-sm font-black text-rose-500 leading-none">{verified}</p>
-                        <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Verified Donors</p>
+                    <div className="px-4">
+                      <div className="bg-white border border-slate-100 rounded-[22px] p-3 shadow-[0_2px_12px_rgba(15,23,42,0.015)] select-none grid grid-cols-3 gap-2 text-center">
+                        <div>
+                          <p className="text-sm font-black text-slate-800 leading-none">{total}</p>
+                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Total Donors</p>
+                        </div>
+                        <div className="border-x border-slate-100">
+                          <p className="text-sm font-black text-[#FF1744] leading-none">{available}</p>
+                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Available Now</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-rose-500 leading-none">{verified}</p>
+                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Verified Donors</p>
+                        </div>
                       </div>
                     </div>
                   );
@@ -4838,8 +5198,8 @@ export default function App() {
                   const topMatch = filtered.find(d => d.isAvailable && d.isVerified) || filtered.find(d => d.isAvailable) || filtered[0] || null;
 
                   return (
-                    <div className="space-y-4 pb-12">
-                      <div className="flex items-center justify-between px-1 select-none">
+                    <div className="space-y-0 pb-12">
+                      <div className="flex items-center justify-between px-4 pb-3 select-none">
                         <span className="text-[14px] font-black text-slate-800 uppercase tracking-wide">Available Donors</span>
                         <span className="text-xs font-bold text-slate-400">
                           <strong className="text-[#FF1744] font-black">{filtered.length}</strong> donors found
@@ -4848,12 +5208,12 @@ export default function App() {
 
                       {/* TOP MATCH SPOTLIGHT COMPONENT */}
                       {topMatch && !donorSearchQuery && !filterBloodGroup && (
-                        <div className="bg-gradient-to-br from-[#FF1744]/2 via-rose-500/5 to-transparent border-2 border-[#FF1744]/15 rounded-[24px] p-4.5 relative overflow-hidden group shadow-sm select-none animate-in fade-in slide-in-from-top-4">
-                          <div className="absolute top-0 right-0 bg-[#FF1744] text-white px-3 py-1 rounded-bl-2xl text-[8px] font-black uppercase tracking-wider z-10">
-                            👑 Top Match
+                        <div className="bg-gradient-to-br from-[#FF1744]/2 via-rose-500/5 to-transparent border-y border-x-0 border-[#FF1744]/20 p-4.5 relative overflow-hidden group select-none animate-in fade-in slide-in-from-top-4 w-full rounded-none">
+                          <div className="absolute top-0 left-0 bg-[#FF1744] text-white px-3.5 py-1.5 rounded-br-2xl text-[8px] font-black uppercase tracking-wider z-10 flex items-center gap-1 shadow-sm">
+                            👑 TOP MATCH
                           </div>
 
-                          <div className="flex gap-4 items-start pb-3 border-b border-rose-100/50">
+                          <div className="flex gap-4 items-start pb-3 border-b border-rose-100/50 mt-3 relative">
                             <button 
                               onClick={() => onViewProfile(topMatch.uid)}
                               className="relative shrink-0 select-none cursor-pointer hover:scale-105 transition-transform"
@@ -4861,71 +5221,104 @@ export default function App() {
                               <img 
                                 src={topMatch.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(topMatch.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
                                 alt={topMatch.displayName} 
-                                className="w-14 h-14 rounded-full object-cover border border-slate-100 shadow-xs"
+                                className="w-16 h-16 rounded-full object-cover border border-slate-100 shadow-xs"
                               />
-                              <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white shadow-xs">
-                                <span className="absolute h-2.2 w-2.2 rounded-full bg-emerald-500 animate-pulse" />
-                                <span className="relative h-2.2 w-2.2 rounded-full bg-emerald-500" />
+                              <span className="absolute bottom-0 right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-xs">
+                                <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500" />
                               </span>
                             </button>
 
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => onViewProfile(topMatch.uid)}>
-                                <h4 className="text-sm font-black text-slate-900 leading-none truncate">{topMatch.displayName}</h4>
-                                {topMatch.isVerified && <BadgeCheck className="w-4 h-4 text-white fill-blue-500 shrink-0" />}
+                                <h4 className="text-[15px] font-black text-slate-900 leading-none truncate">{topMatch.displayName}</h4>
+                                {topMatch.isVerified && <BadgeCheck className="w-4.5 h-4.5 text-white fill-blue-500 shrink-0" />}
                               </div>
 
-                              <div className="flex items-center gap-2 mt-1.5 leading-none">
+                              <div className="flex items-center gap-2 mt-2 leading-none">
                                 <span className="text-[#FF1744] font-black text-xs min-w-[36px]">🩸 {topMatch.bloodGroup}</span>
-                                <span className="px-1.5 py-0.5 bg-emerald-50 text-[7.5px] text-emerald-750 font-extrabold uppercase rounded-md tracking-wider border border-emerald-500/10">Available</span>
+                                <span className="px-2 py-0.5 bg-emerald-50 text-[8px] text-emerald-700 font-extrabold uppercase rounded-md tracking-wider border border-emerald-100/50">Available</span>
                               </div>
 
-                              <p className="text-[10px] text-slate-400 font-bold mt-2 truncate flex items-center gap-0.5 select-none leading-none">
-                                <MapPin className="w-2.5 h-2.5 text-[#FF1744] shrink-0" />
+                              <p className="text-[11px] text-slate-500 font-bold mt-2.5 truncate flex items-center gap-1 select-none leading-none">
+                                <MapPin className="w-3 h-3 text-[#FF1744] shrink-0" />
                                 {topMatch.thana}, {topMatch.district}
                               </p>
                               
-                              <div className="flex items-center gap-2.5 mt-2 text-[10px] text-slate-400 font-medium select-none leading-none">
+                              <div className="flex items-center gap-2.5 mt-2.5 text-[11px] text-slate-500 font-bold select-none leading-none">
                                 <div className="flex items-center gap-0.5">
-                                  <Star className="w-3 h-3 fill-amber-400 stroke-amber-400 shrink-0" />
-                                  <span className="text-slate-800 font-bold">{getSimulatedRating(topMatch.uid)}</span>
-                                  <span>({getSimulatedReviewsCount(topMatch.uid)})</span>
+                                  <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-400 shrink-0" />
+                                  <span className="text-slate-950 font-black">{getSimulatedRating(topMatch.uid)}</span>
+                                  <span className="text-slate-400">({getSimulatedReviewsCount(topMatch.uid)})</span>
                                 </div>
                                 <span>•</span>
-                                <span className="text-[#FF1744] font-bold">{topMatch.donationCount || 20} Donations</span>
+                                <div className="flex items-center gap-0.5">
+                                  <Heart className="w-3.5 h-3.5 fill-red-500 stroke-red-500 shrink-0" />
+                                  <span className="text-red-500 font-bold">{topMatch.donationCount || 20} Donations</span>
+                                </div>
                               </div>
                             </div>
 
-                            <div className="text-right shrink-0">
-                              <span className="text-[#FF1744] font-black text-xs block">{getSimulatedDistance(topMatch)} km</span>
-                              <span className="text-[9px] text-slate-400 font-bold block mt-0.5">Away</span>
+                            {/* Circular distance badge on the right matching screenshot */}
+                            <div className="w-18 h-18 rounded-full bg-rose-50/50 border border-rose-150 flex flex-col items-center justify-center shadow-xs shrink-0 self-center">
+                              <span className="text-red-500 text-sm">💧</span>
+                              <span className="text-[11px] font-black text-slate-900 leading-none mt-0.5">{getSimulatedDistance(topMatch)} km</span>
+                              <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">Away</span>
                             </div>
                           </div>
 
-                          <div className="flex gap-2.5 pt-3">
+                          {/* 3 Horizontal Stats Boxes matching screenshot */}
+                          <div className="grid grid-cols-3 gap-2.5 mt-3">
+                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                              <Compass className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">{getSimulatedDistance(topMatch)} km</p>
+                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Away</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">
+                                  {topMatch.lastDonationDate ? `${Math.floor((Date.now() - new Date(topMatch.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24))} days` : '15 days'} ago
+                                </p>
+                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Last Donated</p>
+                              </div>
+                            </div>
+
+                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">Jan 2023</p>
+                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Member Since</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2.5 pt-4">
                             <a
                               href={`tel:${topMatch.phone}`}
-                              className="w-10 h-10 bg-white hover:bg-red-50 text-[#FF1744] border border-red-100 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+                              className="w-11 h-11 bg-white hover:bg-red-50 text-[#FF1744] border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0 animate-in fade-in"
                               title="Call donor"
                             >
-                              <Phone className="w-4.5 h-4.5 fill-[#FF1744] text-[#FF1744]" />
+                              <Phone className="w-5 h-5 fill-[#FF1744] text-[#FF1744]" />
                             </a>
                             <a
                               href={`https://wa.me/${topMatch.phone.replace(/[^0-9]/g, '')}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="w-10 h-10 bg-white hover:bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+                              className="w-11 h-11 bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0 animate-in fade-in"
                               title="WhatsApp Chat"
                             >
-                              <svg className="w-4.5 h-4.5 fill-emerald-600" viewBox="0 0 24 24">
+                              <svg className="w-5 h-5 fill-emerald-600" viewBox="0 0 24 24">
                                 <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.918 9.918 0 004.777 1.22h.005c5.505 0 9.99-4.478 9.99-9.985C22.007 6.476 17.519 2 12.012 2zm5.719 14.258c-.243.687-1.42 1.309-1.939 1.383-.474.067-.939.117-2.923-.667-2.535-1.002-4.148-3.571-4.275-3.74-.121-.169-1.016-1.353-1.016-2.58 0-1.228.643-1.83.871-2.072.228-.243.504-.303.672-.303.169 0 .341-.002.489.005.155.007.362-.058.566.444.21.512.716 1.745.779 1.874.062.128.099.28.01.464-.084.18-.184.288-.309.431-.124.143-.264.32-.375.431-.126.126-.258.261-.112.512.146.252.648 1.07 1.39 1.732.955.85 1.758 1.11 2.011 1.238.252.126.401.106.55-.067.146-.172.643-.75.815-.999.172-.25.344-.21.58-.121s1.492.704 1.75 1.238c.11.228.11.427.054.566z" />
                               </svg>
                             </a>
                             <button
                               onClick={() => openChat(topMatch.uid)}
-                              className="flex-1 h-10 bg-[#FF1744] hover:bg-red-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
+                              className="flex-1 h-11 bg-[#FF1744] hover:bg-red-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
                             >
-                              <MessageSquare className="w-3.5 h-3.5 fill-white" />
+                              <MessageSquare className="w-4 h-4 fill-white" />
                               <span>Message Best Match</span>
                             </button>
                           </div>
@@ -4933,116 +5326,149 @@ export default function App() {
                       )}
 
                       {/* REGULAR LIST OF MATCHING DONORS */}
-                      <div className="space-y-3">
+                      <div className="space-y-0 border-b border-slate-100">
                         {filtered.length === 0 ? (
-                          <div className="bg-white border border-slate-100 rounded-[24px] p-8 text-center select-none shadow-xs">
-                            <div className="w-12 h-12 rounded-full bg-red-50 text-[#FF1744] flex items-center justify-center mx-auto mb-3">
-                              <AlertCircle className="w-6 h-6 stroke-[2]" />
+                          <div className="px-4 py-8">
+                            <div className="bg-white border border-slate-100 rounded-none p-8 text-center select-none shadow-xs">
+                              <div className="w-12 h-12 rounded-full bg-red-50 text-[#FF1744] flex items-center justify-center mx-auto mb-3">
+                                <AlertCircle className="w-6 h-6 stroke-[2]" />
+                              </div>
+                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">No donors found nearby</h3>
+                              <p className="text-[10px] text-slate-405 mt-2 max-w-[240px] mx-auto leading-relaxed">
+                                Ask help inside our Bangladesh volunteer base by requesting emergency blood instantly.
+                              </p>
+                              
+                              <button
+                                onClick={() => {
+                                  if (user) setView('request-form');
+                                  else handleLogin();
+                                }}
+                                className="mt-4 px-5 py-2.5 bg-[#FF1744] hover:bg-red-700 hover:scale-105 active:scale-95 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1"
+                              >
+                                <Plus className="w-3.5 h-3.5 stroke-[3]" /> Request Blood Now
+                              </button>
                             </div>
-                            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">No donors found nearby</h3>
-                            <p className="text-[10px] text-slate-405 mt-2 max-w-[240px] mx-auto leading-relaxed">
-                              Ask help inside our Bangladesh volunteer base by requesting emergency blood instantly.
-                            </p>
-                            
-                            <button
-                              onClick={() => {
-                                if (user) setView('request-form');
-                                else handleLogin();
-                              }}
-                              className="mt-4 px-5 py-2.5 bg-[#FF1744] hover:bg-red-700 hover:scale-105 active:scale-95 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1"
-                            >
-                              <Plus className="w-3.5 h-3.5 stroke-[3]" /> Request Blood Now
-                            </button>
                           </div>
                         ) : (
                           filtered.slice(0, visibleDonorsCount).map(donor => (
                             <div
                               key={donor.uid}
-                              className="bg-white border border-slate-105 rounded-[22px] p-4 relative overflow-hidden flex flex-col gap-3 shadow-xs hover:border-red-100/50 hover:shadow-xs transition-all duration-300 select-none group animate-in fade-in slide-in-from-bottom-2"
+                              className="bg-white border-b border-slate-100 p-4 relative overflow-hidden flex flex-col gap-3.5 shadow-none hover:bg-slate-50/40 transition-all duration-300 select-none group animate-in fade-in slide-in-from-bottom-2 w-full rounded-none border-x-0 border-t-0"
                             >
-                              <div className="flex gap-3.5 items-start">
+                              <div className="flex gap-4 items-start relative">
                                 <button 
                                   onClick={() => onViewProfile(donor.uid)}
-                                  className="relative shrink-0 select-none cursor-pointer"
+                                  className="relative shrink-0 select-none cursor-pointer hover:scale-105 transition-transform"
                                 >
                                   <img 
                                     src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
                                     alt={donor.displayName} 
-                                    className="w-12 h-12 rounded-full object-cover border border-slate-100"
+                                    className="w-16 h-16 rounded-full object-cover border-2 border-slate-100 shadow-xs"
                                   />
                                   {donor.isAvailable && (
-                                    <span className="absolute -bottom-0.5 -right-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-white shadow-xs">
-                                      <span className="relative h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span className="absolute bottom-0 right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-xs">
+                                      <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500" />
                                     </span>
                                   )}
                                 </button>
 
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1 leading-none cursor-pointer" onClick={() => onViewProfile(donor.uid)}>
-                                    <h4 className="text-sm font-black text-slate-900 leading-none truncate group-hover:text-[#FF1744] transition-colors">{donor.displayName}</h4>
-                                    {donor.isVerified && <BadgeCheck className="w-4 h-4 text-white fill-blue-500 shrink-0" />}
+                                  <div className="flex items-center gap-1.5 cursor-pointer leading-none" onClick={() => onViewProfile(donor.uid)}>
+                                    <h4 className="text-[15px] font-black text-slate-900 leading-none truncate group-hover:text-[#FF1744] transition-colors">{donor.displayName}</h4>
+                                    {donor.isVerified && <BadgeCheck className="w-4.5 h-4.5 text-white fill-blue-500 shrink-0" />}
                                   </div>
 
-                                  <div className="flex items-center gap-2 mt-1.5 leading-none">
+                                  <div className="flex items-center gap-2 mt-2 leading-none">
                                     <span className="text-[#FF1744] font-black text-xs">🩸 {donor.bloodGroup}</span>
                                     {donor.isAvailable ? (
-                                      <span className="px-1.5 py-0.5 bg-emerald-50 text-[7px] text-emerald-700 font-extrabold uppercase rounded-md tracking-wider">Available</span>
+                                      <span className="px-2 py-0.5 bg-emerald-50 text-[8px] text-emerald-750 font-extrabold uppercase rounded-md tracking-wider border border-emerald-500/10">Available</span>
                                     ) : (
-                                      <span className="px-1.5 py-0.5 bg-slate-50 text-[7px] text-slate-400 font-extrabold uppercase rounded-md tracking-wider">Off-Duty</span>
+                                      <span className="px-2 py-0.5 bg-slate-50 text-[8px] text-slate-400 font-extrabold uppercase rounded-md tracking-wider border border-slate-205">Off-Duty</span>
                                     )}
                                   </div>
 
-                                  <p className="text-[10px] text-slate-400 font-bold mt-2 truncate flex items-center gap-0.5 select-none leading-none">
-                                    <MapPin className="w-2.5 h-2.5 text-[#FF1744] shrink-0" />
+                                  <p className="text-[11px] text-slate-500 font-bold mt-2.5 truncate flex items-center gap-1 select-none leading-none">
+                                    <MapPin className="w-3 h-3 text-[#FF1744] shrink-0" />
                                     {donor.thana}, {donor.district}
                                   </p>
 
-                                  <div className="flex items-center gap-2.5 mt-2 text-[9.5px] text-slate-400 font-semibold select-none leading-none">
-                                    <div className="flex items-center gap-0.5 text-slate-500">
-                                      <Star className="w-3.2 h-3.2 fill-amber-400 stroke-amber-400 shrink-0" />
-                                      <span className="text-slate-900 font-black">{getSimulatedRating(donor.uid)}</span>
+                                  <div className="flex items-center gap-2.5 mt-2.5 text-[11px] text-slate-500 font-bold select-none leading-none">
+                                    <div className="flex items-center gap-0.5">
+                                      <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-400 shrink-0" />
+                                      <span className="text-slate-950 font-black">{getSimulatedRating(donor.uid)}</span>
                                       <span className="text-slate-400">({getSimulatedReviewsCount(donor.uid)})</span>
                                     </div>
                                     <span>•</span>
-                                    <span className="text-[#FF1744] font-bold">{donor.donationCount || 15} Donations</span>
+                                    <div className="flex items-center gap-0.5">
+                                      <Heart className="w-3.5 h-3.5 fill-red-500 stroke-red-500 shrink-0" />
+                                      <span className="text-red-500 font-bold">{donor.donationCount || 15} Donations</span>
+                                    </div>
                                   </div>
                                 </div>
 
-                                <div className="text-right shrink-0 flex items-center gap-1">
-                                  <div>
-                                    <span className="text-[#FF1744] font-black text-[12.5px] block">{getSimulatedDistance(donor)} km</span>
-                                    <span className="text-[8.5px] text-slate-400 font-bold block mt-0.5">Away</span>
-                                  </div>
-                                  <ChevronRight className="w-4 h-4 text-slate-400 cursor-pointer hover:text-[#FF1744] transition-colors" onClick={() => onViewProfile(donor.uid)} />
+                                {/* Right circular distance badge matching screenshot */}
+                                <div className="w-18 h-18 rounded-full bg-rose-50/50 border border-rose-150 flex flex-col items-center justify-center shadow-xs shrink-0 self-center">
+                                  <span className="text-red-500 text-sm">💧</span>
+                                  <span className="text-[11px] font-black text-slate-900 leading-none mt-0.5">{getSimulatedDistance(donor)} km</span>
+                                  <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">Away</span>
                                 </div>
                               </div>
 
-                              {/* ACTIONS BUTTON BAR ON EACH CARD */}
-                              <div className="flex gap-2 pt-2 border-t border-slate-50">
+                              {/* 3 Horizontal Stats Boxes matching screenshot */}
+                              <div className="grid grid-cols-3 gap-2.5 mt-1">
+                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                                  <Compass className="w-4 h-4 text-slate-400 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">{getSimulatedDistance(donor)} km</p>
+                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Away</p>
+                                  </div>
+                                </div>
+
+                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                                  <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">
+                                      {donor.lastDonationDate ? `${Math.floor((Date.now() - new Date(donor.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24))} days` : '15 days'} ago
+                                    </p>
+                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Last Donated</p>
+                                  </div>
+                                </div>
+
+                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
+                                  <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">Jan 2024</p>
+                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Member Since</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions buttons matching screenshot style */}
+                              <div className="flex gap-2.5 pt-1">
                                 <a
                                   href={`tel:${donor.phone}`}
-                                  className="w-10 h-10 bg-slate-50 hover:bg-red-50 text-[#FF1744] border border-slate-100 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+                                  className="w-11 h-11 bg-slate-50 hover:bg-red-50 text-[#FF1744] border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
                                   title="Call Phone"
                                 >
-                                  <Phone className="w-4.2 h-4.2 fill-[#FF1744] text-[#FF1744]" />
+                                  <Phone className="w-5 h-5 fill-[#FF1744] text-[#FF1744]" />
                                 </a>
                                 <a
                                   href={`https://wa.me/${donor.phone.replace(/[^0-9]/g, '')}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="w-10 h-10 bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-100 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
+                                  className="w-11 h-11 bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
                                   title="WhatsApp Chat"
                                 >
-                                  <svg className="w-4.2 h-4.2 fill-emerald-600" viewBox="0 0 24 24">
+                                  <svg className="w-5 h-5 fill-emerald-600" viewBox="0 0 24 24">
                                     <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.918 9.918 0 004.777 1.22h.005c5.505 0 9.99-4.478 9.99-9.985C22.007 6.476 17.519 2 12.012 2zm5.719 14.258c-.243.687-1.42 1.309-1.939 1.383-.474.067-.939.117-2.923-.667-2.535-1.002-4.148-3.571-4.275-3.74-.121-.169-1.016-1.353-1.016-2.58 0-1.228.643-1.83.871-2.072.228-.243.504-.303.672-.303.169 0 .341-.002.489.005.155.007.362-.058.566.444.21.512.716 1.745.779 1.874.062.128.099.28.01.464-.084.18-.184.288-.309.431-.124.143-.264.32-.375.431-.126.126-.258.261-.112.512.146.252.648 1.07 1.39 1.732.955.85 1.758 1.11 2.011 1.238.252.126.401.106.55-.067.146-.172.643-.75.815-.999.172-.25.344-.21.58-.121s1.492.704 1.75 1.238c.11.228.11.427.054.566z" />
                                   </svg>
                                 </a>
                                 <button
                                   onClick={() => openChat(donor.uid)}
-                                  className="flex-1 h-10 bg-[#FF1744] hover:bg-rose-600 text-white rounded-xl flex items-center justify-center gap-1.5 font-bold text-[9.5px] uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
+                                  className="flex-1 h-11 bg-[#FF1744] hover:bg-rose-600 text-white rounded-xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
                                 >
-                                  <MessageSquare className="w-3.5 h-3.5 fill-white" />
-                                  <span>Message</span>
+                                  <MessageSquare className="w-4 h-4 fill-white" />
+                                  <span>Message {donor.uid === topMatch?.uid ? 'Best Match' : 'Donor'}</span>
                                 </button>
                               </div>
                             </div>
@@ -5052,32 +5478,34 @@ export default function App() {
 
                       {/* BOTTOM ACTION CARD COMPONENT (Can't Find a Donor) */}
                       {filtered.length > 0 && (
-                        <div className="bg-gradient-to-r from-red-50/70 to-rose-50/50 border border-red-100/60 rounded-[24px] p-4 flex items-center justify-between shadow-xs select-none mt-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-[#FF1744] shrink-0">
-                              <Heart className="w-4.5 h-4.5 fill-[#FF1744]" />
+                        <div className="px-4 pt-6">
+                          <div className="bg-gradient-to-r from-red-50/75 to-rose-50/50 border border-red-100/60 rounded-2xl p-4 flex items-center justify-between shadow-xs select-none">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-[#FF1744] shrink-0">
+                                <Heart className="w-4.5 h-4.5 fill-[#FF1744]" />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-[11.5px] font-black text-slate-800 leading-none">Can't find a donor?</h4>
+                                <p className="text-[8px] text-slate-400 font-bold uppercase mt-1 leading-none tracking-wider">Request blood and notify nearby donors</p>
+                              </div>
                             </div>
-                            <div className="min-w-0">
-                              <h4 className="text-[11.5px] font-black text-slate-800 leading-none">Can't find a donor?</h4>
-                              <p className="text-[8px] text-slate-400 font-bold uppercase mt-1 leading-none tracking-wider">Request blood and notify nearby donors</p>
-                            </div>
-                          </div>
 
-                          <button 
-                            onClick={() => {
-                              if (user) setView('request-form');
-                              else handleLogin();
-                            }}
-                            className="bg-[#FF1744] hover:bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 shrink-0"
-                          >
-                            <Droplet className="w-3 h-3 fill-white stroke-white" /> Request Blood
-                          </button>
+                            <button 
+                              onClick={() => {
+                                if (user) setView('request-form');
+                                else handleLogin();
+                              }}
+                              className="bg-[#FF1744] hover:bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                            >
+                              <Droplet className="w-3 h-3 fill-white stroke-white" /> Request Blood
+                            </button>
+                          </div>
                         </div>
                       )}
 
                       {/* Standard load more action */}
                       {filtered.length > visibleDonorsCount && (
-                        <div className="pt-4 text-center">
+                        <div className="pt-6 text-center">
                           <button 
                             onClick={() => setVisibleDonorsCount(prev => prev + 50)}
                             className="bg-slate-900 text-white hover:bg-slate-800 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all cursor-pointer shadow-md"
@@ -5780,6 +6208,7 @@ export default function App() {
                 setView={setView}
                 hasUpdate={hasUpdate}
                 setHasUpdate={setHasUpdate}
+                events={events}
               />
             </div>
           </motion.div>
@@ -5914,6 +6343,7 @@ export default function App() {
               users={allUsers} 
               onBack={() => { setView('chats'); handleSetActiveChat(null); }} 
               onStartVoiceCall={startVoiceCall}
+              onStartVideoCall={startVideoCall}
             />
           </motion.div>
         )}
@@ -6639,7 +7069,11 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowMicPrompt({ show: false, onGranted: null })}
+              onClick={() => {
+                const cancelCallback = showMicPrompt.onCancel;
+                setShowMicPrompt({ show: false, onGranted: null, onCancel: null });
+                if (cancelCallback) cancelCallback();
+              }}
               className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
             />
             <motion.div 
@@ -6669,10 +7103,13 @@ export default function App() {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                         stream.getTracks().forEach(track => track.stop());
                         const callback = showMicPrompt.onGranted;
-                        setShowMicPrompt({ show: false, onGranted: null });
+                        setShowMicPrompt({ show: false, onGranted: null, onCancel: null });
                         if (callback) callback();
                       } catch (e) {
                         addToast("Permission Denied", "Unable to access microphone.", "error");
+                        const cancelCallback = showMicPrompt.onCancel;
+                        setShowMicPrompt({ show: false, onGranted: null, onCancel: null });
+                        if (cancelCallback) cancelCallback();
                       } finally {
                         setMicRequesting(false);
                       }
@@ -6683,7 +7120,11 @@ export default function App() {
                     {micRequesting ? 'Granting...' : 'Allow Microphone'}
                   </button>
                   <button 
-                    onClick={() => setShowMicPrompt({ show: false, onGranted: null })}
+                    onClick={() => {
+                      const cancelCallback = showMicPrompt.onCancel;
+                      setShowMicPrompt({ show: false, onGranted: null, onCancel: null });
+                      if (cancelCallback) cancelCallback();
+                    }}
                     className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all active:scale-95"
                   >
                     Not Now
@@ -6845,6 +7286,1326 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* New Overlays for App Menu, Health Calculator, and Settings */}
+      <AnimatePresence>
+        {showHamburgerMenu && (
+          <>
+            {/* Backdrop blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowHamburgerMenu(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            {/* Bottom menu drawer */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col max-h-[85vh] pointer-events-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center">
+                    <Menu className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">App Menu</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Explore Services & Stats</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowHamburgerMenu(false)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-5 pb-8">
+                
+                {/* 1. Auth / User Profile Card */}
+                {user ? (
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-4 border border-slate-200/60 flex items-center justify-between">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="relative">
+                        {profile?.avatarUrl ? (
+                          <img 
+                            src={profile.avatarUrl} 
+                            alt={profile.name || "Profile"} 
+                            referrerPolicy="no-referrer"
+                            className="w-12 h-12 rounded-2xl object-cover border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center font-bold text-lg border border-red-600 shadow-sm">
+                            {(profile?.name || user.email || "?")[0].toUpperCase()}
+                          </div>
+                        )}
+                        {profile?.bloodGroup && (
+                          <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white font-black text-[9px] px-1.5 py-0.5 rounded-md shadow-md border border-white">
+                            {profile.bloodGroup}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-black text-slate-950 truncate">{profile?.name || "Anonymous Donor"}</h4>
+                        <p className="text-[9px] font-mono text-slate-500 truncate mt-0.5">{profile?.phone || user.email}</p>
+                        <span className="inline-block mt-1 px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[8px] font-bold rounded-full uppercase tracking-wider">
+                          Active Member
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        onClick={() => {
+                          setShowHamburgerMenu(false);
+                          setView('profile');
+                        }}
+                        className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-700 rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                      >
+                        View Profile
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowHamburgerMenu(false);
+                          handleLogout();
+                        }}
+                        className="px-3.5 py-1.5 hover:bg-red-50 text-[9px] font-bold uppercase tracking-widest text-red-600 rounded-xl transition-all active:scale-95 cursor-pointer"
+                      >
+                        Log Out
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-gradient-to-br from-red-50 to-rose-50/50 rounded-2xl p-5 border border-red-100/80 text-center flex flex-col items-center">
+                    <div className="w-11 h-11 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-3">
+                      <Users className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Create Account or Sign In</h4>
+                    <p className="text-[10px] text-slate-500 font-semibold mt-1 max-w-[240px] leading-relaxed">
+                      Join our national blood donor network to save lives, manage requests, and unlock AI features.
+                    </p>
+                    <button
+                      onClick={() => {
+                        setShowHamburgerMenu(false);
+                        handleLogin();
+                      }}
+                      className="mt-4 w-full py-3.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md shadow-red-500/10 active:scale-95 cursor-pointer"
+                    >
+                      Login / Sign Up Now
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. Menu Links Grid */}
+                <div className="grid grid-cols-2 gap-3.5">
+                  {/* Option: Community Feed */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setView('feed');
+                      setShowRequestsOverlay(false);
+                      handleSetActiveChat(null);
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-red-50/30 hover:bg-red-50/70 border border-slate-200/50 hover:border-red-200 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white group-hover:bg-red-50 text-red-600 flex items-center justify-center shadow-sm border border-slate-100 transition-all">
+                      <Users className="w-5 h-5 text-red-600" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">Community</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Feed, updates & posts</p>
+                  </button>
+
+                  {/* Option: Health Calculator */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setShowHealthCalculator(true);
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-red-50/50 border border-slate-200/50 hover:border-red-200/60 text-left transition-all group cursor-pointer relative"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white group-hover:bg-red-100 text-slate-850 group-hover:text-red-600 flex items-center justify-center shadow-sm border border-slate-100 group-hover:border-transparent transition-all">
+                      <Activity className="w-5 h-5 text-red-500" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">Health Calculator</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">BMI & blood metrics helper</p>
+                  </button>
+
+                  {/* Option: Settings */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setShowSettingsModal(true);
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/50 hover:border-slate-300 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white group-hover:bg-slate-50 text-slate-850 flex items-center justify-center shadow-sm border border-slate-100 transition-all">
+                      <Settings className="w-5 h-5 text-slate-600" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">App Settings</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Preferences & themes</p>
+                  </button>
+
+                  {/* Option: Create Event */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      if (user) {
+                        setShowEventCreateModal(true);
+                      } else {
+                        handleLogin();
+                        addToast("Authentication Required", "Please log in to create an event.", "info");
+                      }
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-red-50/40 hover:bg-red-50 border border-red-100/50 hover:border-red-200/80 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white text-red-650 flex items-center justify-center shadow-sm border border-red-100/40 transition-all">
+                      <Calendar className="w-5 h-5 text-red-650" />
+                    </div>
+                    <h4 className="text-xs font-black text-red-700 uppercase tracking-wider mt-4">Create Event</h4>
+                    <p className="text-[9px] text-red-400 font-semibold mt-0.5">Organize Campaign or Drive</p>
+                  </button>
+
+                  {/* Option: Find Hospitals */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setView('hospitals');
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/50 hover:border-slate-300 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white text-slate-800 flex items-center justify-center shadow-sm border border-slate-100 transition-all">
+                      <PlusCircle className="w-5 h-5 text-emerald-600" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">Hospitals Finder</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Locate nearest clinic</p>
+                  </button>
+
+                  {/* Option: Emergency Lines */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setView('emergency');
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/50 hover:border-slate-300 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white text-slate-800 flex items-center justify-center shadow-sm border border-slate-100 transition-all">
+                      <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">Emergency Lines</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Ambulance & police</p>
+                  </button>
+
+                  {/* Option: Organization Portal */}
+                  <button
+                    onClick={() => {
+                      setShowHamburgerMenu(false);
+                      setView('organizations');
+                    }}
+                    className="flex flex-col items-start p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200/50 hover:border-slate-300 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white text-slate-800 flex items-center justify-center shadow-sm border border-slate-100 transition-all">
+                      <HardDrive className="w-5 h-5 text-indigo-500" />
+                    </div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider mt-4">Organizations</h4>
+                    <p className="text-[9px] text-slate-400 font-semibold mt-0.5">Blood clubs & groups</p>
+                  </button>
+                </div>
+
+                {/* Footer/System Info */}
+                <div className="text-center pt-2 text-[9px] text-slate-400 font-bold uppercase tracking-widest">
+                  BloodLink BD • Premium App Core v2.4
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showHealthCalculator && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowHealthCalculator(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[90vh] pointer-events-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <Activity className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Health Calculator</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">BMI & Donor Safety check</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowHealthCalculator(false)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-6 pb-12 flex-1">
+                {/* Section 1: Inputs */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5">1. Physical Statistics</h4>
+                  
+                  {/* Gender and Age */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Gender (লিঙ্গ)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCalcGender('male')}
+                          className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${calcGender === 'male' ? 'bg-red-50 border-red-200 text-red-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          Male (পুরুষ)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalcGender('female')}
+                          className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all cursor-pointer ${calcGender === 'female' ? 'bg-red-50 border-red-200 text-red-600 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                        >
+                          Female (মহিলা)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Age (বয়স)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={calcAge}
+                          onChange={(e) => setCalcAge(Math.max(1, Math.min(120, Number(e.target.value) || 0)))}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500"
+                        />
+                        <span className="text-[10px] text-slate-500 font-bold">Years</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Weight and Height */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Weight (ওজন)</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          value={calcWeight}
+                          onChange={(e) => setCalcWeight(Math.max(1, Math.min(250, Number(e.target.value) || 0)))}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500"
+                        />
+                        <span className="text-[10px] text-slate-500 font-bold">KG</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Height (উচ্চতা)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={calcHeightFeet}
+                            onChange={(e) => setCalcHeightFeet(Math.max(1, Math.min(8, Number(e.target.value) || 0)))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500"
+                          />
+                          <span className="text-[9px] text-slate-400 font-bold">Ft</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={calcHeightInches}
+                            onChange={(e) => setCalcHeightInches(Math.max(0, Math.min(11, Number(e.target.value) || 0)))}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-red-500"
+                          />
+                          <span className="text-[9px] text-slate-400 font-bold">In</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Donation History Helper */}
+                  <div className="space-y-2 p-3 bg-slate-50 rounded-2xl border border-slate-200/50">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider">Have you donated blood before?</label>
+                      <input
+                        type="checkbox"
+                        checked={calcHasDonatedBefore}
+                        onChange={(e) => setCalcHasDonatedBefore(e.target.checked)}
+                        className="w-4.5 h-4.5 rounded text-red-600 border-slate-300 focus:ring-red-500 cursor-pointer"
+                      />
+                    </div>
+                    {calcHasDonatedBefore && (
+                      <div className="pt-2 border-t border-slate-200 mt-2 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                        <span className="text-[9px] text-slate-500 font-bold uppercase">How many days ago? (কত দিন আগে?)</span>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={calcLastDonatedDays}
+                            onChange={(e) => setCalcLastDonatedDays(Math.max(0, Number(e.target.value) || 0))}
+                            className="w-20 bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-bold text-slate-800 text-center"
+                          />
+                          <span className="text-[10px] text-slate-500 font-bold">Days</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 2: Results Display */}
+                {(() => {
+                  const weightKg = calcWeight || 68;
+                  const feet = calcHeightFeet || 5;
+                  const inches = calcHeightInches || 9;
+                  const totalInches = (feet * 12) + inches;
+                  const heightMeters = totalInches * 0.0254;
+                  const bmi = Number((weightKg / (heightMeters * heightMeters)).toFixed(1));
+
+                  // Nadler's formula for estimated blood volume (Liters)
+                  let bloodVolume = 0;
+                  if (calcGender === 'male') {
+                    bloodVolume = 0.3669 * Math.pow(heightMeters, 3) + 0.03219 * weightKg + 0.6041;
+                  } else {
+                    bloodVolume = 0.3561 * Math.pow(heightMeters, 3) + 0.03308 * weightKg + 0.1833;
+                  }
+                  const roundedVolume = Number(bloodVolume.toFixed(2));
+
+                  let bmiClassification = "Normal Weight";
+                  let bmiColorClass = "stroke-emerald-500 text-emerald-600 bg-emerald-50";
+                  let bmiTextClass = "text-emerald-600";
+                  
+                  if (bmi < 18.5) {
+                    bmiClassification = "Underweight";
+                    bmiColorClass = "stroke-amber-500 text-amber-600 bg-amber-50";
+                    bmiTextClass = "text-amber-600";
+                  } else if (bmi >= 25 && bmi < 30) {
+                    bmiClassification = "Overweight";
+                    bmiColorClass = "stroke-amber-500 text-amber-600 bg-amber-50";
+                    bmiTextClass = "text-amber-600";
+                  } else if (bmi >= 30) {
+                    bmiClassification = "Obese";
+                    bmiColorClass = "stroke-rose-500 text-rose-600 bg-rose-50";
+                    bmiTextClass = "text-rose-600";
+                  }
+
+                  const bmiPercentage = Math.max(10, Math.min(100, ((bmi - 12) / 28) * 100));
+
+                  // Calculate countdown for blood donation (90 days for male, 120 days for female)
+                  const requiredRest = calcGender === 'male' ? 90 : 120;
+                  const restCompleted = calcHasDonatedBefore ? calcLastDonatedDays : requiredRest;
+                  const daysLeft = Math.max(0, requiredRest - restCompleted);
+                  const isRestPeriodValid = daysLeft === 0;
+
+                  // General Eligibility Check
+                  const isAgeValid = calcAge >= 18 && calcAge <= 60;
+                  const isWeightValid = calcWeight >= 45;
+                  const isEligible = isAgeValid && isWeightValid && isRestPeriodValid && calcNoSurgOrTattoo && calcFeelWellToday;
+
+                  return (
+                    <div className="space-y-5">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider border-b border-slate-100 pb-1.5">2. Clinical Report</h4>
+                      
+                      {/* Grid of BMI & Blood Volume */}
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* BMI Panel */}
+                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+                          <span className="text-[8px] text-slate-400 font-extrabold uppercase tracking-widest mb-2">Body Mass Index</span>
+                          <div className="relative w-16 h-16 flex items-center justify-center">
+                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                              <circle cx="18" cy="18" r="16" fill="none" stroke="#E2E8F0" strokeWidth="2.5" />
+                              <circle cx="18" cy="18" r="16" fill="none" className={bmiColorClass.split(' ')[0]} strokeWidth="2.5" strokeDasharray="100" strokeDashoffset={100 - bmiPercentage} strokeLinecap="round" />
+                            </svg>
+                            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                              <span className="text-sm font-black text-slate-900">{bmi}</span>
+                              <span className="text-[6px] text-slate-400 font-black uppercase">BMI</span>
+                            </div>
+                          </div>
+                          <span className={`text-[9px] font-black uppercase tracking-widest mt-2.5 px-2 py-0.5 rounded-full ${bmiColorClass.split(' ').slice(1).join(' ')}`}>
+                            {bmiClassification}
+                          </span>
+                        </div>
+
+                        {/* Estimated Blood Volume */}
+                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center text-center">
+                          <span className="text-[8px] text-slate-400 font-extrabold uppercase tracking-widest mb-2">Total Blood Volume</span>
+                          <div className="w-16 h-16 rounded-full bg-rose-50 flex flex-col items-center justify-center border border-rose-100 relative">
+                            <span className="text-red-500 text-lg mb-0.5">💧</span>
+                            <span className="text-sm font-black text-slate-900 leading-none">{roundedVolume}</span>
+                            <span className="text-[6.5px] text-slate-400 font-bold uppercase mt-0.5">Liters</span>
+                          </div>
+                          <p className="text-[8.5px] text-slate-500 font-medium mt-2.5 leading-tight">
+                            Estimate for your {calcGender} physical frame.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Donation Eligibility Section */}
+                      <div className={`p-4 rounded-2xl border ${isEligible ? 'bg-emerald-50/70 border-emerald-100/80 text-emerald-950' : 'bg-rose-50/70 border-rose-100/80 text-rose-950'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isEligible ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                            {isEligible ? '✓' : '✗'}
+                          </div>
+                          <div>
+                            <h5 className="text-xs font-black uppercase tracking-wider leading-none">
+                              {isEligible ? 'Donor Status: Eligible (অনুমোদিত)' : 'Donor Status: Not Eligible'}
+                            </h5>
+                            <p className="text-[9.5px] font-medium mt-1 opacity-90 leading-normal">
+                              {isEligible 
+                                ? 'You meet our core clinical thresholds. Feel free to request or submit donations.' 
+                                : 'A donor must meet all health & safety guidelines to participate in active donations safely.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Details checklist list */}
+                        <div className="mt-4 pt-3.5 border-t border-slate-200/50 space-y-2">
+                          {/* Age threshold */}
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-semibold text-slate-700">Age: 18 - 60 years (আপনার বয়স: {calcAge})</span>
+                            <span className={isAgeValid ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>{isAgeValid ? 'Passed ✓' : 'Failed ✗'}</span>
+                          </div>
+                          {/* Weight threshold */}
+                          <div className="flex items-center justify-between text-[10px]">
+                            <span className="font-semibold text-slate-700">Weight: Min 45KG (আপনার ওজন: {calcWeight} KG)</span>
+                            <span className={isWeightValid ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>{isWeightValid ? 'Passed ✓' : 'Failed ✗'}</span>
+                          </div>
+                          {/* Time interval threshold */}
+                          {calcHasDonatedBefore && (
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="font-semibold text-slate-700">Donation Rest Gap ({requiredRest} Days minimum)</span>
+                              <span className={isRestPeriodValid ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>
+                                {isRestPeriodValid ? 'Passed ✓' : `${daysLeft} Days Remaining ⏱`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Section 3: Safety Self-Check Questionnaire */}
+                      <div className="space-y-3 bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                        <h5 className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">3. Medical Self-Declaration</h5>
+                        
+                        <div className="space-y-2.5">
+                          <label className="flex items-start gap-2.5 cursor-pointer text-[10px] text-slate-700 font-bold leading-normal select-none">
+                            <input
+                              type="checkbox"
+                              checked={calcNoSurgOrTattoo}
+                              onChange={(e) => setCalcNoSurgOrTattoo(e.target.checked)}
+                              className="mt-0.5 w-4 h-4 rounded text-red-600 border-slate-300 focus:ring-red-500 shrink-0"
+                            />
+                            <span>No major surgery, body tattoo or acupuncture in the past 6 months (গত ৬ মাসের মধ্যে কোনো বড় অস্ত্রোপচার বা ট্যাটু করানো হয়নি)</span>
+                          </label>
+
+                          <label className="flex items-start gap-2.5 cursor-pointer text-[10px] text-slate-700 font-bold leading-normal select-none">
+                            <input
+                              type="checkbox"
+                              checked={calcFeelWellToday}
+                              onChange={(e) => setCalcFeelWellToday(e.target.checked)}
+                              className="mt-0.5 w-4 h-4 rounded text-red-600 border-slate-300 focus:ring-red-500 shrink-0"
+                            />
+                            <span>Feeling well, active, and fully healthy today without chronic symptoms (আজ আমি সম্পূর্ণ সুস্থ ও সক্রিয় বোধ করছি)</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="p-3 bg-red-50 rounded-2xl border border-red-100 text-center text-[9px] text-red-700 font-semibold leading-normal">
+                        ⚠️ **Disclaimer**: This calculator provides general helper scores based on standard physiological formulas. It is not a replacement for a formal medical check-up conducted by qualified staff at a certified blood center.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSettingsModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowSettingsModal(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col max-h-[80vh] pointer-events-auto"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
+                    <Settings className="w-5 h-5 text-slate-700" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">App Preferences</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Customize user interface</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-5 pb-8 flex-1">
+                {/* Setting 1: Language */}
+                <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">App Language</h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Choose layout writing format</p>
+                    </div>
+                    <div className="flex bg-white rounded-xl border border-slate-200/80 p-0.5 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsLanguage('en');
+                          addToast("Success", "Language set to English", "success");
+                        }}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all cursor-pointer ${settingsLanguage === 'en' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        EN
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSettingsLanguage('bn');
+                          addToast("সফল", "ভাষা পরিবর্তন করে বাংলায় করা হয়েছে", "success");
+                        }}
+                        className={`px-3 py-1.5 text-[10px] font-black uppercase rounded-lg transition-all cursor-pointer ${settingsLanguage === 'bn' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        বাংলা
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Setting 2: Audio alerts */}
+                <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">Sound Alerts & Pings</h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Toggle sound feedback on actions</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEnableSoundAlerts(!enableSoundAlerts);
+                        addToast("Preference Saved", `Sound feedback ${!enableSoundAlerts ? 'enabled' : 'disabled'}`, "info");
+                      }}
+                      className={`w-12 h-6.5 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${enableSoundAlerts ? 'bg-red-600' : 'bg-slate-300'}`}
+                    >
+                      <div className={`w-5.5 h-5.5 rounded-full bg-white shadow-sm transform transition-transform ${enableSoundAlerts ? 'translate-x-5.5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Setting 3: Reset cache */}
+                <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div>
+                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">App Local Cache</h4>
+                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Reset offline variables and saved states</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (await askConfirm("Reset application?", "This will clear local states and reload the application. Continue?", "Reset & Reload")) {
+                        localStorage.clear();
+                        window.location.reload();
+                      }
+                    }}
+                    className="w-full mt-2 py-3 bg-white text-rose-600 border border-rose-150 hover:bg-rose-50 hover:text-rose-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all active:scale-[0.98] shadow-sm cursor-pointer"
+                  >
+                    Clear Cache & Force Restart
+                  </button>
+                </div>
+
+                {/* Tech specifications */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-1 text-left">
+                  <span className="text-[8px] text-slate-400 font-black uppercase tracking-widest">Device Metadata specifications</span>
+                  <div className="text-[9.5px] text-slate-650 font-bold space-y-0.5">
+                    <div>Build Engine Version: 2.4.1</div>
+                    <div>Database Host: {settings?.databaseId || 'ai-studio-9c1a2b2f'}</div>
+                    <div>Region Ingress: {settings?.firestoreRegion || 'europe-west2'}</div>
+                    <div>Runtime Node: Cloud Run Container</div>
+                    <div>API Proxies: Gemini SDK Layer</div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Create Event Modal */}
+      <AnimatePresence>
+        {showEventCreateModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowEventCreateModal(false)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] pointer-events-auto text-left"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Create Event</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Organize Campaign or Drive</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowEventCreateModal(false)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left">
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const data = new FormData(form);
+                  const title = data.get('title') as string;
+                  const description = data.get('description') as string;
+                  const location = data.get('location') as string;
+                  const eventDate = data.get('eventDate') as string;
+                  const imageUrl = data.get('imageUrl') as string;
+
+                  if (!title.trim() || !description.trim() || !location.trim() || !eventDate.trim()) {
+                    addToast("Error", "Please fill in all required fields.", "error");
+                    return;
+                  }
+
+                  try {
+                    const finalImg = userEventImageBase64 || imageUrl.trim() || 'https://images.unsplash.com/photo-1615461066841-6116ecdccd04?w=600&auto=format&fit=cover&q=80';
+                    await addDoc(collection(db, 'events'), {
+                      title: title.trim(),
+                      description: description.trim(),
+                      location: location.trim(),
+                      eventDate: eventDate.trim(),
+                      imageUrl: finalImg,
+                      status: 'Active',
+                      createdAt: serverTimestamp(),
+                      createdBy: user?.uid,
+                      joinedUsers: []
+                    });
+                    addToast("Success", "Event created successfully!", "success");
+                    setUserEventImageBase64('');
+                    setShowEventCreateModal(false);
+                  } catch (err: any) {
+                    addToast("Error", err.message || "Failed to create event.", "error");
+                  }
+                }} className="space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Event Title *</label>
+                    <input 
+                      type="text" 
+                      name="title" 
+                      placeholder="e.g. Children's Day Blood Camp" 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Date & Time *</label>
+                    <input 
+                      type="datetime-local" 
+                      name="eventDate" 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Location / Venue *</label>
+                    <input 
+                      type="text" 
+                      name="location" 
+                      placeholder="e.g. Mirpur-10 Public Library Ground" 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Image Selection (Device / URL)</label>
+                    <div className="flex gap-2">
+                      <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-xl px-4 py-2.5 text-xs text-slate-600 font-bold transition-all">
+                        <Image className="w-4 h-4 text-slate-400" />
+                        <span className="truncate">{userEventImageBase64 ? 'Selected ✓' : 'Device Image'}</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const base64 = await compressAndResizeImage(file);
+                                setUserEventImageBase64(base64);
+                                addToast("Success", "Device image loaded!", "success");
+                              } catch (err) {
+                                addToast("Error", "Could not read image file.", "error");
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                      <input 
+                        type="text" 
+                        name="imageUrl" 
+                        placeholder="Or paste Image URL..." 
+                        className="flex-[2] px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                      />
+                    </div>
+                    {userEventImageBase64 && (
+                      <div className="mt-2 relative inline-block">
+                        <img src={userEventImageBase64} alt="Upload Preview" className="w-24 h-14 object-cover rounded-lg border border-slate-100" />
+                        <button 
+                          type="button" 
+                          onClick={() => setUserEventImageBase64('')}
+                          className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow-sm"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description *</label>
+                    <textarea 
+                      name="description" 
+                      rows={5}
+                      placeholder="Explain details of the event, objective, guidelines..." 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all resize-none"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-red-650 hover:bg-red-700 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    Publish Event
+                  </button>
+                </form>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Event Details Modal */}
+      <AnimatePresence>
+        {selectedEvent && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedEvent(null)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[75vh] pointer-events-auto text-left"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Event Details</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Campaign Information</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedEvent(null)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left font-sans">
+                {selectedEvent.imageUrl && (
+                  <img src={selectedEvent.imageUrl} alt={selectedEvent.title} className="w-full h-44 object-cover rounded-2xl border border-slate-200 shadow-xs" />
+                )}
+                
+                <div>
+                  <h4 className="text-lg font-black text-slate-900 tracking-tight leading-snug">{selectedEvent.title}</h4>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    📅 Date: {selectedEvent.eventDate ? new Date(selectedEvent.eventDate).toLocaleString() : ''}
+                  </p>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    📍 Location: {selectedEvent.location}
+                  </p>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-150 rounded-2xl space-y-1">
+                  <span className="text-[9px] text-slate-450 font-black uppercase tracking-wider">Campaign Overview</span>
+                  <p className="text-xs text-slate-700 leading-relaxed font-sans whitespace-pre-line">
+                    {selectedEvent.description}
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-red-50/40 border border-red-100/60 rounded-2xl">
+                  <div>
+                    <span className="text-[9px] text-rose-500 font-black uppercase tracking-wider">RSVP status</span>
+                    <p className="text-xs font-black text-slate-800 mt-0.5">
+                      {selectedEvent.joinedUsers?.length || 0} donors joined
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!user) {
+                        setSelectedEvent(null);
+                        handleLogin();
+                        return;
+                      }
+                      if (selectedEvent.id.startsWith('event-')) {
+                        addToast("ইভেন্ট যোগদান", "এটি একটি ডেমো ইভেন্ট। নিজের ইভেন্ট তৈরি করে যোগদান করতে পারেন!", "info");
+                        return;
+                      }
+                      try {
+                        const eventRef = doc(db, 'events', selectedEvent.id);
+                        const currentJoined = selectedEvent.joinedUsers || [];
+                        const isJoined = currentJoined.includes(user.uid);
+                        let updatedJoined = [];
+                        if (isJoined) {
+                          updatedJoined = currentJoined.filter(uid => uid !== user.uid);
+                          addToast("Left Event", "You have opted out of this event.", "info");
+                        } else {
+                          updatedJoined = [...currentJoined, user.uid];
+                          addToast("Joined Event", "You are successfully registered for this event!", "success");
+                        }
+                        await updateDoc(eventRef, { joinedUsers: updatedJoined });
+                        setSelectedEvent({ ...selectedEvent, joinedUsers: updatedJoined });
+                      } catch (err: any) {
+                        addToast("Error", err.message || "Failed to update RSVP status.", "error");
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer"
+                  >
+                    {selectedEvent.joinedUsers?.includes(user?.uid || '') ? 'Opt Out' : 'Join Event Now'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Health Tip / Blog Reader Modal */}
+      <AnimatePresence>
+        {selectedHealthTip && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedHealthTip(null)}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] pointer-events-auto text-left font-sans"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">স্বাস্থ্য নির্দেশিকা</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Health Tip & Article</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedHealthTip(null)}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left font-sans">
+                {selectedHealthTip.imageUrl && (
+                  <img src={selectedHealthTip.imageUrl} alt={selectedHealthTip.title} className="w-full h-44 object-cover rounded-2xl border border-slate-200 shadow-xs" />
+                )}
+                
+                <div className="border-b border-slate-100 pb-3">
+                  <h4 className="text-lg font-black text-slate-950 tracking-tight leading-snug">{selectedHealthTip.title}</h4>
+                  <div className="flex items-center gap-3 mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <span>⏰ {selectedHealthTip.readTime || '৩ মিনিট রিড'}</span>
+                    <span>•</span>
+                    <span>❤️ {selectedHealthTip.likes?.length || 0} likes</span>
+                  </div>
+                </div>
+
+                <div className="text-slate-800 text-sm leading-relaxed whitespace-pre-line">
+                  {selectedHealthTip.content}
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <button
+                    onClick={async () => {
+                      if (!user) {
+                        setSelectedHealthTip(null);
+                        handleLogin();
+                        return;
+                      }
+                      if (selectedHealthTip.id.startsWith('tip-')) {
+                        addToast("পছন্দ করা হয়েছে", "ডেমো ব্লগে লাইক দেওয়ার জন্য ধন্যবাদ!", "success");
+                        return;
+                      }
+                      try {
+                        const tipRef = doc(db, 'health_tips', selectedHealthTip.id);
+                        const currentLikes = selectedHealthTip.likes || [];
+                        const isLiked = currentLikes.includes(user.uid);
+                        let updatedLikes = [];
+                        if (isLiked) {
+                          updatedLikes = currentLikes.filter(uid => uid !== user.uid);
+                        } else {
+                          updatedLikes = [...currentLikes, user.uid];
+                        }
+                        await updateDoc(tipRef, { likes: updatedLikes });
+                        setSelectedHealthTip({ ...selectedHealthTip, likes: updatedLikes });
+                      } catch (err: any) {
+                        addToast("Error", err.message || "Failed to update like status.", "error");
+                      }
+                    }}
+                    className={`px-4 py-2 border text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 cursor-pointer ${
+                      selectedHealthTip.likes?.includes(user?.uid || '')
+                        ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ❤️ {selectedHealthTip.likes?.includes(user?.uid || '') ? 'Liked' : 'Like Article'}
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedHealthTip(null)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold uppercase tracking-widest rounded-xl transition-all cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* View All Events Modal */}
+      <AnimatePresence>
+        {showAllEventsModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowAllEventsModal(false);
+                setEventSearch('');
+              }}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-slate-50 rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] pointer-events-auto text-left font-sans"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 bg-white border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">সকল ইভেন্টসমূহ</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">All Campaigns & Drives</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAllEventsModal(false);
+                    setEventSearch('');
+                  }}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="p-4 bg-white border-b border-slate-100 shrink-0">
+                <input 
+                  type="text"
+                  value={eventSearch}
+                  onChange={(e) => setEventSearch(e.target.value)}
+                  placeholder="ইভেন্টের নাম বা স্থান দিয়ে খুঁজুন..."
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 focus:bg-white transition-all font-sans"
+                />
+              </div>
+
+              {/* List */}
+              <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left bg-slate-50/50">
+                {(events.length > 0 ? events : [
+                  {
+                    id: 'event-1',
+                    title: 'জাতীয় রক্তদান কর্মসূচি ও ক্যাম্পেইন',
+                    description: 'জাতীয় যুব দিবস উপলক্ষে ঢাকার মিরপুরে একটি বিশেষ রক্তদান ক্যাম্পেইনের আয়োজন করা হয়েছে। ঢাকা মেডিকেল কলেজের দক্ষ চিকিৎসক দলের তত্ত্বাবধানে নিরাপদ ও উন্নত পরিবেশে রক্তদান প্রক্রিয়া সম্পন্ন হবে।',
+                    location: 'মিরপুর-১০, পাবলিক লাইব্রেরি প্রাঙ্গণ, ঢাকা',
+                    eventDate: '2026-09-10T10:00',
+                    imageUrl: 'https://images.unsplash.com/photo-1579154204601-01588f351167?w=600&auto=format&fit=cover&q=80',
+                    status: 'Active',
+                    joinedUsers: [] as string[]
+                  },
+                  {
+                    id: 'event-2',
+                    title: 'জরুরী প্লাজমা ও রক্ত সংগ্রহ ক্যাম্প',
+                    description: 'ডেঙ্গু আক্রান্ত রোগীদের প্লেটলেট ও রক্ত সরবরাহে সহায়তা করতে স্বেচ্ছাসেবী ব্লাড ক্লাবের উদ্যোগে এই ক্যাম্পটি আয়োজিত হচ্ছে।',
+                    location: 'ধানমন্ডি লেক রবীন্দ্র সরোবর, ঢাকা',
+                    eventDate: '2026-09-25T14:30',
+                    imageUrl: 'https://images.unsplash.com/photo-1615461066841-6116ecdccd04?w=600&auto=format&fit=cover&q=80',
+                    status: 'Active',
+                    joinedUsers: [] as string[]
+                  }
+                ])
+                .filter(ev => {
+                  if (!eventSearch.trim()) return true;
+                  const queryStr = eventSearch.toLowerCase();
+                  return ev.title?.toLowerCase().includes(queryStr) || ev.location?.toLowerCase().includes(queryStr);
+                })
+                .map((ev) => {
+                  const isJoined = ev.joinedUsers?.includes(user?.uid || '');
+                  let monthStr = "SEP";
+                  let dayStr = "14";
+                  let isPassed = false;
+                  try {
+                    if (ev.eventDate) {
+                      const dateObj = new Date(ev.eventDate);
+                      if (!isNaN(dateObj.getTime())) {
+                        monthStr = dateObj.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+                        dayStr = dateObj.getDate().toString().padStart(2, '0');
+                        isPassed = dateObj.getTime() < Date.now();
+                      }
+                    }
+                  } catch (e) {}
+
+                  return (
+                    <div 
+                      key={ev.id}
+                      onClick={() => {
+                        setSelectedEvent(ev as AppEvent);
+                        setShowAllEventsModal(false);
+                        setEventSearch('');
+                      }}
+                      className="bg-white border border-slate-150 rounded-3xl p-4 flex gap-4 items-center cursor-pointer hover:border-red-200 hover:shadow-xs transition-all duration-300"
+                    >
+                      {ev.imageUrl && (
+                        <img src={ev.imageUrl} alt={ev.title} className="w-16 h-16 object-cover rounded-2xl shrink-0 border border-slate-100" />
+                      )}
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider ${
+                            isPassed ? 'bg-slate-100 text-slate-500' : 'bg-rose-50 text-red-650'
+                          }`}>
+                            {isPassed ? 'PASSED' : 'ACTIVE'}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">
+                            {monthStr} {dayStr}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-black text-slate-900 mt-1 leading-snug truncate">{ev.title}</h4>
+                        <p className="text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
+                          <span>📍 {ev.location}</span>
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* View All Blogs Modal */}
+      <AnimatePresence>
+        {showAllBlogsModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => {
+                setShowAllBlogsModal(false);
+                setBlogSearch('');
+              }}
+              className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]"
+            />
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 220 }}
+              className="fixed bottom-0 left-0 right-0 bg-slate-50 rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] pointer-events-auto text-left font-sans"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 bg-white border-b border-slate-100 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                    <FileText className="w-5 h-5 text-rose-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">স্বাস্থ্য তথ্য ও ব্লগ</h3>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">All Medical Articles & Tips</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowAllBlogsModal(false);
+                    setBlogSearch('');
+                  }}
+                  className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="p-4 bg-white border-b border-slate-100 shrink-0">
+                <input 
+                  type="text"
+                  value={blogSearch}
+                  onChange={(e) => setBlogSearch(e.target.value)}
+                  placeholder="ব্লগ বা আর্টিকেলের বিষয় দিয়ে খুঁজুন..."
+                  className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 focus:bg-white transition-all font-sans"
+                />
+              </div>
+
+              {/* List */}
+              <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left bg-slate-50/50">
+                {(healthTips.length > 0 ? healthTips : [
+                  {
+                    id: 'tip-1',
+                    title: 'রক্তদানের সাধারণ স্বাস্থ্য উপকারিতা',
+                    content: 'নিয়মিত রক্তদান করলে শরীরে নতুন লোহিত রক্তকণিকা বা রেড ব্লাড সেল তৈরির হার বাড়ে। গবেষণায় দেখা গেছে, রক্তদান রক্তে অতিরিক্ত আয়রনের মাত্রা কমাতে সাহায্য করে, যা হৃদরোগ ও স্ট্রোকের ঝুঁকি কমায়। তাছাড়া এটি শরীরের সামগ্রিক কোলেস্টেরল মাত্রা নিয়ন্ত্রণে রাখতে সহায়ক এবং রক্তচাপ নিয়ন্ত্রণে রাখতেও সাহায্য করে।',
+                    readTime: '৩ মিনিট রিড',
+                    likes: [] as string[]
+                  },
+                  {
+                    id: 'tip-2',
+                    title: 'রক্তদানের পূর্বে ও পরে কী খাবেন?',
+                    content: 'রক্তদানের পূর্বে অন্তত ৩-৪ গ্লাস পানি বা ফলের রস পান করুন এবং একটি স্বাস্থ্যকর ও পুষ্টিকর খাবার খান। খালি পেটে রক্তদান করা যাবে না। রক্তদানের পর অন্তত ১৫-২০ মিনিট শুয়ে বা বসে বিশ্রাম নিন এবং প্রচুর তরল খাবার পান করুন। অন্তত পরবর্তী ৩-৪ ঘণ্টা ভারী কোনো কাজ বা ভারী জিনিস উত্তোলন থেকে বিরত থাকুন।',
+                    readTime: '৪ মিনিট রিড',
+                    likes: [] as string[]
+                  },
+                  {
+                    id: 'tip-3',
+                    title: 'রক্ত দিতে কারা যোগ্য এবং কারা অযোগ্য?',
+                    content: 'যেকোনো সুস্থ ব্যক্তি যার বয়স ১৮ থেকে ৬০ বছর, ওজন কমপক্ষে ৪৫ কেজি এবং রক্তের হিমোগ্লোবিন সঠিক মাত্রায় আছে, তিনি রক্তদান করতে পারবেন। কিন্তু যদি আপনি কোনো জটিল রোগে আক্রান্ত হন, সাম্প্রতিক সময়ে বড় অস্ত্রোপচার হয়ে থাকে, অথবা গর্ভবতী হন, তবে রক্তদান করা থেকে বিরত থাকতে হবে।',
+                    readTime: '৩ মিনিট রিড',
+                    likes: [] as string[]
+                  }
+                ])
+                .filter(tip => {
+                  if (!blogSearch.trim()) return true;
+                  const queryStr = blogSearch.toLowerCase();
+                  return tip.title?.toLowerCase().includes(queryStr) || tip.content?.toLowerCase().includes(queryStr);
+                })
+                .map((tip) => {
+                  const isLiked = tip.likes?.includes(user?.uid || '');
+                  return (
+                    <div 
+                      key={tip.id}
+                      onClick={() => {
+                        setSelectedHealthTip(tip as HealthTip);
+                        setShowAllBlogsModal(false);
+                        setBlogSearch('');
+                      }}
+                      className="bg-white border border-slate-150 rounded-3xl p-4 flex gap-4 items-center cursor-pointer hover:border-rose-200 hover:shadow-xs transition-all duration-300"
+                    >
+                      {tip.imageUrl && (
+                        <img src={tip.imageUrl} alt={tip.title} className="w-16 h-16 object-cover rounded-2xl shrink-0 border border-slate-100" />
+                      )}
+                      <div className="flex-1 min-w-0 text-left">
+                        <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest">
+                          ⏰ {tip.readTime || '৩ মিনিট রিড'}
+                        </span>
+                        <h4 className="text-xs font-black text-slate-900 mt-1 leading-snug truncate">{tip.title}</h4>
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate font-sans">{tip.content}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* AI Blood Assistant Voice Dialog Trigger */}
       <AIBloodAssistant 
         onSearchDonors={(bloodGroup, district, thana) => {
@@ -6871,45 +8632,9 @@ export default function App() {
       />
 
       <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-20 px-2 flex justify-around items-center z-[100] bg-transparent">
-        {/* Premium composite background with a gorgeous circular scoop cutout (Cart notch style) */}
-        <div className="absolute inset-x-0 bottom-0 h-[72px] flex z-0 pointer-events-none select-none" style={{ filter: 'drop-shadow(0 15px 35px rgba(15, 23, 42, 0.08)) drop-shadow(0 6px 18px rgba(15, 23, 42, 0.07))' }}>
-          {/* Left Part with premium rounded borders */}
-          <div className="flex-1 bg-white/95 backdrop-blur-md rounded-tl-[32px] border-t border-l border-slate-200/50" />
-          
-          {/* Semicircular / concave shape curve in the center (Exactly 104px wide) */}
-          <div className="w-[104px] h-[72px] relative bg-transparent overflow-visible -mx-[1px]">
-            <svg viewBox="0 0 104 72" fill="none" className="absolute top-0 left-0 w-full h-full overflow-visible">
-              {/* Fill path without any border/stroke */}
-              <path 
-                d="M 0,0 
-                   L 12,0 
-                   C 26,0 26,45 52,45 
-                   C 78,45 78,0 92,0 
-                   L 104,0 
-                   L 104,72 
-                   L 0,72 
-                   Z" 
-                fill="white" 
-                fillOpacity="0.95"
-              />
-              {/* Stroke line that ONLY draws the premium curved upper border (no sides, no bottom) */}
-              <path 
-                d="M 0,0 
-                   L 12,0 
-                   C 26,0 26,45 52,45 
-                   C 78,45 78,0 92,0 
-                   L 104,0" 
-                fill="none"
-                stroke="#e2e8f0" 
-                strokeWidth="1.2"
-              />
-            </svg>
-            <div className="absolute top-0 bottom-0 left-0 w-3 bg-white/95" />
-            <div className="absolute top-0 bottom-0 right-0 w-3 bg-white/95" />
-          </div>
-
-          {/* Right Part with premium rounded borders */}
-          <div className="flex-1 bg-white/95 backdrop-blur-md rounded-tr-[32px] border-t border-r border-slate-200/50" />
+        {/* Premium solid composite background with rounded top-left and top-right corners */}
+        <div className="absolute inset-x-0 bottom-0 h-[72px] flex z-0 pointer-events-none select-none" style={{ filter: 'drop-shadow(0 -10px 25px rgba(15, 23, 42, 0.05)) drop-shadow(0 6px 18px rgba(15, 23, 42, 0.05))' }}>
+          <div className="flex-1 bg-white/95 backdrop-blur-md rounded-t-[32px] border-t border-x border-slate-200/50" />
         </div>
 
         <NavButton 
@@ -6920,6 +8645,7 @@ export default function App() {
             setView('requests'); 
             setShowRequestsOverlay(false); 
             handleSetActiveChat(null); 
+            setShowHamburgerMenu(false);
           }} 
         />
         
@@ -6932,30 +8658,9 @@ export default function App() {
             setView('requests'); 
             setShowRequestsOverlay(true); 
             handleSetActiveChat(null); 
+            setShowHamburgerMenu(false);
           }} 
         />
-
-        {/* Special Middle Sparkle AI Button (Half inside the menu, half sticking up above) */}
-        <div className="relative flex-1 flex flex-col items-center justify-center -translate-y-4 h-20 pointer-events-auto select-none z-10">
-          <button
-            type="button"
-            onClick={() => setIsAiAssistantOpen(true)}
-            className="w-17 h-17 bg-red-600 hover:bg-red-700 text-white rounded-full flex flex-col items-center justify-center shadow-[0_12px_32px_rgba(220,38,38,0.45)] border-4 border-white cursor-pointer select-none relative z-10 hover:scale-105 active:scale-95 transition-all duration-300"
-            style={{ touchAction: 'manipulation' }}
-            title="রক্তবন্ধু AI সহকারী — আপনার এআই রক্তদাতা সাহায্যকারী"
-          >
-            <Bot className="w-6.5 h-6.5 text-white stroke-[2.2]" />
-            <span className="text-[8.5px] font-black uppercase tracking-wider text-red-50 mt-0.5 leading-none">
-              AI সহকারী
-            </span>
-            
-            {/* Live blinking radar badge on the button */}
-            <span className="absolute -bottom-1 px-2.5 py-0.5 bg-[#0e1726] text-white border border-slate-700 rounded-full flex items-center gap-1 scale-90 shadow-lg z-20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="text-[6.5px] font-black tracking-widest leading-none">LIVE</span>
-            </span>
-          </button>
-        </div>
 
         <NavButton 
           active={view === 'find'} 
@@ -6965,18 +8670,29 @@ export default function App() {
             setView('find'); 
             setShowRequestsOverlay(false); 
             handleSetActiveChat(null); 
+            setShowHamburgerMenu(false);
           }} 
         />
 
         <NavButton 
-          active={view === 'feed'} 
-          badge={newPostsCount > 0 ? newPostsCount : undefined} 
-          icon={<Users className={view === 'feed' ? "animate-pulse" : ""} />} 
-          label="Community" 
+          active={view === 'chats'} 
+          badge={unreadCount > 0 ? unreadCount : undefined} 
+          icon={<MessageSquare className={view === 'chats' ? "animate-pulse" : ""} />} 
+          label="Chats" 
           onClick={() => { 
-            setView('feed'); 
+            setView('chats'); 
             setShowRequestsOverlay(false); 
             handleSetActiveChat(null); 
+            setShowHamburgerMenu(false);
+          }} 
+        />
+
+        <NavButton 
+          active={showHamburgerMenu} 
+          icon={<Menu />} 
+          label="Menu" 
+          onClick={() => { 
+            setShowHamburgerMenu(!showHamburgerMenu); 
           }} 
         />
       </nav>
@@ -7753,7 +9469,37 @@ function ImportDonorsModal({ org, organizations, onCancel, onSuccess, addToast }
   );
 }
 
-function AdminPanel({ users, requests, posts, reports, organizations, orgApplications, adminUser, notifications, settings, onDeleteRequest, askConfirm, addToast, setView, hasUpdate, setHasUpdate }: { 
+const compressAndResizeImage = async (file: File, targetWidth = 800, targetHeight = 450): Promise<string> => {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject('Canvas context not available');
+
+        const scale = Math.max(targetWidth / img.width, targetHeight / img.height);
+        const x = (targetWidth - img.width * scale) / 2;
+        const y = (targetHeight - img.height * scale) / 2;
+        
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+        
+        resolve(canvas.toDataURL('image/jpeg', 0.75));
+      };
+      img.onerror = () => reject('Image load failed');
+    };
+    reader.onerror = () => reject('File read failed');
+  });
+};
+
+function AdminPanel({ users, requests, posts, reports, organizations, orgApplications, adminUser, notifications, settings, onDeleteRequest, askConfirm, addToast, setView, hasUpdate, setHasUpdate, events }: { 
   users: UserProfile[], 
   requests: BloodRequest[], 
   posts: CommunityPost[], 
@@ -7768,10 +9514,33 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   addToast: (title: string, body: string, type?: Toast['type'], requestId?: string) => void,
   setView: (view: any) => void,
   hasUpdate: boolean,
-  setHasUpdate: (v: boolean) => void
+  setHasUpdate: (v: boolean) => void,
+  events: AppEvent[]
 }) {
-  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant' | 'blogs' | 'events'>('stats');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [adminHealthTips, setAdminHealthTips] = useState<HealthTip[]>([]);
+  const [showCreateBlog, setShowCreateBlog] = useState(false);
+  const [editingBlog, setEditingBlog] = useState<HealthTip | null>(null);
+  const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
+  const [blogImageFileBase64, setBlogImageFileBase64] = useState<string>('');
+  const [editBlogImageFileBase64, setEditBlogImageFileBase64] = useState<string>('');
+  const [eventImageFileBase64, setEventImageFileBase64] = useState<string>('');
+  const [editEventImageFileBase64, setEditEventImageFileBase64] = useState<string>('');
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'health_tips'), (snapshot) => {
+      const tips: HealthTip[] = [];
+      snapshot.forEach((doc) => {
+        tips.push({ id: doc.id, ...doc.data() } as HealthTip);
+      });
+      setAdminHealthTips(tips);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'health_tips');
+    });
+    return () => unsubscribe();
+  }, []);
   const [broadcastText, setBroadcastText] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
@@ -8196,6 +9965,8 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'requests', label: 'Blood Requests', icon: <Droplets className="w-4 h-4" /> },
     { id: 'feed', label: 'Community Feed', icon: <Users className="w-4 h-4" /> },
     { id: 'reports', label: 'Reports', icon: <ShieldAlert className="w-4 h-4" />, badge: stats.pendingReports > 0 ? stats.pendingReports : null },
+    { id: 'blogs', label: 'Blogs & Health Tips', icon: <FileText className="w-4 h-4" /> },
+    { id: 'events', label: 'Events & Campaigns', icon: <Calendar className="w-4 h-4" /> },
     { id: 'alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: notifications.filter(n => !n.isRead).length > 0 ? notifications.filter(n => !n.isRead).length : null },
     { id: 'ai-assistant', label: 'AI Assistant', icon: <Bot className="w-4 h-4 text-emerald-500" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
@@ -9811,6 +11582,867 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
           </motion.div>
         )}
 
+        {tab === 'blogs' && (
+          <motion.div
+            key="blogs"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6 text-left"
+          >
+            {/* Header */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Health Tips & Articles</p>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Blog Share & Directory</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Share medical insights, awareness campaigns, and daily health guides in Bangla with our donor base.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCreateBlog(!showCreateBlog);
+                  setBlogImageFileBase64('');
+                }}
+                className="bg-slate-900 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shrink-0 cursor-pointer"
+              >
+                {showCreateBlog ? 'Cancel Form' : 'Share New Blog'}
+              </button>
+            </div>
+
+            {/* Create Blog Form */}
+            {showCreateBlog && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[2.5rem] border border-slate-150 p-8 shadow-xs"
+              >
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-6">New Health Tip Details (Bangla)</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const data = new FormData(form);
+                  const title = data.get('title') as string;
+                  const category = data.get('category') as string;
+                  const readTime = data.get('readTime') as string;
+                  const imageUrl = data.get('imageUrl') as string;
+                  const content = data.get('content') as string;
+
+                  if (!title.trim() || !category.trim() || !readTime.trim() || !content.trim()) {
+                    addToast("Error", "Please fill in all required fields.", "error");
+                    return;
+                  }
+
+                  try {
+                    const finalImg = blogImageFileBase64 || imageUrl.trim() || 'https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600&auto=format&fit=cover&q=80';
+                    await addDoc(collection(db, 'health_tips'), {
+                      title: title.trim(),
+                      category: category.trim(),
+                      readTime: readTime.trim(),
+                      imageUrl: finalImg,
+                      content: content.trim(),
+                      likes: [],
+                      createdAt: serverTimestamp()
+                    });
+                    addToast("Success", "Blog/Health tip published successfully!", "success");
+                    form.reset();
+                    setBlogImageFileBase64('');
+                    setShowCreateBlog(false);
+                  } catch (err: any) {
+                    addToast("Error", err.message || "Failed to publish blog.", "error");
+                  }
+                }} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Article Title * (শিরোনাম)</label>
+                      <input 
+                        type="text" 
+                        name="title" 
+                        placeholder="e.g. রক্তদানের শারীরিক উপকারিতা" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category * (বিভাগ)</label>
+                      <input 
+                        type="text" 
+                        name="category" 
+                        placeholder="e.g. রক্তদান / স্বাস্থ্য টিপস" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Read Time * (পড়ার সময়)</label>
+                      <input 
+                        type="text" 
+                        name="readTime" 
+                        placeholder="e.g. ৩ মিনিট রিড" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Image Selection (Device / URL)</label>
+                      <div className="flex gap-2">
+                        <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-xl px-4 py-2.5 text-xs text-slate-600 font-bold transition-all">
+                          <Image className="w-4 h-4 text-slate-400" />
+                          <span className="truncate">{blogImageFileBase64 ? 'Selected ✓' : 'Device Image'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const base64 = await compressAndResizeImage(file);
+                                  setBlogImageFileBase64(base64);
+                                  addToast("Success", "Device image loaded!", "success");
+                                } catch (err) {
+                                  addToast("Error", "Could not read image file.", "error");
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <input 
+                          type="text" 
+                          name="imageUrl" 
+                          placeholder="Or paste Image URL..." 
+                          className="flex-[2] px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        />
+                      </div>
+                      {blogImageFileBase64 && (
+                        <div className="mt-2 relative inline-block">
+                          <img src={blogImageFileBase64} alt="Upload Preview" className="w-24 h-14 object-cover rounded-lg border border-slate-100" />
+                          <button 
+                            type="button" 
+                            onClick={() => setBlogImageFileBase64('')}
+                            className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Content * (বিষয়বস্তু)</label>
+                    <textarea 
+                      name="content" 
+                      rows={6}
+                      placeholder="এখানে বাংলায় বিস্তারিত স্বাস্থ্য টিপস বা ব্লগের লেখাটি লিখুন..." 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all resize-none font-sans"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    Share & Publish Blog
+                  </button>
+                </form>
+              </motion.div>
+            )}
+
+            {/* Current Directory */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Blogs Directory</h3>
+              {adminHealthTips.length === 0 ? (
+                <div className="bg-white rounded-[2.5rem] p-16 text-center border border-slate-100 shadow-sm">
+                  <p className="text-slate-400 text-sm">No blogs or health tips found. Click "Share New Blog" to post one!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {adminHealthTips.map((tip) => (
+                    <div key={tip.id} className="bg-white rounded-3xl p-6 border border-slate-150 flex flex-col justify-between hover:border-slate-300 transition-all">
+                      <div className="space-y-3">
+                        {tip.imageUrl && (
+                          <img src={tip.imageUrl} alt={tip.title} className="w-full h-32 object-cover rounded-2xl border border-slate-100 mb-2" />
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className="px-2.5 py-0.5 bg-slate-50 border border-slate-100 rounded-full text-[9px] font-black text-slate-600 uppercase tracking-wider">
+                            {tip.category}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">
+                            {tip.readTime}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-black text-slate-900 leading-snug">{tip.title}</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed line-clamp-3 whitespace-pre-line font-sans">
+                          {tip.content}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">
+                          ❤️ {tip.likes?.length || 0} Likes
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingBlog(tip);
+                              setEditBlogImageFileBase64('');
+                            }}
+                            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-all cursor-pointer border border-slate-150"
+                            title="Edit Blog"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const proceed = await askConfirm(
+                                "Delete Blog?",
+                                `Are you sure you want to permanently delete "${tip.title}"? This cannot be undone.`,
+                                "Yes, Delete",
+                                "warning"
+                              );
+                              if (proceed) {
+                                try {
+                                  await deleteDoc(doc(db, 'health_tips', tip.id));
+                                  addToast("Success", "Blog deleted successfully.", "success");
+                                } catch (err: any) {
+                                  addToast("Error", err.message || "Failed to delete blog.", "error");
+                                }
+                              }
+                            }}
+                            className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-all cursor-pointer"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Edit Blog Modal */}
+            <AnimatePresence>
+              {editingBlog && (
+                <>
+                  <div 
+                    onClick={() => { setEditingBlog(null); setEditBlogImageFileBase64(''); }} 
+                    className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]" 
+                  />
+                  <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                    className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] text-left"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-rose-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Edit Blog / Health Tip</h3>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modify Published Content</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setEditingBlog(null); setEditBlogImageFileBase64(''); }}
+                        className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left">
+                      <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const data = new FormData(form);
+                        const title = data.get('title') as string;
+                        const category = data.get('category') as string;
+                        const readTime = data.get('readTime') as string;
+                        const imageUrl = data.get('imageUrl') as string;
+                        const content = data.get('content') as string;
+
+                        if (!title.trim() || !category.trim() || !readTime.trim() || !content.trim()) {
+                          addToast("Error", "Please fill in all required fields.", "error");
+                          return;
+                        }
+
+                        try {
+                          const blogRef = doc(db, 'health_tips', editingBlog.id);
+                          const finalImg = editBlogImageFileBase64 || imageUrl.trim() || editingBlog.imageUrl;
+                          await updateDoc(blogRef, {
+                            title: title.trim(),
+                            category: category.trim(),
+                            readTime: readTime.trim(),
+                            imageUrl: finalImg,
+                            content: content.trim(),
+                            updatedAt: serverTimestamp()
+                          });
+                          addToast("Success", "Blog updated successfully!", "success");
+                          setEditingBlog(null);
+                          setEditBlogImageFileBase64('');
+                        } catch (err: any) {
+                          addToast("Error", err.message || "Failed to update blog.", "error");
+                        }
+                      }} className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Article Title *</label>
+                          <input 
+                            type="text" 
+                            name="title" 
+                            defaultValue={editingBlog.title}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Category *</label>
+                            <input 
+                              type="text" 
+                              name="category" 
+                              defaultValue={editingBlog.category}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Read Time *</label>
+                            <input 
+                              type="text" 
+                              name="readTime" 
+                              defaultValue={editingBlog.readTime}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Image Selection</label>
+                          <div className="flex flex-col gap-2">
+                            <label className="cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition-all">
+                              <Image className="w-4 h-4 text-slate-400" />
+                              <span>{editBlogImageFileBase64 ? 'New Image Selected ✓' : 'Select New Image from Device'}</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    try {
+                                      const base64 = await compressAndResizeImage(file);
+                                      setEditBlogImageFileBase64(base64);
+                                      addToast("Image Loaded", "Device image loaded successfully!", "success");
+                                    } catch (err) {
+                                      addToast("Error", "Could not load image file.", "error");
+                                    }
+                                  }
+                                }} 
+                              />
+                            </label>
+                            <input 
+                              type="text" 
+                              name="imageUrl" 
+                              placeholder="Or paste Image URL instead..." 
+                              defaultValue={editingBlog.imageUrl}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                            />
+                          </div>
+                          {(editBlogImageFileBase64 || editingBlog.imageUrl) && (
+                            <div className="mt-2 relative inline-block">
+                              <img src={editBlogImageFileBase64 || editingBlog.imageUrl} alt="Preview" className="w-24 h-16 object-cover rounded-lg border border-slate-200" />
+                              {editBlogImageFileBase64 && (
+                                <button 
+                                  type="button" 
+                                  onClick={() => setEditBlogImageFileBase64('')}
+                                  className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 shadow-xs hover:bg-red-700 transition-colors"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Content *</label>
+                          <textarea 
+                            name="content" 
+                            rows={8}
+                            defaultValue={editingBlog.content}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all resize-none font-sans"
+                            required
+                          ></textarea>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+                        >
+                          Save Blog Changes
+                        </button>
+                      </form>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+
+        {tab === 'events' && (
+          <motion.div
+            key="events"
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6 text-left"
+          >
+            {/* Header */}
+            <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Campaigns & Blood Drives</p>
+                <h2 className="text-2xl font-black text-slate-900 tracking-tight">Event Management</h2>
+                <p className="text-xs text-slate-500 mt-1">
+                  Organize, edit, and publish community donation drives, public blood camps, or virtual campaigns.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCreateEvent(!showCreateEvent);
+                  setEventImageFileBase64('');
+                }}
+                className="bg-slate-900 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shrink-0 cursor-pointer"
+              >
+                {showCreateEvent ? 'Cancel Form' : 'Publish New Event'}
+              </button>
+            </div>
+
+            {/* Create Event Form */}
+            {showCreateEvent && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-[2.5rem] border border-slate-150 p-8 shadow-xs"
+              >
+                <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider mb-6">New Event details</h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const form = e.currentTarget;
+                  const data = new FormData(form);
+                  const title = data.get('title') as string;
+                  const description = data.get('description') as string;
+                  const location = data.get('location') as string;
+                  const eventDate = data.get('eventDate') as string;
+                  const imageUrl = data.get('imageUrl') as string;
+
+                  if (!title.trim() || !description.trim() || !location.trim() || !eventDate.trim()) {
+                    addToast("Error", "Please fill in all required fields.", "error");
+                    return;
+                  }
+
+                  try {
+                    const finalImg = eventImageFileBase64 || imageUrl.trim() || 'https://images.unsplash.com/photo-1615461066841-6116ecdccd04?w=600&auto=format&fit=cover&q=80';
+                    await addDoc(collection(db, 'events'), {
+                      title: title.trim(),
+                      description: description.trim(),
+                      location: location.trim(),
+                      eventDate: eventDate.trim(),
+                      imageUrl: finalImg,
+                      status: 'Active',
+                      createdAt: serverTimestamp(),
+                      createdBy: adminUser?.uid || 'admin',
+                      joinedUsers: []
+                    });
+                    addToast("Success", "Event published successfully!", "success");
+                    form.reset();
+                    setEventImageFileBase64('');
+                    setShowCreateEvent(false);
+                  } catch (err: any) {
+                    addToast("Error", err.message || "Failed to publish event.", "error");
+                  }
+                }} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Event Title *</label>
+                      <input 
+                        type="text" 
+                        name="title" 
+                        placeholder="e.g. Children's Day Blood Camp" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Date & Time *</label>
+                      <input 
+                        type="datetime-local" 
+                        name="eventDate" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-955 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Location / Venue *</label>
+                      <input 
+                        type="text" 
+                        name="location" 
+                        placeholder="e.g. Mirpur-10 Public Library Ground" 
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Image Selection (Device / URL)</label>
+                      <div className="flex gap-2">
+                        <label className="flex-1 cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50 hover:bg-slate-100 rounded-xl px-4 py-2.5 text-xs text-slate-600 font-bold transition-all">
+                          <Image className="w-4 h-4 text-slate-400" />
+                          <span className="truncate">{eventImageFileBase64 ? 'Selected ✓' : 'Device Image'}</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                try {
+                                  const base64 = await compressAndResizeImage(file);
+                                  setEventImageFileBase64(base64);
+                                  addToast("Success", "Device image loaded!", "success");
+                                } catch (err) {
+                                  addToast("Error", "Could not read image file.", "error");
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <input 
+                          type="text" 
+                          name="imageUrl" 
+                          placeholder="Or paste Image URL..." 
+                          className="flex-[2] px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all"
+                        />
+                      </div>
+                      {eventImageFileBase64 && (
+                        <div className="mt-2 relative inline-block">
+                          <img src={eventImageFileBase64} alt="Upload Preview" className="w-24 h-14 object-cover rounded-lg border border-slate-100" />
+                          <button 
+                            type="button" 
+                            onClick={() => setEventImageFileBase64('')}
+                            className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 hover:bg-red-700 shadow-sm"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description *</label>
+                    <textarea 
+                      name="description" 
+                      rows={5}
+                      placeholder="Explain details of the event, objective, guidelines..." 
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-950 focus:outline-none focus:border-slate-400 transition-all resize-none"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+                  >
+                    Publish Event Campaign
+                  </button>
+                </form>
+              </motion.div>
+            )}
+
+            {/* Current Events Directory */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Events Directory</h3>
+              {events.length === 0 ? (
+                <div className="bg-white rounded-[2.5rem] p-16 text-center border border-slate-100 shadow-sm">
+                  <p className="text-slate-400 text-sm">No events found. Click "Publish New Event" to launch one!</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {events.map((ev) => (
+                    <div key={ev.id} className="bg-white rounded-3xl p-6 border border-slate-150 flex flex-col justify-between hover:border-slate-300 transition-all">
+                      <div className="space-y-3">
+                        {ev.imageUrl && (
+                          <img src={ev.imageUrl} alt={ev.title} className="w-full h-32 object-cover rounded-2xl border border-slate-100 mb-2" />
+                        )}
+                        <div className="flex items-center justify-between">
+                          <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                            ev.status === 'Active' 
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
+                              : 'bg-slate-50 text-slate-500 border-slate-100'
+                          }`}>
+                            {ev.status}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase">
+                            📅 {ev.eventDate ? new Date(ev.eventDate).toLocaleDateString() : 'TBD'}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-black text-slate-900 leading-snug">{ev.title}</h4>
+                        <p className="text-xs text-slate-500 font-bold">📍 {ev.location}</p>
+                        <p className="text-xs text-slate-500 leading-relaxed line-clamp-3 whitespace-pre-line font-sans">
+                          {ev.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4 mt-4 border-t border-slate-100">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">
+                          👥 {ev.joinedUsers?.length || 0} RSVPs
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingEvent(ev);
+                              setEditEventImageFileBase64('');
+                            }}
+                            className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl transition-all cursor-pointer border border-slate-150"
+                            title="Edit Event"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const proceed = await askConfirm(
+                                "Delete Event?",
+                                `Are you sure you want to permanently delete "${ev.title}"? This cannot be undone.`,
+                                "Yes, Delete",
+                                "warning"
+                              );
+                              if (proceed) {
+                                try {
+                                  await deleteDoc(doc(db, 'events', ev.id));
+                                  addToast("Success", "Event deleted successfully.", "success");
+                                } catch (err: any) {
+                                  addToast("Error", err.message || "Failed to delete event.", "error");
+                                }
+                              }
+                            }}
+                            className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-all cursor-pointer"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Edit Event Modal */}
+            <AnimatePresence>
+              {editingEvent && (
+                <>
+                  <div 
+                    onClick={() => { setEditingEvent(null); setEditEventImageFileBase64(''); }} 
+                    className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-[110]" 
+                  />
+                  <motion.div 
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                    className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] shadow-2xl z-[120] border-t border-slate-100 max-w-lg mx-auto overflow-hidden flex flex-col h-[85vh] text-left"
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between p-5 border-b border-slate-100 shrink-0">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 bg-rose-50 rounded-xl flex items-center justify-center">
+                          <Calendar className="w-5 h-5 text-rose-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">Edit Event Details</h3>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Modify Campaign details</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => { setEditingEvent(null); setEditEventImageFileBase64(''); }}
+                        className="p-1.5 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all cursor-pointer"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-5 overflow-y-auto space-y-4 pb-12 flex-1 text-left">
+                      <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const data = new FormData(form);
+                        const title = data.get('title') as string;
+                        const description = data.get('description') as string;
+                        const location = data.get('location') as string;
+                        const eventDate = data.get('eventDate') as string;
+                        const imageUrl = data.get('imageUrl') as string;
+                        const status = data.get('status') as string;
+
+                        if (!title.trim() || !description.trim() || !location.trim() || !eventDate.trim()) {
+                          addToast("Error", "Please fill in all required fields.", "error");
+                          return;
+                        }
+
+                        try {
+                          const eventRef = doc(db, 'events', editingEvent.id);
+                          const finalImg = editEventImageFileBase64 || imageUrl.trim() || editingEvent.imageUrl;
+                          await updateDoc(eventRef, {
+                            title: title.trim(),
+                            description: description.trim(),
+                            location: location.trim(),
+                            eventDate: eventDate.trim(),
+                            imageUrl: finalImg,
+                            status: status,
+                            updatedAt: serverTimestamp()
+                          });
+                          addToast("Success", "Event updated successfully!", "success");
+                          setEditingEvent(null);
+                          setEditEventImageFileBase64('');
+                        } catch (err: any) {
+                          addToast("Error", err.message || "Failed to update event.", "error");
+                        }
+                      }} className="space-y-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Event Title *</label>
+                          <input 
+                            type="text" 
+                            name="title" 
+                            defaultValue={editingEvent.title}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                            required
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Date & Time *</label>
+                            <input 
+                              type="datetime-local" 
+                              name="eventDate" 
+                              defaultValue={editingEvent.eventDate}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Status</label>
+                            <select 
+                              name="status"
+                              defaultValue={editingEvent.status}
+                              className="w-full px-4 py-3.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all bg-white"
+                            >
+                              <option value="Active">Active</option>
+                              <option value="Completed">Completed</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Location / Venue *</label>
+                          <input 
+                            type="text" 
+                            name="location" 
+                            defaultValue={editingEvent.location}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Image Selection</label>
+                          <div className="flex flex-col gap-2">
+                            <label className="cursor-pointer flex items-center justify-center gap-2 border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50 hover:bg-slate-100 text-xs font-bold text-slate-600 transition-all">
+                              <Image className="w-4 h-4 text-slate-400" />
+                              <span>{editEventImageFileBase64 ? 'New Image Selected ✓' : 'Select New Image from Device'}</span>
+                              <input 
+                                type="file" 
+                                accept="image/*" 
+                                className="hidden" 
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    try {
+                                      const base64 = await compressAndResizeImage(file);
+                                      setEditEventImageFileBase64(base64);
+                                      addToast("Image Loaded", "Device image loaded successfully!", "success");
+                                    } catch (err) {
+                                      addToast("Error", "Could not load image file.", "error");
+                                    }
+                                  }
+                                }} 
+                              />
+                            </label>
+                            <input 
+                              type="text" 
+                              name="imageUrl" 
+                              placeholder="Or paste Image URL instead..." 
+                              defaultValue={editingEvent.imageUrl}
+                              className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all"
+                            />
+                          </div>
+                          {(editEventImageFileBase64 || editingEvent.imageUrl) && (
+                            <div className="mt-2 relative inline-block">
+                              <img src={editEventImageFileBase64 || editingEvent.imageUrl} alt="Preview" className="w-24 h-16 object-cover rounded-lg border border-slate-200" />
+                              {editEventImageFileBase64 && (
+                                <button 
+                                  type="button" 
+                                  onClick={() => setEditEventImageFileBase64('')}
+                                  className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 shadow-xs hover:bg-red-700 transition-colors"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Description *</label>
+                          <textarea 
+                            name="description" 
+                            rows={6}
+                            defaultValue={editingEvent.description}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all resize-none font-sans"
+                            required
+                          ></textarea>
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer"
+                        >
+                          Save Event Changes
+                        </button>
+                      </form>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+
         {tab === 'organizations' && (
           <motion.div 
             key="orgs"
@@ -10194,6 +12826,57 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                                 updatedAt: serverTimestamp()
                               }, { merge: true });
                               addToast("Setting Updated", `${item.label} updated.`, 'success');
+                            } catch (e) {
+                              handleFirestoreError(e, OperationType.UPDATE, 'settings/global');
+                            }
+                          }}
+                          className={`w-12 h-6 rounded-full relative transition-colors shrink-0 ${((settings as any)?.[item.key] !== false) ? 'bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.3)]' : 'bg-slate-300'}`}
+                        >
+                          <motion.div 
+                            animate={{ x: ((settings as any)?.[item.key] !== false) ? 26 : 4 }}
+                            className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
+                          />
+                        </button>
+                        <div>
+                          <p className="text-[11px] font-black text-slate-900 uppercase tracking-wider">{item.label}</p>
+                          <p className="text-[9px] text-slate-400 font-bold">{item.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+
+               {/* Homepage Component Visibility Controls */}
+               <div className="bg-white border border-slate-100 p-6 rounded-[2.5rem] shadow-sm mt-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-[#ff1744] rounded-xl">
+                      <Layout className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest leading-none">Homepage Sections</h3>
+                      <p className="text-[10px] text-slate-400 font-bold mt-1">Show or hide components on the landing page</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {[
+                      { key: 'homeShowEmergencyBanner', label: 'Emergency Banner', desc: 'Display Urgent SOS alert messages' },
+                      { key: 'homeShowMap', label: 'Interactive Google Map', desc: 'Display live lifesavers locator map' },
+                      { key: 'homeShowMetrics', label: 'Analytics Statistics', desc: 'Display active donor and request counters' },
+                      { key: 'homeShowQuickActions', label: 'Quick Action Bento Grid', desc: 'Display fast shortcut link cards' },
+                      { key: 'homeShowNearestDonor', label: 'Nearest Active Donor Spotlight', desc: 'Display closest ready donor profile' },
+                      { key: 'homeShowLiveFeed', label: 'Live Donation Feed', desc: 'Display live stream matched logs' }
+                    ].map((item) => (
+                      <div key={item.key} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
+                        <button 
+                          onClick={async () => {
+                            try {
+                              const currentVal = (settings as any)?.[item.key] !== false;
+                              await setDoc(doc(db, 'settings', 'global'), {
+                                [item.key]: !currentVal,
+                                updatedAt: serverTimestamp()
+                              }, { merge: true });
+                              addToast("Setting Updated", `${item.label} updated successfully.`, 'success');
                             } catch (e) {
                               handleFirestoreError(e, OperationType.UPDATE, 'settings/global');
                             }
@@ -11696,18 +14379,6 @@ function RequestCardRedesigned({
   const isHigh = (request.urgency as string) === 'High' || (request.urgency as string) === 'High Priority';
   const [expanded, setExpanded] = useState(false);
 
-  // Determine badge colors and text
-  let badgeClass = 'bg-blue-50 text-blue-600 border-blue-100';
-  let badgeLabel = 'NORMAL';
-
-  if (isUrgent) {
-    badgeClass = 'bg-red-50 text-[#ff2247] border-red-100/60';
-    badgeLabel = 'URGENT';
-  } else if (isHigh) {
-    badgeClass = 'bg-orange-50 text-orange-600 border-orange-100/60';
-    badgeLabel = 'HIGH PRIORITY';
-  }
-
   // Formatting date/time using existing formatLastSeen function or a backup
   const postedTime = request.createdAt ? formatLastSeen(request.createdAt) : 'some time ago';
 
@@ -11717,205 +14388,256 @@ function RequestCardRedesigned({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="bg-white rounded-3xl p-4 premium-down-shadow hover:shadow-2xl transition-all relative overflow-hidden"
+      className="bg-slate-50/95 border border-slate-200/85 rounded-2xl p-3 sm:p-3.5 shadow-xs hover:shadow-md hover:border-slate-350 transition-all relative overflow-hidden w-full text-left"
     >
-      {/* Upper Content - Circle and details */}
-      <div className="flex gap-4 items-start">
-        {/* Left Circular Blood Group Badge */}
-        <div className="flex flex-col items-center shrink-0">
-          <div className="w-12 h-12 rounded-full bg-red-50/70 border border-red-100/50 flex flex-col items-center justify-center relative select-none">
-            <span className="text-base font-black text-[#ff2247] tracking-tighter leading-none">{request.bloodGroup}</span>
-          </div>
-          <span className="text-[8px] text-slate-400 font-bold mt-1 text-center select-none tracking-tight">Blood Group</span>
+      {/* Top Badges Row */}
+      <div className="flex items-center justify-between mb-2.5">
+        {/* Left badge: Emergency Status matching screenshot design */}
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
+          isUrgent 
+            ? 'bg-rose-50 border-rose-200/60 text-rose-600' 
+            : isHigh 
+              ? 'bg-amber-50 border-amber-200/60 text-amber-700' 
+              : 'bg-blue-50 border-blue-200/60 text-blue-700'
+        }`}>
+          <span className="flex items-center gap-1 shrink-0">
+            <span className={`w-1.5 h-1.5 rounded-full ${isUrgent ? 'bg-rose-500' : isHigh ? 'bg-amber-500' : 'bg-blue-500'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isUrgent ? 'bg-rose-550' : isHigh ? 'bg-amber-550' : 'bg-blue-550'}`} />
+          </span>
+          <span>{isUrgent ? 'EMERGENCY URGENT' : isHigh ? 'HIGH PRIORITY' : 'NORMAL PRIORITY'}</span>
         </div>
 
-        {/* Center/Right Information Block */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-xs sm:text-[13px] font-black text-slate-900 tracking-tight leading-snug">
-              {request.bloodGroup} Blood Needed
-            </h3>
-            <span className={`px-2 py-0.5 text-[7px] sm:text-[8px] font-extrabold uppercase tracking-wider rounded-lg border shrink-0 ${badgeClass}`}>
-              {badgeLabel}
-            </span>
-          </div>
+        {/* Right badge: Bag needed count */}
+        <div className="bg-slate-200/60 border border-slate-300/40 rounded-lg px-2.5 py-1 select-none">
+          <span className="text-[9px] font-black text-slate-600 tracking-widest uppercase">
+            {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'BAGS' : 'BAG' } NEEDED
+          </span>
+        </div>
+      </div>
 
-          {/* Hospital and Location Block */}
-          <div className="flex items-start gap-1.5 mt-1.5 min-w-0">
-            <MapPin className="w-3.5 h-3.5 text-[#ff2247] shrink-0 mt-0.5" />
-            <div className="min-w-0">
-              <p className="text-[10.5px] font-black text-slate-800 truncate leading-tight">{request.hospital}</p>
-              <p className="text-[9px] text-slate-450 font-bold leading-none mt-0.5 truncate">{request.thana}, {request.district}</p>
-            </div>
-          </div>
+      {/* Middle Content - Blood Group and Venue Details */}
+      <div className="flex gap-3 items-center mb-2.5">
+        {/* Large Crimson Rounded Square for Blood Group */}
+        <div className="w-[58px] h-[58px] rounded-2xl bg-gradient-to-br from-[#E11D48] to-[#9F1239] shadow-[0_4px_12px_rgba(225,29,72,0.15)] flex flex-col items-center justify-center select-none shrink-0 border border-rose-500/10">
+          <span className="text-xl font-black text-white tracking-tighter leading-none">{request.bloodGroup}</span>
+          <span className="text-[7px] font-black tracking-widest text-white/70 uppercase mt-0.5">GROUP</span>
+        </div>
 
-          {/* Author/Sponsor and Distance Row */}
-          <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-50 flex-wrap gap-2">
-            <div className="flex items-center gap-1 min-w-0">
-              <img 
-                src={request.requesterPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.requesterName)}&background=ffe2e2&color=dc2626&bold=true`} 
-                alt={request.requesterName}
-                className="w-4.5 h-4.5 rounded-full object-cover border border-slate-100"
-                referrerPolicy="no-referrer"
-              />
-              <p className="text-[9.5px] text-slate-500 font-semibold truncate leading-none">
-                Posted {postedTime} by <span onClick={onViewProfile} className="font-extrabold text-[#ff2247] hover:underline cursor-pointer">{request.requesterName}</span>
-              </p>
-            </div>
-
-            {/* Distance Display mimicking screenshot */}
-            <span className="text-[9px] text-slate-400 font-bold flex items-center gap-0.5 select-none shrink-0">
-              <MapPin className="w-3 h-3 text-slate-350" />
-              <span>{isUrgent ? '2.1' : isHigh ? '3.8' : '4.5'} km away</span>
-            </span>
+        {/* Hospital name and location details */}
+        <div className="flex-1 min-w-0 text-left">
+          <h3 className="text-sm font-black text-slate-850 tracking-tight leading-snug truncate sm:whitespace-normal">
+            {request.hospital}
+          </h3>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 leading-none">
+            <MapPin className="w-3.5 h-3.5 text-[#FF3E5E] shrink-0" />
+            <span className="truncate font-semibold">{request.thana || 'Selected Jurisdiction'}, {request.district || 'Bangladesh'}</span>
           </div>
         </div>
       </div>
 
-      {/* Footer Info Row - Chips and View Details Button */}
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100/90 flex-wrap gap-2">
-        {/* Info Chips Block */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {/* Unit Bag Chip */}
-          <span className="flex items-center gap-1 px-2.5 py-1 bg-slate-50/60 rounded-lg text-[9px] font-bold text-slate-600 border border-slate-100/40 select-none">
-            <Droplet className="w-3 h-3 text-[#ff2247] fill-[#ff2247]" />
-            <span>{request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Units Needed' : 'Unit Needed' }</span>
-          </span>
+      {/* Case Details Box */}
+      <div className="bg-white border border-slate-200/50 rounded-xl p-3 mb-2.5 text-left shadow-2xs">
+        <span className="block text-[8px] font-black tracking-widest text-slate-400 uppercase">
+          PATIENT CASE DETAILS
+        </span>
+        <p className="text-xs text-slate-700 font-medium italic mt-1 leading-relaxed font-sans whitespace-pre-wrap">
+          "{request.medicalReason || 'Describe the patient situation e.g. Surgery schedule requirements...'}"
+        </p>
+        {request.hospitalAddress && (
+          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-start gap-1 text-[10px] text-slate-550 italic leading-snug">
+            <span className="font-extrabold text-[#FF3E5E] shrink-0">Address:</span>
+            <span className="text-slate-600 font-semibold">{request.hospitalAddress}</span>
+          </div>
+        )}
+      </div>
 
-          {/* Gender Preference Chip */}
-          <span className="flex items-center gap-1 px-2.5 py-1 bg-slate-50/60 rounded-lg text-[9px] font-bold text-slate-600 border border-slate-100/40 select-none">
-            <UserIcon className="w-3 h-3 text-blue-500" />
-            <span>Any Gender</span>
-          </span>
-
-
-        </div>
-
-        {/* Action Button Block */}
-        <div className="flex items-center gap-1.5 ml-auto">
-          {isOwner && onDelete && (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="text-red-550 hover:text-red-750 p-1.5 bg-red-50 hover:bg-red-105 rounded-xl border border-red-100 transition-all cursor-pointer shadow-xs active:scale-90"
-              title="Delete request"
+      {/* Divider and Sponsor / Actions block */}
+      <div className="border-t border-slate-200/60 pt-2.5 flex items-center justify-between gap-2.5">
+        {/* Left: Patient Sponsor */}
+        <div className="flex items-center gap-2 min-w-0 text-left">
+          <img 
+            src={request.requesterPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.requesterName)}&background=ffe2e2&color=dc2626&bold=true`} 
+            alt={request.requesterName}
+            className="w-8.5 h-8.5 rounded-full object-cover border border-slate-200"
+            referrerPolicy="no-referrer"
+          />
+          <div className="min-w-0">
+            <span className="block text-[8px] font-black tracking-widest text-slate-400 uppercase leading-none">
+              PATIENT SPONSOR
+            </span>
+            <h4 
+              onClick={onViewProfile}
+              className="text-xs font-bold text-slate-800 mt-0.5 leading-tight hover:underline hover:text-[#FF3E5E] transition-colors cursor-pointer truncate"
             >
-              <Trash className="w-3.5 h-3.5" />
-            </button>
-          )}
-
-          <button 
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="border border-[#ff2247] hover:bg-red-50 text-[#ff2247] h-7 px-3 rounded-full text-[10px] font-black uppercase tracking-wider transition-all select-none cursor-pointer flex items-center justify-center gap-1 whitespace-nowrap shadow-xs active:scale-95"
-          >
-            <span>{expanded ? 'Hide Details' : 'View Details'}</span>
-            <ChevronRight className={`w-3 h-3 stroke-[2.5] transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
-          </button>
+              {request.requesterName}
+            </h4>
+          </div>
         </div>
+
+        {/* Right: CALL CONTACT beside sponsor on same line */}
+        <a 
+          href={`tel:${request.contactPhone}`}
+          className="bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#10B981] hover:to-[#059669] text-white px-3 py-1.8 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer shadow-xs shrink-0"
+        >
+          <Phone className="w-3 h-3 text-white stroke-[2.5]" />
+          <span>CALL CONTACT</span>
+        </a>
       </div>
 
-      {/* Expanded Actions & Metadata Area */}
+      {/* Down Line Actions: Map, Chat, Whatsapp, Match donor */}
+      <div className="mt-2.5 pt-2.5 border-t border-slate-200/60 flex flex-wrap items-center gap-1.5">
+        {/* Map directions */}
+        {request.lat && request.lng && (
+          <a 
+            href={`https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-1 min-w-[55px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
+            title="Route Navigation"
+          >
+            <Navigation className="w-3 h-3 stroke-[2] text-[#FF3E5E]" />
+            <span className="hidden xs:inline">Map</span>
+          </a>
+        )}
+
+        {/* Direct Messaging */}
+        {onMessage && (
+          <button 
+            onClick={onMessage}
+            type="button"
+            className="flex-1 min-w-[55px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
+            title="Chat with Sponsor"
+          >
+            <MessageSquare className="w-3 h-3 stroke-[2] text-blue-500" />
+            <span className="hidden xs:inline">Chat</span>
+          </button>
+        )}
+
+        {/* WhatsApp direct contact */}
+        {request.contactPhone && (() => {
+          const whatsappPhone = request.contactPhone.replace(/\D/g, '');
+          const whatsappFormatted = whatsappPhone.startsWith('0') ? `88${whatsappPhone}` : whatsappPhone;
+          const whatsappUrl = `https://wa.me/${whatsappFormatted}`;
+          return (
+            <a 
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 min-w-[75px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
+              title="Contact on WhatsApp"
+            >
+              <MessageCircle className="w-3 h-3 stroke-[2] text-emerald-500" />
+              <span className="hidden xs:inline">WhatsApp</span>
+            </a>
+          );
+        })()}
+
+        {/* Match Donor option */}
+        {onMatchDonors && request.status === 'Pending' && (
+          <button 
+            onClick={onMatchDonors}
+            type="button"
+            className="flex-[1.5] min-w-[90px] h-8 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 hover:text-slate-950 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
+            title="Match Volunteers"
+          >
+            <Search className="w-3 h-3 text-rose-500 shrink-0" />
+            <span>Match Donor</span>
+          </button>
+        )}
+
+        {/* Owner/Admin Settings panel toggle */}
+        {(isOwner || onDelete || onDonationDone) && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+              expanded ? 'bg-slate-800 text-white border border-transparent' : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800'
+            }`}
+            title="Toggle Management Options"
+          >
+            <Settings className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
+          </button>
+        )}
+      </div>
       {expanded && (
-        <div className="mt-3.5 pt-3.5 border-t border-slate-100 space-y-3 bg-slate-50/50 p-3 rounded-2xl animate-in slide-in-from-top-3 duration-200">
-          <div className="space-y-1">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Medical Case / Reason</p>
-            <p className="text-[10.5px] font-semibold text-slate-700 leading-relaxed bg-white p-2.5 rounded-xl border border-slate-100/80">{request.medicalReason || 'Emergency medical requirements'}</p>
+        <motion.div 
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-left"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase">
+              POST SETTINGS & ASSISTANCE
+            </span>
+            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">
+              📅 Posted {postedTime}
+            </span>
           </div>
 
-          {request.hospitalAddress && (
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Exact Location Address</p>
-              <p className="text-[10px] font-semibold text-slate-750 italic border-l-2 border-[#ff2247] pl-2">{request.hospitalAddress}</p>
-            </div>
-          )}
-
-          {/* Quick status operations for owners / helpers */}
-          {request.status === 'Pending' && (
-            <div className="pt-1 flex gap-2">
-              {isOwner ? (
-                <button 
-                  onClick={async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    try {
-                      await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
-                      if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
-                    } catch (err) {
-                      handleFirestoreError(err, OperationType.UPDATE, `requests/${request.id}`);
-                    }
-                  }}
-                  type="button"
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-md shadow-emerald-100 flex items-center justify-center gap-1.5 flex-1 cursor-pointer"
-                >
-                  <CheckCircle className="w-3.5 h-3.5 shrink-0" /> Mark As Fulfilled
-                </button>
-              ) : (
-                onDonationDone && (
+          <div className="flex gap-1.5 flex-wrap sm:flex-nowrap">
+            {request.status === 'Pending' && (
+              <>
+                {isOwner ? (
                   <button 
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      onDonationDone(request);
+                      try {
+                        await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
+                        if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.UPDATE, `requests/${request.id}`);
+                      }
                     }}
                     type="button"
-                    className="group flex-1 bg-slate-100 hover:bg-green-600 text-slate-700 hover:text-white border border-slate-200/50 hover:border-transparent text-[9px] font-black uppercase tracking-widest px-4 py-2 rounded-xl active:scale-95 transition-all shadow-xs hover:shadow-md hover:shadow-green-100/50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="bg-emerald-600 hover:bg-emerald-550 text-white text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 flex-1 cursor-pointer"
                   >
-                    <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-rose-500 group-hover:text-rose-100 transition-colors" /> Confirm I Donated
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Mark Fulfilled</span>
                   </button>
-                )
-              )}
+                ) : (
+                  onDonationDone && (
+                    <button 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onDonationDone(request);
+                      }}
+                      type="button"
+                      className="group flex-1 bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer border border-slate-200 hover:border-transparent"
+                    >
+                      <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-[#FF3E5E] group-hover:text-white transition-colors" />
+                      <span>Confirm I Donated</span>
+                    </button>
+                  )
+                )}
 
-              {onMatchDonors && request.status === 'Pending' && (
-                <button 
-                  onClick={onMatchDonors}
-                  type="button"
-                  className="flex-1 bg-red-600 hover:bg-red-750 text-white px-3 py-2 rounded-xl transition-all font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-1.2 active:scale-95 shadow-md shadow-red-100 cursor-pointer"
-                >
-                  <Search className="w-3.5 h-3.5 text-white shrink-0" />
-                  Match Volunteers
-                </button>
-              )}
-            </div>
-          )}
+                {onMatchDonors && (
+                  <button 
+                    onClick={onMatchDonors}
+                    type="button"
+                    className="flex-1 bg-rose-650 hover:bg-rose-600 text-white px-3 py-2 rounded-lg transition-all font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <Search className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>Match Donors</span>
+                  </button>
+                )}
+              </>
+            )}
 
-          {/* Contact lines */}
-          <div className="flex items-center justify-between gap-2.5 pt-2 border-t border-slate-100/90">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Quick Actions:</span>
-            <div className="flex items-center gap-1.5">
-              {request.lat && request.lng && (
-                <a 
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-8 h-8 bg-slate-100 hover:bg-slate-200/80 text-slate-600 rounded-lg transition-all active:scale-95 border border-slate-200/50 shadow-xs flex items-center justify-center shrink-0"
-                  title="Route Navigation"
-                >
-                  <Navigation className="w-4 h-4 stroke-[2.2]" />
-                </a>
-              )}
-              {onMessage && (
-                <button 
-                  onClick={onMessage}
-                  type="button"
-                  className="w-8 h-8 bg-slate-100 hover:bg-slate-200/80 text-slate-600 rounded-lg transition-all active:scale-95 border border-slate-200/50 shadow-xs flex items-center justify-center shrink-0 cursor-pointer"
-                  title="Chat Manager"
-                >
-                  <MessageSquare className="w-4 h-4 stroke-[2.2]" />
-                </button>
-              )}
-              <a 
-                href={`tel:${request.contactPhone}`}
-                className="w-8 h-8 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg transition-all active:scale-95 border border-emerald-100/80 shadow-xs flex items-center justify-center shrink-0"
-                title="Call phone"
+            {onDelete && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="text-red-600 hover:text-red-500 p-2 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-all cursor-pointer flex items-center justify-center"
+                title="Delete request"
               >
-                <Phone className="w-4 h-4 stroke-[2.2]" />
-              </a>
-            </div>
+                <Trash className="w-4 h-4" />
+              </button>
+            )}
           </div>
-        </div>
+        </motion.div>
       )}
     </motion.div>
   );
@@ -14168,6 +16890,11 @@ function NavButton({ active, icon, label, onClick, badge }: { active: boolean, i
     activeText = 'text-purple-600 font-extrabold';
     barColor = 'bg-[#8b5cf6] shadow-[0_2px_8px_rgba(139,92,246,0.4)]';
     iconColor = 'text-purple-600';
+  } else if (label === 'Menu') {
+    activeBg = 'bg-slate-500/10';
+    activeText = 'text-slate-600 font-extrabold';
+    barColor = 'bg-slate-700 shadow-[0_2px_8px_rgba(51,65,85,0.4)]';
+    iconColor = 'text-slate-800';
   }
 
   return (
@@ -14350,6 +17077,14 @@ function CallOverlay({
   const candidateQueue = useRef<RTCIceCandidateInit[]>([]);
   const connected = call.status === 'connected';
 
+  const [cameraEnabled, setCameraEnabled] = useState(true);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  const isVideoCall = call.type === 'video';
+
   const peerPhoto = isIncoming ? call.callerPhoto : call.receiverPhoto;
   const peerName = isIncoming ? call.callerName : call.receiverName;
   const avatarUrl = peerPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(peerName)}&background=f1f5f9&color=64748b&bold=true`;
@@ -14455,6 +17190,18 @@ function CallOverlay({
     }
   }, [remoteStream]);
 
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
+
   const updateAudioOutput = async () => {
     if (remoteAudioRef.current) {
       remoteAudioRef.current.volume = 1.0;
@@ -14475,6 +17222,7 @@ function CallOverlay({
       });
       localStreamRef.current = null;
     }
+    setLocalStream(null);
     if (pcRef.current) {
       pcRef.current.onicecandidate = null;
       pcRef.current.ontrack = null;
@@ -14496,21 +17244,34 @@ function CallOverlay({
     const pc = new RTCPeerConnection(servers);
     pcRef.current = pc;
 
+    // Helper to safely check closed state without triggering TypeScript's restrictive type-narrowing error TS2367
+    const isClosed = (conn: RTCPeerConnection) => (conn.signalingState as string) === 'closed';
+
     pc.oniceconnectionstatechange = () => {
+      if (pcRef.current !== pc || isClosed(pc)) return;
       console.log("ICE state change:", pc.iceConnectionState);
       setIceState(pc.iceConnectionState);
       if (pc.iceConnectionState === 'failed') {
         console.warn("ICE connection failed, attempting restart...");
-        try { pc.restartIce(); } catch (e) { console.error("ICE restart failed", e); }
+        try { 
+          if (!isClosed(pc)) {
+            pc.restartIce(); 
+          }
+        } catch (e) { console.error("ICE restart failed", e); }
       }
     };
 
     pc.onconnectionstatechange = () => {
+      if (pcRef.current !== pc || isClosed(pc)) return;
       console.log("Connection state change:", pc.connectionState);
       setConnectionState(pc.connectionState);
       if (pc.connectionState === 'failed') {
-        addToast("Connection Error", "Voice connection failed. Retrying...", "error");
-        pc.restartIce();
+        addToast("Connection Error", "Connection failed. Retrying...", "error");
+        try {
+          if (!isClosed(pc)) {
+            pc.restartIce();
+          }
+        } catch (e) { console.error("ICE restart failed on connection failed state", e); }
       }
     };
 
@@ -14522,59 +17283,71 @@ function CallOverlay({
       console.log("Signaling state:", pc.signalingState);
     };
 
-    // Removed early setRemoteStream(new MediaStream()) to prevent premature attachment
-    
     try {
-      // Use standard getUserMedia first
-      console.log("Requesting microphone access...");
-      const localStream = await navigator.mediaDevices.getUserMedia({ 
+      console.log(`Requesting ${isVideoCall ? 'microphone and camera' : 'microphone'} access...`);
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
           sampleRate: 48000
-        } 
+        },
+        video: isVideoCall ? {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          frameRate: { ideal: 24 }
+        } : false
       });
       
-      if (pcRef.current !== pc) {
-        localStream.getTracks().forEach(t => t.stop());
+      if (pcRef.current !== pc || isClosed(pc)) {
+        stream.getTracks().forEach(t => t.stop());
         return () => {};
       }
-      localStreamRef.current = localStream;
+      localStreamRef.current = stream;
+      setLocalStream(stream);
       
-      // Add transceiver and/or tracks
-      const localTrack = localStream.getAudioTracks()[0];
-      if (localTrack) {
-        console.log("Adding local track to PC:", localTrack.id);
-        pc.addTrack(localTrack, localStream);
-      } else {
-        // Fallback transceiver if no track found yet (unlikely)
-        pc.addTransceiver('audio', { direction: 'sendrecv' });
-      }
+      stream.getTracks().forEach(track => {
+        console.log("Adding local track to PC:", track.kind, track.id);
+        if (pcRef.current === pc && !isClosed(pc)) {
+          try {
+            pc.addTrack(track, stream);
+          } catch (trackError) {
+            console.error("Error adding track:", trackError);
+          }
+        }
+      });
     } catch (e) {
-      console.error("Microphone access failed:", e);
-      addToast("Mic Error", "Permission denied or mic busy. Voice transfer may not work.", "error");
-      // Still allow receiving audio if possible
-      pc.addTransceiver('audio', { direction: 'recvonly' });
+      console.error("Access failed:", e);
+      addToast("Call Error", "Permission denied or media busy. Call transfer may not work.", "error");
+      if (pcRef.current === pc && !isClosed(pc)) {
+        try {
+          pc.addTransceiver('audio', { direction: 'recvonly' });
+          if (isVideoCall) {
+            pc.addTransceiver('video', { direction: 'recvonly' });
+          }
+        } catch (transceiverError) {
+          console.error("Failed to add transceivers in catch", transceiverError);
+        }
+      }
     }
 
     pc.ontrack = (event) => {
       console.log("Received remote track:", event.track.kind);
-      if (pcRef.current === pc && event.track.kind === 'audio') {
+      if (pcRef.current === pc) {
         const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-        console.log("Setting remote stream - Tracks:", stream.getAudioTracks().length);
         setRemoteStream(stream);
         
         // Explicitly enable remote tracks
-        stream.getAudioTracks().forEach(t => {
+        stream.getTracks().forEach(t => {
           t.enabled = true;
-          console.log("Remote track enabled:", t.id);
+          console.log("Remote track enabled:", t.kind, t.id);
         });
       }
     };
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && pcRef.current === pc) {
+      if (event.candidate && pcRef.current === pc && !isClosed(pc)) {
         const candidatesPath = isIncoming ? 'receiverCandidates' : 'callerCandidates';
         addDoc(collection(db, 'calls', call.id, candidatesPath), event.candidate.toJSON()).catch(e => {
           console.error("Error adding candidate", e);
@@ -14585,11 +17358,13 @@ function CallOverlay({
     const peerCandidatesPath = isIncoming ? 'callerCandidates' : 'receiverCandidates';
     const unsubCandidates = onSnapshot(collection(db, 'calls', call.id, peerCandidatesPath), (snapshot) => {
       snapshot.docChanges().forEach(async (change) => {
-        if (change.type === 'added' && pcRef.current === pc) {
+        if (change.type === 'added' && pcRef.current === pc && !isClosed(pc)) {
           const candidateData = change.doc.data();
           if (pc.remoteDescription && pc.remoteDescription.type) {
             try {
-              await pc.addIceCandidate(new RTCIceCandidate(candidateData));
+              if (pcRef.current === pc && !isClosed(pc)) {
+                await pc.addIceCandidate(new RTCIceCandidate(candidateData));
+              }
             } catch (e) {
               console.error("addIceCandidate error", e);
             }
@@ -14601,13 +17376,15 @@ function CallOverlay({
     }, (error) => handleFirestoreError(error, OperationType.LIST, `calls/${call.id}/${peerCandidatesPath}`));
 
     const processQueue = async () => {
-      if (!pc.remoteDescription || !pc.remoteDescription.type) return;
+      if (pcRef.current !== pc || isClosed(pc) || !pc.remoteDescription || !pc.remoteDescription.type) return;
       console.log("Processing ICE candidate queue, size:", candidateQueue.current.length);
       while (candidateQueue.current.length > 0) {
         const cand = candidateQueue.current.shift();
         if (cand) {
           try {
-            await pc.addIceCandidate(new RTCIceCandidate(cand));
+            if (pcRef.current === pc && !isClosed(pc)) {
+              await pc.addIceCandidate(new RTCIceCandidate(cand));
+            }
           } catch (e) {
             console.error("Delayed addIceCandidate error", e);
           }
@@ -14620,59 +17397,72 @@ function CallOverlay({
 
     try {
       if (!isIncoming) {
-        if (pcRef.current !== pc) {
+        if (pcRef.current !== pc || isClosed(pc)) {
           unsubCandidates();
           return () => {};
         }
         const offerDescription = await pc.createOffer({
-          offerToReceiveAudio: true
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: isVideoCall
         });
+        if (pcRef.current !== pc || isClosed(pc)) {
+          unsubCandidates();
+          return () => {};
+        }
         await pc.setLocalDescription(offerDescription);
+        if (pcRef.current !== pc || isClosed(pc)) {
+          unsubCandidates();
+          return () => {};
+        }
         await updateDoc(doc(db, 'calls', call.id), { 
           offer: { sdp: offerDescription.sdp, type: offerDescription.type } 
         });
 
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-        if (data?.answer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress) {
-          try {
-            signalingInProgress = true;
-            console.log("Caller: Setting remote description (answer)...");
-            await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-            await processQueue();
-          } catch (e) {
-            console.error("setRemoteDescription answer error", e);
-          } finally {
-            signalingInProgress = false;
+          if (data?.answer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress) {
+            try {
+              signalingInProgress = true;
+              console.log("Caller: Setting remote description (answer)...");
+              await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+              if (pcRef.current !== pc || isClosed(pc)) return;
+              await processQueue();
+            } catch (e) {
+              console.error("setRemoteDescription answer error", e);
+            } finally {
+              signalingInProgress = false;
+            }
           }
-        }
         }, (error) => handleFirestoreError(error, OperationType.GET, `calls/${call.id}`));
       } else {
         // Receiver waits for offer
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-        if (data?.offer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress) {
-          try {
-            signalingInProgress = true;
-            console.log("Receiver: Setting remote description (offer)...");
-            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-            await processQueue();
-            if (pcRef.current !== pc) return;
-            
-            console.log("Receiver: Creating answer...");
-            const answerDescription = await pc.createAnswer();
-            await pc.setLocalDescription(answerDescription);
-            
-            await updateDoc(doc(db, 'calls', call.id), { 
-              answer: { sdp: answerDescription.sdp, type: answerDescription.type } 
-            });
-            console.log("Receiver: Answer sent.");
-          } catch (e) {
-            console.error("Receiver signaling error:", e);
-          } finally {
-            signalingInProgress = false;
+          if (data?.offer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress) {
+            try {
+              signalingInProgress = true;
+              console.log("Receiver: Setting remote description (offer)...");
+              await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+              if (pcRef.current !== pc || isClosed(pc)) return;
+              await processQueue();
+              if (pcRef.current !== pc || isClosed(pc)) return;
+              
+              console.log("Receiver: Creating answer...");
+              const answerDescription = await pc.createAnswer();
+              if (pcRef.current !== pc || isClosed(pc)) return;
+              await pc.setLocalDescription(answerDescription);
+              if (pcRef.current !== pc || isClosed(pc)) return;
+              
+              await updateDoc(doc(db, 'calls', call.id), { 
+                answer: { sdp: answerDescription.sdp, type: answerDescription.type } 
+              });
+              console.log("Receiver: Answer sent.");
+            } catch (e) {
+              console.error("Receiver signaling error:", e);
+            } finally {
+              signalingInProgress = false;
+            }
           }
-        }
         }, (error) => handleFirestoreError(error, OperationType.GET, `calls/${call.id}`));
       }
 
@@ -14696,6 +17486,32 @@ function CallOverlay({
     }
   }, [muted]);
 
+  useEffect(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getVideoTracks().forEach(track => {
+        track.enabled = cameraEnabled;
+      });
+    }
+  }, [cameraEnabled]);
+
+  useEffect(() => {
+    if (remoteStream) {
+      const checkVideo = () => {
+        const hasVideo = remoteStream.getVideoTracks().length > 0 && remoteStream.getVideoTracks().some(t => t.enabled);
+        setHasRemoteVideo(hasVideo);
+      };
+      checkVideo();
+      remoteStream.onaddtrack = checkVideo;
+      remoteStream.onremovetrack = checkVideo;
+      return () => {
+        remoteStream.onaddtrack = null;
+        remoteStream.onremovetrack = null;
+      };
+    } else {
+      setHasRemoteVideo(false);
+    }
+  }, [remoteStream]);
+
   const formatDuration = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
@@ -14703,122 +17519,167 @@ function CallOverlay({
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950 overflow-hidden">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950 overflow-hidden font-sans">
       <audio ref={remoteAudioRef} autoPlay playsInline className="absolute opacity-0 pointer-events-none" />
       
-      <div className="absolute inset-0 z-0 select-none">
-        <img 
-          src={avatarUrl}
-          className="w-full h-full object-cover blur-3xl opacity-30 scale-110"
-          alt=""
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950" />
-      </div>
+      {/* Background container */}
+      {isVideoCall && connected ? (
+        <div className="absolute inset-0 z-0 bg-slate-950 flex items-center justify-center overflow-hidden">
+          {/* Remote Video element */}
+          {hasRemoteVideo ? (
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="flex flex-col items-center justify-center">
+              <img 
+                src={avatarUrl}
+                className="w-28 h-28 rounded-full object-cover border-4 border-white/10 p-1 mb-4 shadow-xl animate-pulse"
+                alt="Avatar"
+              />
+              <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Waiting for camera feed...</p>
+            </div>
+          )}
+
+          {/* Local Video Picture-in-Picture */}
+          {localStream && cameraEnabled && (
+            <div className="absolute top-6 right-6 w-28 h-40 md:w-36 md:h-52 bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-white/20 z-50 animate-in fade-in zoom-in-95 duration-500">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover scale-x-[-1]"
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="absolute inset-0 z-0 select-none">
+          <img 
+            src={avatarUrl}
+            className="w-full h-full object-cover blur-3xl opacity-30 scale-110"
+            alt=""
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950" />
+        </div>
+      )}
 
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.9 }}
-        className="relative z-10 w-full max-w-sm flex flex-col items-center px-8"
+        className="relative z-10 w-full max-w-sm flex flex-col items-center px-8 justify-between h-full py-20"
       >
-        <div className="relative mb-12">
-          {!connected && (
-            <>
-              <motion.div 
-                animate={{ scale: [1, 1.5], opacity: [0.3, 0] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="absolute inset-0 bg-white/20 rounded-full"
-              />
-              <motion.div 
-                animate={{ scale: [1, 1.8], opacity: [0.2, 0] }}
-                transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                className="absolute inset-0 bg-white/10 rounded-full"
-              />
-            </>
-          )}
-
-          <div className="relative w-40 h-40 rounded-[60px] overflow-hidden shadow-2xl border-4 border-white/10 p-1 bg-slate-900">
-            <img 
-              src={avatarUrl}
-              className="w-full h-full object-cover rounded-[54px]"
-              alt="Avatar"
-            />
-          </div>
-          
-          {connected && (
-            <motion.div 
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-green-500 text-white px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(34,197,94,0.5)] border-2 border-slate-950"
-            >
-              Live
-            </motion.div>
-          )}
-        </div>
-
-        <h2 className="text-3xl font-black text-white mb-2 text-center tracking-tight">
-          {peerName}
-        </h2>
-        
-        <div className="mb-20 flex flex-col items-center">
-            {iceState === 'failed' && (
-              <button 
-                onClick={() => {
-                  pcRef.current?.restartIce();
-                  addToast("ICE Restart", "Attempting to reconnect...", "info");
-                }}
-                className="mb-6 px-6 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-500 border border-red-500/30 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all"
-              >
-                Reconnect Voice
-              </button>
-            )}
-            {connected ? (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col items-center"
-              >
-                <p className="text-white text-5xl font-black mb-3 tracking-tighter tabular-nums">
-                  {formatDuration(duration)}
-                </p>
-                <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 rounded-full border border-green-500/30">
-                  <div className={`w-1.5 h-1.5 rounded-full ${iceState === 'connected' || iceState === 'completed' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-bounce'}`} />
-                  <span className={`${iceState === 'connected' || iceState === 'completed' ? 'text-green-500' : 'text-yellow-500'} font-black text-[9px] uppercase tracking-widest`}>
-                    {iceState === 'connected' || iceState === 'completed' ? 'Secure Connection' : 'Optimizing...'}
-                  </span>
-                </div>
-              </motion.div>
-            ) : (
-              <div className="flex flex-col items-center">
-                <p className="text-slate-400 font-bold uppercase text-[11px] tracking-[0.3em] h-4">
-                  {connected ? (
-                    iceState === 'failed' || connectionState === 'failed' ? 'Connection Failed' :
-                    iceState === 'disconnected' || connectionState === 'disconnected' ? 'Lost Connection' :
-                    connectionState === 'connecting' ? 'Connecting Audio...' :
-                    'Establishing...'
-                  ) : (
-                    isIncoming ? 'Incoming Call' : 'Ringing...'
-                  )}
-                </p>
-                {isConnecting && connected && (
+        {/* Upper metadata block */}
+        <div className="flex flex-col items-center w-full">
+          {/* Only show center avatar in Voice Call or if Video Call is not connected yet */}
+          {(!isVideoCall || !connected) && (
+            <div className="relative mb-8">
+              {!connected && (
+                <>
                   <motion.div 
-                    animate={{ width: ['0%', '100%'] }}
+                    animate={{ scale: [1, 1.5], opacity: [0.3, 0] }}
                     transition={{ duration: 2, repeat: Infinity }}
-                    className="h-0.5 bg-blue-500 mt-2 rounded-full overflow-hidden w-24 mx-auto"
+                    className="absolute inset-0 bg-white/20 rounded-full"
                   />
-                )}
+                  <motion.div 
+                    animate={{ scale: [1, 1.8], opacity: [0.2, 0] }}
+                    transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
+                    className="absolute inset-0 bg-white/10 rounded-full"
+                  />
+                </>
+              )}
+
+              <div className="relative w-36 h-36 rounded-[54px] overflow-hidden shadow-2xl border-4 border-white/10 p-1 bg-slate-900">
+                <img 
+                  src={avatarUrl}
+                  className="w-full h-full object-cover rounded-[48px]"
+                  alt="Avatar"
+                />
               </div>
-            )}
+              
+              {connected && (
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -bottom-3 left-1/2 -translate-x-1/2 bg-green-500 text-white px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-[0_0_20px_rgba(34,197,94,0.5)] border-2 border-slate-950"
+                >
+                  Live
+                </motion.div>
+              )}
+            </div>
+          )}
+
+          {/* Peer Name & Call Status label */}
+          <div className="text-center w-full mt-4">
+            <h2 className="text-3xl font-black text-white mb-2 tracking-tight drop-shadow-md">
+              {peerName}
+            </h2>
+            
+            <p className="text-slate-300/80 font-black uppercase text-[10px] tracking-[0.3em] mb-4">
+              {isVideoCall ? "HD Video Call" : "Secure Audio Call"}
+            </p>
+
+            <div className="flex flex-col items-center">
+              {iceState === 'failed' && (
+                <button 
+                  onClick={() => {
+                    pcRef.current?.restartIce();
+                    addToast("ICE Restart", "Attempting to reconnect...", "info");
+                  }}
+                  className="mb-4 px-6 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-500 border border-red-500/30 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                >
+                  Reconnect Connection
+                </button>
+              )}
+              
+              {connected ? (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center"
+                >
+                  <p className="text-white text-5xl font-black mb-3 tracking-tighter tabular-nums drop-shadow-md">
+                    {formatDuration(duration)}
+                  </p>
+                  <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 rounded-full border border-green-500/30 backdrop-blur-md">
+                    <div className={`w-1.5 h-1.5 rounded-full ${iceState === 'connected' || iceState === 'completed' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500 animate-bounce'}`} />
+                    <span className={`${iceState === 'connected' || iceState === 'completed' ? 'text-green-500' : 'text-yellow-500'} font-black text-[9px] uppercase tracking-widest`}>
+                      {iceState === 'connected' || iceState === 'completed' ? 'Secure Connection' : 'Optimizing...'}
+                    </span>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="flex flex-col items-center">
+                  <p className="text-slate-400 font-bold uppercase text-[11px] tracking-[0.3em] h-4">
+                    {isIncoming ? 'Incoming Call' : 'Ringing...'}
+                  </p>
+                  {isConnecting && connected && (
+                    <motion.div 
+                      animate={{ width: ['0%', '100%'] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="h-0.5 bg-red-500 mt-2 rounded-full overflow-hidden w-24 mx-auto"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-8 w-full max-w-[280px]">
+        {/* Action Controls block at the bottom */}
+        <div className="w-full flex justify-center mt-auto">
           {!connected && isIncoming ? (
-            <div className="col-span-3 flex justify-around items-center">
+            <div className="flex justify-around items-center w-full max-w-[240px]">
               <button 
                 onClick={onEnd}
-                className="w-20 h-20 bg-white/10 text-white rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all hover:bg-red-500/20 hover:text-red-500"
+                className="w-16 h-16 bg-white/10 hover:bg-red-500/20 hover:text-red-500 text-white rounded-full flex items-center justify-center backdrop-blur-md active:scale-90 transition-all border border-white/5"
               >
-                <PhoneOff className="w-8 h-8" />
+                <PhoneOff className="w-7 h-7" />
               </button>
               <button 
                 onClick={() => {
@@ -14829,43 +17690,60 @@ function CallOverlay({
                     }
                   }, 500);
                 }}
-                className="w-24 h-24 bg-green-500 text-white rounded-[40px] flex items-center justify-center shadow-[0_0_40px_rgba(34,197,94,0.3)] active:scale-95 transition-all outline-none hover:bg-green-600"
+                className="w-20 h-20 bg-green-500 hover:bg-green-600 text-white rounded-[32px] flex items-center justify-center shadow-[0_0_40px_rgba(34,197,94,0.3)] active:scale-95 transition-all outline-none"
               >
-                <PhoneCall className="w-10 h-10 fill-current" />
+                {isVideoCall ? <Video className="w-9 h-9 fill-current" /> : <PhoneCall className="w-9 h-9 fill-current" />}
               </button>
             </div>
           ) : (
-             <>
-               <div className="flex flex-col items-center gap-3">
-                 <button 
-                   onClick={() => setMuted(!muted)}
-                   className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all ${muted ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,44,44,0.3)]' : 'bg-white/10 text-white border border-white/5'}`}
-                 >
-                   {muted ? <MicOff className="w-7 h-7" /> : <Mic className="w-7 h-7" />}
-                 </button>
-                 <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Mute</span>
-               </div>
-               
-               <div className="flex flex-col items-center gap-3">
-                 <button 
-                   onClick={onEnd}
-                   className="w-20 h-20 bg-red-600 text-white rounded-[32px] flex items-center justify-center shadow-2xl active:scale-95 transition-all hover:bg-red-700 hover:rotate-12"
-                 >
-                   <PhoneOff className="w-9 h-9 fill-current" />
-                 </button>
-                 <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">End</span>
-               </div>
+            /* Active connected calls controls */
+            <div className={`grid ${isVideoCall ? 'grid-cols-4 max-w-[320px]' : 'grid-cols-3 max-w-[280px]'} gap-4 w-full justify-items-center items-center`}>
+              {/* Mute Button */}
+              <div className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={() => setMuted(!muted)}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${muted ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,44,44,0.3)]' : 'bg-white/10 hover:bg-white/20 text-white border border-white/5 backdrop-blur-md'}`}
+                >
+                  {muted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+                </button>
+                <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">Mute</span>
+              </div>
+              
+              {/* Video Specific Camera Button */}
+              {isVideoCall && (
+                <div className="flex flex-col items-center gap-2">
+                  <button 
+                    onClick={() => setCameraEnabled(!cameraEnabled)}
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${!cameraEnabled ? 'bg-red-500 text-white shadow-[0_0_20px_rgba(239,44,44,0.3)]' : 'bg-white/10 hover:bg-white/20 text-white border border-white/5 backdrop-blur-md'}`}
+                  >
+                    {cameraEnabled ? <Camera className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+                  </button>
+                  <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">Camera</span>
+                </div>
+              )}
 
-               <div className="flex flex-col items-center gap-3">
-                 <button 
-                   onClick={() => setIsLoudspeaker(!isLoudspeaker)}
-                   className={`w-16 h-16 rounded-3xl flex items-center justify-center transition-all ${isLoudspeaker ? 'bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'bg-white/10 text-white border border-white/5'}`}
-                 >
-                   {isLoudspeaker ? <Volume2 className="w-7 h-7" /> : <VolumeX className="w-7 h-7" />}
-                 </button>
-                 <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Speaker</span>
-               </div>
-             </>
+              {/* End Call Button */}
+              <div className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={onEnd}
+                  className="w-16 h-16 bg-red-600 hover:bg-red-700 text-white rounded-3xl flex items-center justify-center shadow-2xl active:scale-95 transition-all hover:rotate-12"
+                >
+                  <PhoneOff className="w-8 h-8 fill-current" />
+                </button>
+                <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">Hang Up</span>
+              </div>
+
+              {/* Speaker Button */}
+              <div className="flex flex-col items-center gap-2">
+                <button 
+                  onClick={() => setIsLoudspeaker(!isLoudspeaker)}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${isLoudspeaker ? 'bg-blue-500 text-white shadow-[0_0_20px_rgba(59,130,246,0.3)]' : 'bg-white/10 hover:bg-white/20 text-white border border-white/5 backdrop-blur-md'}`}
+                >
+                  {isLoudspeaker ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
+                </button>
+                <span className="text-white/40 text-[9px] font-black uppercase tracking-widest">Speaker</span>
+              </div>
+            </div>
           )}
         </div>
       </motion.div>
@@ -14873,7 +17751,7 @@ function CallOverlay({
   );
 }
 
-function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall }: { chat: Chat, currentUser: FirebaseUser, users: UserProfile[], onBack: () => void, onStartVoiceCall: (uid: string) => void }) {
+function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartVideoCall }: { chat: Chat, currentUser: FirebaseUser, users: UserProfile[], onBack: () => void, onStartVoiceCall: (uid: string) => void, onStartVideoCall: (uid: string) => void }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -15020,13 +17898,20 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall }: { chat
                 )}
               </div>
             </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
              <button 
                onClick={() => onStartVoiceCall(otherUserId!)}
                className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
                title="Voice Call"
              >
                <PhoneCall className="w-5 h-5" />
+             </button>
+             <button 
+               onClick={() => onStartVideoCall(otherUserId!)}
+               className="w-10 h-10 flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+               title="Video Call"
+             >
+               <Video className="w-5 h-5" />
              </button>
           </div>
         </div>
@@ -15080,7 +17965,14 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall }: { chat
                           </span>
                           {!isMe && (m.text.includes("Missed") || m.text.includes("Rejected")) && (
                             <button 
-                              onClick={() => otherUserId && onStartVoiceCall(otherUserId)}
+                              onClick={() => {
+                                if (!otherUserId) return;
+                                if (m.text.toLowerCase().includes("video")) {
+                                  onStartVideoCall(otherUserId);
+                                } else {
+                                  onStartVoiceCall(otherUserId);
+                                }
+                              }}
                               className="text-[9px] text-red-600 font-black uppercase tracking-widest hover:underline"
                             >
                               Call Back
@@ -17771,6 +20663,7 @@ function MapView({
   const [selectedThanaKey, setSelectedThanaKey] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<BloodRequest | null>(null);
   const [mapFilter, setMapFilter] = useState<'all' | 'donors' | 'requests'>('all');
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const isEnabled = Boolean(apiKey) && apiKey !== '';
   const effectiveMapId = mapId;
   const map = useMap();
@@ -17955,7 +20848,20 @@ function MapView({
   };
 
   return (
-    <div className="h-full w-full rounded-2xl overflow-hidden shadow-sm relative">
+    <div 
+      className="h-full w-full rounded-2xl overflow-hidden shadow-sm relative"
+      onMouseLeave={() => setIsUnlocked(false)}
+    >
+      {!isUnlocked && (
+        <div 
+          onClick={() => {
+            setIsUnlocked(true);
+          }}
+          className="absolute inset-0 z-[15] cursor-pointer"
+          title="Click to interact with map"
+        />
+      )}
+
       <Map
         defaultCenter={getInitialCenter()}
         defaultZoom={getInitialZoom()}
@@ -17966,7 +20872,7 @@ function MapView({
           strictBounds: false
         }}
         disableDefaultUI={true}
-        gestureHandling={'greedy'}
+        gestureHandling={isUnlocked ? 'greedy' : 'none'}
         minZoom={6.5}
         maxZoom={12}
         internalUsageAttributionIds= {['gmp_mcp_codeassist_v1_aistudio']}

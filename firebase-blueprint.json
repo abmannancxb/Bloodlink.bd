@@ -226,6 +226,40 @@
         "createdBy": { "type": "string" }
       },
       "required": ["message", "createdAt", "createdBy"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "An event organized by users or admins, such as a Children Day Program or blood drive.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "location": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "eventDate": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "joinedUsers": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "description", "location", "eventDate", "status", "createdAt", "createdBy"]
+    },
+    "HealthTip": {
+      "title": "Health Tip",
+      "description": "Health awareness and donor tips published by admins in Bangla.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "readTime": { "type": "string" }
+      },
+      "required": ["title", "content", "createdAt", "createdBy"]
     }
   },
   "firestore": {
@@ -280,6 +314,14 @@
     "/global_alerts/{alertId}": {
       "schema": "UserBroadcastAlert",
       "description": "Global system-wide alert messages sent by admins directly to all users."
+    },
+    "/events/{eventId}": {
+      "schema": "Event",
+      "description": "Events and donation programs."
+    },
+    "/health_tips/{tipId}": {
+      "schema": "HealthTip",
+      "description": "Bangla health and donor guidelines."
     }
   }
 }

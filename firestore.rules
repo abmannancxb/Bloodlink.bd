@@ -304,5 +304,47 @@ service cloud.firestore {
       allow read, list: if isSignedIn();
       allow create, update, delete: if isAdmin();
     }
+
+    // --- Events ---
+    match /events/{eventId} {
+      function isValidEvent(data) {
+        return data.title is string && data.title.size() <= 200
+          && data.description is string && data.description.size() <= 5000
+          && data.location is string && data.location.size() <= 200
+          && data.eventDate is string && data.eventDate.size() <= 100
+          && data.status is string && data.status in ['Active', 'Passed']
+          && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000))
+          && data.createdBy == request.auth.uid;
+      }
+
+      allow read, list: if true;
+      allow create: if isValidId(eventId) && isSignedIn() && isValidEvent(incoming())
+        && incoming().keys().hasAll(['title', 'description', 'location', 'eventDate', 'status', 'createdAt', 'createdBy'])
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && (
+        (isOwner(existing().createdBy) && isValidEvent(incoming()) && incoming().createdAt == existing().createdAt) ||
+        (incoming().diff(existing()).affectedKeys().hasOnly(['joinedUsers'])) ||
+        isAdmin()
+      );
+      allow delete: if isOwner(existing().createdBy) || isAdmin();
+    }
+
+    // --- Health Tips ---
+    match /health_tips/{tipId} {
+      function isValidHealthTip(data) {
+        return data.title is string && data.title.size() <= 500
+          && data.content is string && data.content.size() <= 10000
+          && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000))
+          && (!('readTime' in data) || data.readTime is string && data.readTime.size() <= 100)
+          && data.createdBy == request.auth.uid;
+      }
+
+      allow read, list: if true;
+      allow create: if isValidId(tipId) && isAdmin() && isValidHealthTip(incoming())
+        && incoming().keys().hasAll(['title', 'content', 'createdAt', 'createdBy'])
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidHealthTip(incoming()) && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin();
+    }
   }
 }

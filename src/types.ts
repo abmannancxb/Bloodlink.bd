@@ -102,6 +102,13 @@ export interface SystemSettings {
   aiDailyLimit?: number;
   aiTodayUsageCount?: number;
   aiTodayResetDate?: string;
+  // Homepage Display Settings
+  homeShowEmergencyBanner?: boolean;
+  homeShowMap?: boolean;
+  homeShowNearestDonor?: boolean;
+  homeShowLiveFeed?: boolean;
+  homeShowMetrics?: boolean;
+  homeShowQuickActions?: boolean;
   updatedAt?: any;
   updatedBy?: string;
 }
@@ -249,6 +256,7 @@ export interface VoiceCall {
   createdAt: any;
   connectedAt?: any;
   endedAt?: any;
+  type?: 'voice' | 'video';
 }
 
 export interface OrganizationApplication {
@@ -263,6 +271,30 @@ export interface OrganizationApplication {
   contact: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
+}
+
+export interface AppEvent {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  imageUrl?: string;
+  eventDate: string;
+  status: 'Active' | 'Passed';
+  createdAt: any;
+  createdBy: string;
+  joinedUsers?: string[];
+}
+
+export interface HealthTip {
+  id: string;
+  title: string;
+  content: string;
+  imageUrl?: string;
+  createdAt: any;
+  createdBy: string;
+  likes?: string[];
+  readTime?: string;
 }
 
 export { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
