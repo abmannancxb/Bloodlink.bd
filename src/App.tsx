@@ -217,6 +217,150 @@ const hasValidKey = API_KEY.length > 0;
 
 // --- Types & Helpers deleted and moved to types.ts ---
 
+export function isBloodCompatible(donor: string, recipient: string): boolean {
+  const d = donor.trim().toUpperCase();
+  const r = recipient.trim().toUpperCase();
+  if (d === r) return true;
+  if (d === 'O-') return true;
+  if (d === 'O+') return ['O+', 'A+', 'B+', 'AB+'].includes(r);
+  if (d === 'A-') return ['A-', 'A+', 'AB-', 'AB+'].includes(r);
+  if (d === 'A+') return ['A+', 'AB+'].includes(r);
+  if (d === 'B-') return ['B-', 'B+', 'AB-', 'AB+'].includes(r);
+  if (d === 'B+') return ['B+', 'AB+'].includes(r);
+  if (d === 'AB-') return ['AB-', 'AB+'].includes(r);
+  return false;
+}
+
+export function formatLastSeen(timestamp: any): string {
+  if (!timestamp) return 'Recently';
+  try {
+    let date: Date;
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      date = timestamp.toDate();
+    } else if (timestamp instanceof Date) {
+      date = timestamp;
+    } else if (typeof timestamp === 'number') {
+      date = new Date(timestamp);
+    } else if (typeof timestamp === 'string') {
+      date = new Date(timestamp);
+    } else if (timestamp.seconds !== undefined) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      return 'Recently';
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'Just now';
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 30) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  } catch (e) {
+    return 'Recently';
+  }
+}
+
+export function isUserOnline(timestamp: any): boolean {
+  if (!timestamp) return false;
+  try {
+    let date: Date;
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      date = timestamp.toDate();
+    } else if (timestamp instanceof Date) {
+      date = timestamp;
+    } else if (typeof timestamp === 'number') {
+      date = new Date(timestamp);
+    } else if (typeof timestamp === 'string') {
+      date = new Date(timestamp);
+    } else if (timestamp.seconds !== undefined) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      return false;
+    }
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    return diffMs >= 0 && diffMs < 5 * 60000;
+  } catch (e) {
+    return false;
+  }
+}
+
+export function formatDisplayDate(dateStr: any): string {
+  if (!dateStr) return '';
+  try {
+    let date: Date;
+    if (dateStr.toDate && typeof dateStr.toDate === 'function') {
+      date = dateStr.toDate();
+    } else {
+      date = new Date(dateStr);
+    }
+    if (isNaN(date.getTime())) return String(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return String(dateStr);
+  }
+}
+
+export function formatDateForInput(dateVal: any): string {
+  if (!dateVal) return '';
+  try {
+    let date: Date;
+    if (dateVal.toDate && typeof dateVal.toDate === 'function') {
+      date = dateVal.toDate();
+    } else {
+      date = new Date(dateVal);
+    }
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+  } catch (e) {
+    return '';
+  }
+}
+
+function RequestBloodPromoCard({
+  user,
+  setView,
+  handleLogin,
+}: {
+  user: any;
+  setView: (view: string) => void;
+  handleLogin: () => void;
+}) {
+  return (
+    <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 shadow-xs relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="flex items-start gap-3.5">
+        <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center shrink-0 border border-rose-100">
+          <Droplet className="w-5 h-5 text-red-600 animate-pulse" />
+        </div>
+        <div>
+          <h4 className="text-sm font-black text-slate-900 tracking-tight">Need Urgent Blood?</h4>
+          <p className="text-xs text-slate-500 mt-1 max-w-md">
+            Don't hesitate to post a request. Our community of certified heroes is always ready to step forward and save lives.
+          </p>
+        </div>
+      </div>
+      <button
+        onClick={() => {
+          if (user) {
+            setView('post-request');
+          } else {
+            handleLogin();
+          }
+        }}
+        className="w-full md:w-auto bg-[#FF1744] hover:bg-red-600 text-white font-black text-[10px] uppercase tracking-widest py-3 px-6 rounded-xl shadow-md transform active:scale-95 transition-all cursor-pointer whitespace-nowrap"
+      >
+        Post Request Now
+      </button>
+    </div>
+  );
+}
+
+
 const playNotificationSound = () => {
   // 1. Try playing an external professional ping sound
   const soundUrl = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -3917,6 +4061,17 @@ export default function App() {
                       );
                     })()}
 
+                    {/* Join as Donor Volunteer Promo Card (Up in Analytics/Home Page) */}
+                    <div className="mb-5">
+                      <PremiumHeroBannerCard 
+                        user={user} 
+                        setView={setView} 
+                        setIsGuest={setIsGuest}
+                        setAuthScreen={setAuthScreen}
+                        handleLogin={handleLogin} 
+                      />
+                    </div>
+
                     {/* 2. Standalone Premium Analytics Metrics Strip */}
                     {settings?.homeShowMetrics !== false && (
                       <div className="bg-white border border-slate-100 border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] p-3.5 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.02)] mb-5 select-none">
@@ -3975,6 +4130,15 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
+                    {/* Can't Find A Donor Promo Card (Down in Analytics/Home Page) */}
+                    <div>
+                      <RequestBloodPromoCard 
+                        user={user} 
+                        setView={setView} 
+                        handleLogin={handleLogin} 
+                      />
+                    </div>
 
                     {/* 3 & 4. Integrated Map Combination Container (Map Background + Bento Overlaid Bottom) */}
                     <div className="relative -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full h-[480px] bg-slate-100 rounded-none sm:rounded-[36px] overflow-hidden border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between pointer-events-auto">
@@ -5049,6 +5213,15 @@ export default function App() {
                     </div>
                   );
                 })()}
+
+                {/* Can't Find A Donor Promo Card (Donor List Page) */}
+                <div className="px-4">
+                  <RequestBloodPromoCard 
+                    user={user} 
+                    setView={setView} 
+                    handleLogin={handleLogin} 
+                  />
+                </div>
 
                 {/* 6. AVAILABLE DONORS CONTAINER */}
                 {(() => {
@@ -14585,55 +14758,32 @@ function RequestCardRedesigned({
                         await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
                         if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
                       } catch (err) {
-                        handleFirestoreError(err, OperationType.UPDATE, `requests/${request.id}`);
+                        handleFirestoreError(err, OperationType.UPDATE, 'requests');
                       }
                     }}
-                    type="button"
-                    className="bg-emerald-600 hover:bg-emerald-550 text-white text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 flex-1 cursor-pointer"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg py-2 px-3 text-[10px] uppercase tracking-wider text-center cursor-pointer transition-colors"
                   >
-                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>Mark Fulfilled</span>
+                    Mark as Fulfilled
                   </button>
                 ) : (
                   onDonationDone && (
                     <button 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDonationDone(request);
-                      }}
-                      type="button"
-                      className="group flex-1 bg-slate-100 hover:bg-emerald-600 text-slate-700 hover:text-white text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-lg active:scale-95 transition-all flex items-center justify-center gap-1 cursor-pointer border border-slate-200 hover:border-transparent"
+                      onClick={() => onDonationDone(request)}
+                      className="flex-1 bg-[#FF3E5E] hover:bg-red-650 text-white font-bold rounded-lg py-2 px-3 text-[10px] uppercase tracking-wider text-center cursor-pointer transition-colors"
                     >
-                      <Heart className="w-3.5 h-3.5 shrink-0 animate-pulse text-[#FF3E5E] group-hover:text-white transition-colors" />
-                      <span>Confirm I Donated</span>
+                      I Donated
                     </button>
                   )
                 )}
-
-                {onMatchDonors && (
-                  <button 
-                    onClick={onMatchDonors}
-                    type="button"
-                    className="flex-1 bg-rose-650 hover:bg-rose-600 text-white px-3 py-2 rounded-lg transition-all font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                  >
-                    <Search className="w-3.5 h-3.5 text-white shrink-0" />
-                    <span>Match Donors</span>
-                  </button>
-                )}
               </>
             )}
-
-            {onDelete && (
+            {onDelete && (isOwner || profile?.role === 'admin') && (
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                className="text-red-600 hover:text-red-500 p-2 bg-red-50 hover:bg-red-100 rounded-lg border border-red-200 transition-all cursor-pointer flex items-center justify-center"
-                title="Delete request"
+                onClick={onDelete}
+                className="bg-slate-200 hover:bg-slate-300 text-slate-750 rounded-lg p-2 flex items-center justify-center cursor-pointer transition-colors"
+                title="Delete Post"
               >
-                <Trash className="w-4 h-4" />
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
               </button>
             )}
           </div>
@@ -14643,105 +14793,287 @@ function RequestCardRedesigned({
   );
 }
 
-// Helper for blood group medical compatibility rules
-const isBloodCompatible = (donor: string, patient: string): boolean => {
-  const d = donor.trim().toUpperCase();
-  const p = patient.trim().toUpperCase();
-  if (d === p) return true;
-  
-  if (d === 'O-') return true; // Universal Donor can donate to everyone
-  
-  if (p === 'AB+') return true; // Universal Recipient can receive from everyone
-  
-  if (p === 'A+') {
-    return d === 'A-' || d === 'O+';
-  }
-  if (p === 'A-') {
-    return d === 'A-' || d === 'O-';
-  }
-  if (p === 'B+') {
-    return d === 'B-' || d === 'O+';
-  }
-  if (p === 'B-') {
-    return d === 'B-' || d === 'O-';
-  }
-  if (p === 'AB-') {
-    return d === 'A-' || d === 'B-' || d === 'AB-';
-  }
-  if (p === 'O+') {
-    return d === 'O-';
-  }
-  return false;
-};
+function PremiumHeroBannerCard({
+  user,
+  setView,
+  setIsGuest,
+  setAuthScreen,
+  handleLogin,
+}: {
+  user: any;
+  setView: (view: string) => void;
+  setIsGuest: (v: boolean) => void;
+  setAuthScreen: (v: 'login-email' | 'register') => void;
+  handleLogin: () => void;
+}) {
+  const isUserLoggedIn = !!user;
 
-// Helper to format date for display
-const formatDisplayDate = (date: any) => {
-  if (!date) return '';
-  if (typeof date === 'string') return date;
-  if (date && typeof date.toDate === 'function') {
-    try {
-      return date.toDate().toLocaleDateString();
-    } catch (e) {
-      console.error("formatDisplayDate failed", e);
-      return '';
-    }
-  }
-  if (date && typeof date.seconds === 'number') {
-    return new Date(date.seconds * 1000).toLocaleDateString();
-  }
-  return String(date);
-};
+  return (
+    <div 
+      className="bg-gradient-to-r from-[#FF1744] to-[#FF4D6D] rounded-[30px] p-6 sm:p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-[0_12px_40px_rgba(255,23,68,0.18)] relative overflow-hidden select-none w-full animate-in fade-in slide-in-from-bottom-5 duration-500"
+    >
+      {/* Background soft glowing particles and ECG line in the design */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Soft glowing particle dots */}
+        <div className="absolute top-[20%] left-[10%] w-2 h-2 bg-white/40 rounded-full blur-[1px] animate-pulse" />
+        <div className="absolute top-[75%] left-[25%] w-1.5 h-1.5 bg-white/30 rounded-full blur-[0.5px] animate-ping duration-1000" />
+        <div className="absolute top-[15%] right-[45%] w-3 h-3 bg-white/20 rounded-full blur-[1px]" />
+        <div className="absolute bottom-[20%] right-[35%] w-2 h-2 bg-white/40 rounded-full blur-[0.5px] animate-pulse" />
+      </div>
 
-// Helper for last seen formatting
-const formatLastSeen = (lastSeen: any) => {
-  if (!lastSeen) return 'Never';
-  let d: Date;
-  if (lastSeen instanceof Date) d = lastSeen;
-  else if (lastSeen && typeof lastSeen.toDate === 'function') d = lastSeen.toDate();
-  else if (lastSeen && typeof lastSeen.seconds === 'number') d = new Date(lastSeen.seconds * 1000);
-  else d = new Date(lastSeen);
+      <style>{`
+        @keyframes floatDrop {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+        }
+        @keyframes drawEcg {
+          0% { stroke-dashoffset: 600; }
+          100% { stroke-dashoffset: 0; }
+        }
+        .anim-float-drop-premium {
+          animation: floatDrop 3.5s ease-in-out infinite;
+        }
+        .anim-ecg-line-premium {
+          stroke-dasharray: 600;
+          stroke-dashoffset: 600;
+          animation: drawEcg 5s linear infinite;
+        }
+      `}</style>
 
-  if (isNaN(d.getTime())) return 'Never';
+      {/* Content Columns */}
+      <div className="flex-1 text-center md:text-left z-10 space-y-6 max-w-xl">
+        {/* Left Side Texts */}
+        <div className="space-y-3">
+          <h2 className="text-2xl sm:text-3.5xl md:text-[34px] font-black text-white leading-tight tracking-tight">
+            You Can Be Someone's Hope. ❤️
+          </h2>
+          <p className="text-sm sm:text-base text-white/90 font-medium leading-relaxed max-w-md mx-auto md:mx-0">
+            Every blood donation is a chance to save a life. Join our community of heroes today.
+          </p>
+        </div>
 
-  const now = new Date();
-  const diffInSeconds = Math.floor((now.getTime() - d.getTime()) / 1000);
+        {/* Action Buttons: side by side, equal width, consistent spacing, pill-shaped */}
+        <div className="flex flex-row items-center justify-center md:justify-start gap-4 w-full">
+          {!isUserLoggedIn ? (
+            <>
+              <button
+                onClick={() => {
+                  setAuthScreen('register');
+                  setIsGuest(false);
+                }}
+                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>👤+ Registration</span>
+              </button>
+              <button
+                onClick={() => {
+                  setAuthScreen('login-email');
+                  setIsGuest(false);
+                }}
+                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>→ Log In</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setView('profile')}
+                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>👤 My Profile</span>
+              </button>
+              <button
+                onClick={() => setView('request-form')}
+                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>🩸 Post Request</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
 
-  if (diffInSeconds < 60) return 'Just now';
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
-  if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}d ago`;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-};
+      {/* Right Side 3D Vector Design */}
+      <div className="w-56 h-56 shrink-0 relative flex items-center justify-center z-10 select-none">
+        <svg viewBox="0 0 240 240" className="w-full h-full drop-shadow-[0_12px_28px_rgba(0,0,0,0.15)]">
+          <defs>
+            {/* Glossy 3D Drop Radial Gradient */}
+            <radialGradient id="dropGlossyPremium" cx="35%" cy="30%" r="65%">
+              <stop offset="0%" stopColor="#FFFFFF" />
+              <stop offset="15%" stopColor="#FFEAEA" />
+              <stop offset="45%" stopColor="#FF1744" />
+              <stop offset="85%" stopColor="#D50000" />
+              <stop offset="100%" stopColor="#7F0000" />
+            </radialGradient>
+            
+            {/* Outer soft glow for the blood drop */}
+            <filter id="softGlowDrop" x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="10" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
 
-const isUserOnline = (lastSeen: any) => {
-  if (!lastSeen) return false;
-  let d: Date;
-  if (lastSeen instanceof Date) d = lastSeen;
-  else if (lastSeen && typeof lastSeen.toDate === 'function') d = lastSeen.toDate();
-  else if (lastSeen && typeof lastSeen.seconds === 'number') d = new Date(lastSeen.seconds * 1000);
-  else d = new Date(lastSeen);
-  
-  if (isNaN(d.getTime())) return false;
-  return (new Date().getTime() - d.getTime()) < 5 * 60 * 1000;
-};
+            {/* Hand Gradient */}
+            <linearGradient id="caringHandsGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="rgba(255, 255, 255, 0.4)" />
+              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.75)" />
+              <stop offset="100%" stopColor="rgba(255, 255, 255, 0.95)" />
+            </linearGradient>
 
-// Helper for type="date" input (YYYY-MM-DD)
-const formatDateForInput = (date: any) => {
-  if (!date) return '';
-  let d: Date;
-  if (typeof date === 'string') {
-    d = new Date(date);
-  } else if (date && typeof date.toDate === 'function') {
-    d = date.toDate();
-  } else if (date && typeof date.seconds === 'number') {
-    d = new Date(date.seconds * 1000);
-  } else {
-    return '';
-  }
-  
-  if (isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
-};
+            {/* ECG Glow Path Gradient */}
+            <linearGradient id="ecgLineGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(255, 255, 255, 0)" />
+              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.35)" />
+              <stop offset="100%" stopColor="rgba(255, 255, 255, 0)" />
+            </linearGradient>
+          </defs>
+
+          {/* Faint heartbeat ECG line in the background */}
+          <path 
+            d="M 10 120 H 60 L 72 95 L 84 145 L 96 110 L 104 120 H 130 L 142 30 L 158 210 L 174 90 L 186 135 L 194 120 H 230" 
+            fill="none" 
+            stroke="url(#ecgLineGlow)" 
+            strokeWidth="3" 
+            strokeLinecap="round" 
+            strokeLinejoin="round"
+            className="anim-ecg-line-premium"
+          />
+
+          {/* Glowing particle dots inside the SVG canvas */}
+          <circle cx="45" cy="60" r="3" fill="#FFFFFF" opacity="0.5" className="animate-pulse" />
+          <circle cx="205" cy="50" r="4" fill="#FFFFFF" opacity="0.6" className="animate-pulse" style={{ animationDelay: '1s' }} />
+          <circle cx="25" cy="160" r="2" fill="#FFFFFF" opacity="0.3" />
+          <circle cx="215" cy="170" r="3" fill="#FFFFFF" opacity="0.4" style={{ animationDelay: '0.5s' }} />
+
+          {/* Two Caring Open Hands cradling the drop */}
+          <g fill="url(#caringHandsGrad)">
+            {/* Left Caring Hand */}
+            <path d="M 40,175 C 52,162 76,165 96,172 C 108,176 112,181 112,184 C 102,184 85,181 68,182 C 56,183 48,189 40,197 C 34,190 34,182 40,175 Z" />
+            <path d="M 52,166 C 64,152 82,154 102,164 C 95,165 82,161 68,165 C 61,167 56,171 52,166 Z" opacity="0.85" />
+            <path d="M 46,198 C 62,192 90,194 111,199 C 96,202 74,202 57,204 C 51,204 48,201 46,198 Z" opacity="0.75" />
+            
+            {/* Right Caring Hand (Mirrored) */}
+            <path d="M 200,175 C 188,162 164,165 144,172 C 132,176 128,181 128,184 C 138,184 155,181 172,182 C 184,183 192,189 200,197 C 206,190 206,182 200,175 Z" />
+            <path d="M 188,166 C 176,152 158,154 138,164 C 145,165 158,161 172,165 C 179,167 184,171 188,166 Z" opacity="0.85" />
+            <path d="M 194,198 C 178,192 150,194 129,199 C 144,202 166,202 183,204 C 189,204 192,201 194,198 Z" opacity="0.75" />
+          </g>
+
+          {/* 3D Glossy Floating Blood Drop with Heart inside */}
+          <g className="anim-float-drop-premium" style={{ transformOrigin: 'center center' }}>
+            {/* Outer shadow/glow of the drop */}
+            <path 
+              d="M 120,55 C 120,55 85,105 85,130 A 35,35 0 0,0 155,130 C 155,105 120,55 120,55 Z" 
+              fill="#FF1744" 
+              opacity="0.4" 
+              filter="url(#softGlowDrop)" 
+            />
+            
+            {/* Main Drop Volume */}
+            <path 
+              d="M 120,55 C 120,55 85,105 85,130 A 35,35 0 0,0 155,130 C 155,105 120,55 120,55 Z" 
+              fill="url(#dropGlossyPremium)" 
+            />
+
+            {/* Gloss Highlight (Inner upper-left curve) */}
+            <path 
+              d="M 103,100 C 97,108 97,118 103,125 C 99,122 94,114 95,106 C 96,98 103,100 103,100 Z" 
+              fill="#FFFFFF" 
+              opacity="0.65" 
+            />
+
+            {/* Small high intensity gloss reflection ellipse */}
+            <ellipse cx="106" cy="85" rx="4.5" ry="8.5" transform="rotate(-30 106 85)" fill="#FFFFFF" opacity="0.85" />
+
+            {/* Pure White Heart inside the drop */}
+            <path 
+              d="M 120,132 C 118,130 110,121 110,114 C 110,108.5 114,105 119,105 C 121.7,105 123.5,106.5 124,108 C 124.5,106.5 126.3,105 129,105 C 134,105 138,108.5 138,114 C 138,121 130,130 128,132 L 124,136 Z" 
+              fill="#FFFFFF" 
+              className="drop-shadow-sm" 
+            />
+          </g>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function JoinDonorPromoCard({
+  user,
+  setView,
+  setIsGuest,
+  setAuthScreen,
+  handleLogin,
+}: {
+  user: any;
+  setView: (view: string) => void;
+  setIsGuest: (v: boolean) => void;
+  setAuthScreen: (v: 'login-email' | 'register') => void;
+  handleLogin: () => void;
+}) {
+  const isUserLoggedIn = !!user;
+
+  return (
+    <div 
+      className="bg-[#FFF5F5] border border-[#FFE3E3] rounded-[32px] p-5 sm:p-6 flex flex-col sm:flex-row items-center sm:justify-between gap-4 sm:gap-6 shadow-[0_4px_20px_rgba(255,23,70,0.02)] select-none w-full animate-in fade-in slide-in-from-bottom-3 duration-300"
+    >
+      <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-5 text-center sm:text-left">
+        {/* Left Badge: Pink circle with white border and solid red sparkles/heart icon */}
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#FFEAEB] flex items-center justify-center border-4 border-white shrink-0 shadow-xs">
+          <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 fill-[#FF1E46] text-[#FF1E46]" />
+        </div>
+        
+        {/* Middle Texts */}
+        <div className="space-y-1">
+          <h3 className="text-lg sm:text-[21px] font-black text-slate-900 tracking-tight leading-none">
+            {isUserLoggedIn ? "Inspire others to donate!" : "Join as blood donor volunteer?"}
+          </h3>
+          <p className="text-[10px] sm:text-[11.5px] font-extrabold text-[#FF1E46]/80 uppercase tracking-widest leading-none mt-1 block">
+            {isUserLoggedIn ? "SHARE YOUR EXPERIENCE & ENCOURAGE NEW HEROES" : "BE A LIFELINE • EVERY DROP OF BLOOD SAVES LIVES"}
+          </p>
+          <p className="text-[11px] sm:text-[12.5px] text-slate-500 font-medium leading-relaxed max-w-lg mt-1.5 hidden sm:block">
+            {isUserLoggedIn 
+              ? "Your continuous support fuels our active donor network. Tell your story to motivate thousands of active community members in Bangladesh." 
+              : "Become part of Bangladesh's most active voluntary blood network. Connect instantly with local patients, manage donor status, and save precious lives."}
+          </p>
+        </div>
+      </div>
+
+      {/* Right Action Button/Buttons */}
+      {isUserLoggedIn ? (
+        <button
+          onClick={() => setView('post-opinion')}
+          className="shrink-0 w-full sm:w-auto bg-[#FF1E46] hover:bg-red-650 hover:scale-[1.03] active:scale-[0.98] transition-all text-white font-black text-xs sm:text-[13px] uppercase tracking-wider px-6 py-3.5 sm:px-7 sm:py-4 rounded-3xl flex items-center justify-center gap-2 cursor-pointer shadow-[0_6px_20px_rgba(255,30,70,0.25)]"
+        >
+          <Plus className="w-4.5 h-4.5 text-white stroke-[3]" />
+          <span>Post Donor Story</span>
+        </button>
+      ) : (
+        <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              setAuthScreen('register');
+              setIsGuest(false);
+            }}
+            className="w-full sm:w-auto bg-[#FF1E46] hover:bg-red-650 hover:scale-[1.03] active:scale-[0.98] transition-all text-white font-black text-xs sm:text-[13px] uppercase tracking-wider px-6 py-3.5 sm:px-7 sm:py-4 rounded-3xl flex items-center justify-center gap-2 cursor-pointer shadow-[0_6px_20px_rgba(255,30,70,0.25)]"
+          >
+            <UserPlus className="w-4.5 h-4.5 text-white" />
+            <span>Register Now</span>
+          </button>
+          <button
+            onClick={() => {
+              setAuthScreen('login-email');
+              setIsGuest(false);
+            }}
+            className="w-full sm:w-auto bg-white border-2 border-[#FFE3E3] text-[#FF1E46] hover:bg-[#FFF0F1] hover:scale-[1.03] active:scale-[0.98] transition-all font-black text-xs sm:text-[13px] uppercase tracking-wider px-6 py-3.5 sm:px-7 sm:py-4 rounded-3xl flex items-center justify-center gap-2 cursor-pointer"
+          >
+            <LogIn className="w-4.5 h-4.5 text-[#FF1E46]" />
+            <span>Login</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DonorCard({ donor, onMessage, onViewProfile, currentUserProfile, showThanaOnly }: { donor: UserProfile, onMessage?: () => void, onViewProfile?: () => void, currentUserProfile?: UserProfile | null, showThanaOnly?: boolean, key?: any }) {
   const isNearby = currentUserProfile && 
@@ -17080,8 +17412,24 @@ function CallOverlay({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [hasRemoteVideo, setHasRemoteVideo] = useState(false);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const setLocalVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    localVideoRef.current = el;
+    if (el && localStream) {
+      el.srcObject = localStream;
+      el.play().catch(err => console.error("Local video play failed:", err));
+    }
+  }, [localStream]);
+
+  const setRemoteVideoRef = useCallback((el: HTMLVideoElement | null) => {
+    remoteVideoRef.current = el;
+    if (el && remoteStream) {
+      el.srcObject = remoteStream;
+      el.play().catch(err => console.error("Remote video play failed:", err));
+    }
+  }, [remoteStream]);
 
   const isVideoCall = call.type === 'video';
 
@@ -17190,17 +17538,7 @@ function CallOverlay({
     }
   }, [remoteStream]);
 
-  useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
 
-  useEffect(() => {
-    if (remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-    }
-  }, [remoteStream]);
 
   const updateAudioOutput = async () => {
     if (remoteAudioRef.current) {
@@ -17523,40 +17861,64 @@ function CallOverlay({
       <audio ref={remoteAudioRef} autoPlay playsInline className="absolute opacity-0 pointer-events-none" />
       
       {/* Background container */}
-      {isVideoCall && connected ? (
-        <div className="absolute inset-0 z-0 bg-slate-950 flex items-center justify-center overflow-hidden">
-          {/* Remote Video element */}
-          {hasRemoteVideo ? (
-            <video
-              ref={remoteVideoRef}
-              autoPlay
-              playsInline
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center">
-              <img 
-                src={avatarUrl}
-                className="w-28 h-28 rounded-full object-cover border-4 border-white/10 p-1 mb-4 shadow-xl animate-pulse"
-                alt="Avatar"
-              />
-              <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Waiting for camera feed...</p>
-            </div>
-          )}
-
-          {/* Local Video Picture-in-Picture */}
-          {localStream && cameraEnabled && (
-            <div className="absolute top-6 right-6 w-28 h-40 md:w-36 md:h-52 bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-white/20 z-50 animate-in fade-in zoom-in-95 duration-500">
+      {isVideoCall ? (
+        connected ? (
+          <div className="absolute inset-0 z-0 bg-slate-950 flex items-center justify-center overflow-hidden">
+            {/* Remote Video element */}
+            {hasRemoteVideo ? (
               <video
-                ref={localVideoRef}
+                ref={setRemoteVideoRef}
+                autoPlay
+                playsInline
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center">
+                <img 
+                  src={avatarUrl}
+                  className="w-28 h-28 rounded-full object-cover border-4 border-white/10 p-1 mb-4 shadow-xl animate-pulse"
+                  alt="Avatar"
+                />
+                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Waiting for camera feed...</p>
+              </div>
+            )}
+
+            {/* Local Video Picture-in-Picture */}
+            {localStream && cameraEnabled && (
+              <div className="absolute top-6 right-6 w-28 h-40 md:w-36 md:h-52 bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-2 border-white/20 z-50 animate-in fade-in zoom-in-95 duration-500">
+                <video
+                  ref={setLocalVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover scale-x-[-1]"
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          localStream && cameraEnabled ? (
+            <div className="absolute inset-0 z-0 bg-slate-950 overflow-hidden">
+              <video
+                ref={setLocalVideoRef}
                 autoPlay
                 playsInline
                 muted
                 className="w-full h-full object-cover scale-x-[-1]"
               />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/50 via-slate-950/25 to-slate-950/80" />
             </div>
-          )}
-        </div>
+          ) : (
+            <div className="absolute inset-0 z-0 select-none">
+              <img 
+                src={avatarUrl}
+                className="w-full h-full object-cover blur-3xl opacity-30 scale-110"
+                alt=""
+              />
+              <div className="absolute inset-0 bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950" />
+            </div>
+          )
+        )
       ) : (
         <div className="absolute inset-0 z-0 select-none">
           <img 
