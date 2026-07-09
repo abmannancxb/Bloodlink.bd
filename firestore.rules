@@ -8,8 +8,9 @@ service cloud.firestore {
     function getProfile() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
     function isAdmin() { 
       return isSignedIn() && (
-        request.auth.token.email.lower() == 'abmannancxb@gmail.com' ||
-        request.auth.token.email.lower() == 'connect.abmannan@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'abmannancxb@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'abmhannancxb@gmail.com' ||
+        request.auth.token.get('email', '').lower() == 'connect.abmannan@gmail.com' ||
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
       ); 
@@ -47,7 +48,12 @@ service cloud.firestore {
           && (!('organizationName' in data) || (data.organizationName == null || data.organizationName is string))
           && (!('isVerified' in data) || (data.isVerified is bool))
           && (!('gender' in data) || (data.gender in ['male', 'female', 'other', null]))
-          && (!('nextDonationEligibility' in data) || (data.nextDonationEligibility == null || (data.nextDonationEligibility is string && data.nextDonationEligibility.size() <= 20)));
+          && (!('nextDonationEligibility' in data) || (data.nextDonationEligibility == null || (data.nextDonationEligibility is string && data.nextDonationEligibility.size() <= 20)))
+          && (!('username' in data) || (data.username is string && data.username.size() <= 100))
+          && (!('weight' in data) || (data.weight == null || data.weight is number))
+          && (!('heightFeet' in data) || (data.heightFeet == null || data.heightFeet is number))
+          && (!('heightInches' in data) || (data.heightInches == null || data.heightInches is number))
+          && (!('lastProfileSaveDate' in data) || (data.lastProfileSaveDate is string && data.lastProfileSaveDate.size() <= 100));
       }
 
       allow read: if true;
@@ -63,7 +69,7 @@ service cloud.firestore {
           incoming().get('isBlocked', false) == existing().get('isBlocked', false) &&
           incoming().get('isVerified', existing().get('isVerified', false)) == existing().get('isVerified', false) &&
           incoming().get('uid', userId) == existing().get('uid', userId) &&
-          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'bloodGroup', 'district', 'thana', 'phone', 'isAvailable', 'lastDonationDate', 'fcmToken', 'photoURL', 'coverURL', 'lastSeen', 'updatedAt', 'organizationId', 'organizationName', 'role', 'isBlocked', 'uid', 'donationCount', 'isVerified', 'isAvailable', 'followers', 'gender', 'nextDonationEligibility'])
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'bloodGroup', 'district', 'thana', 'phone', 'isAvailable', 'lastDonationDate', 'fcmToken', 'photoURL', 'coverURL', 'lastSeen', 'updatedAt', 'organizationId', 'organizationName', 'role', 'isBlocked', 'uid', 'donationCount', 'isVerified', 'isAvailable', 'followers', 'gender', 'nextDonationEligibility', 'weight', 'heightFeet', 'heightInches', 'username', 'lastProfileSaveDate'])
         )
       ) || (
         // Organization admins can manage their members' affiliation

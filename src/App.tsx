@@ -254,12 +254,12 @@ export function formatLastSeen(timestamp: any): string {
     if (diffMs < 0) return 'Just now';
     const diffMins = Math.floor(diffMs / 60000);
     if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'minute' : 'minutes'} ago`;
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'hour' : 'hours'} ago`;
     const diffDays = Math.floor(diffHours / 24);
-    if (diffDays < 30) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    if (diffDays < 30) return `${diffDays} ${diffDays === 1 ? 'day' : 'days'} ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   } catch (e) {
     return 'Recently';
   }
@@ -596,7 +596,8 @@ export default function App() {
           'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
           'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
           'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
-          'terms', 'faq', 'story'
+          'terms', 'faq', 'story', 'edit-profile', 'post-opinion', 'request-form', 
+          'admin-login', 'chat-room', 'org-apply', 'emergency', 'hospitals'
         ];
         if (viewKey && !validViews.includes(viewKey)) {
           return viewKey;
@@ -709,6 +710,61 @@ export default function App() {
     return false;
   });
 
+  const [dismissedEmergencyIds, setDismissedEmergencyIds] = useState<string[]>([]);
+
+  const [showEmergencyAfterDelay, setShowEmergencyAfterDelay] = useState<boolean>(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowEmergencyAfterDelay(true);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (showEmergencyAfterDelay) {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContextClass) {
+          const ctx = new AudioContextClass();
+          
+          // First tone
+          const osc1 = ctx.createOscillator();
+          const gain1 = ctx.createGain();
+          osc1.type = 'sine';
+          osc1.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+          gain1.gain.setValueAtTime(0.08, ctx.currentTime);
+          gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+          osc1.connect(gain1);
+          gain1.connect(ctx.destination);
+          osc1.start();
+          osc1.stop(ctx.currentTime + 0.15);
+          
+          // Second tone after a small delay
+          setTimeout(() => {
+            try {
+              if (ctx.state === 'closed') return;
+              const osc2 = ctx.createOscillator();
+              const gain2 = ctx.createGain();
+              osc2.type = 'sine';
+              osc2.frequency.setValueAtTime(880, ctx.currentTime); // A5 high note
+              gain2.gain.setValueAtTime(0.12, ctx.currentTime);
+              gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+              osc2.connect(gain2);
+              gain2.connect(ctx.destination);
+              osc2.start();
+              osc2.stop(ctx.currentTime + 0.3);
+            } catch (innerErr) {
+              console.warn("Sound play failed", innerErr);
+            }
+          }, 120);
+        }
+      } catch (err) {
+        console.warn("AudioContext failed", err);
+      }
+    }
+  }, [showEmergencyAfterDelay]);
+
   const [view, setView] = useState<'requests' | 'find' | 'feed' | 'profile' | 'public-profile' | 'edit-profile' | 'notifications' | 'admin' | 'post-opinion' | 'request-form' | 'admin-login' | 'chats' | 'chat-room' | 'organizations' | 'org-dashboard' | 'org-apply' | 'about' | 'contact' | 'privacy' | 'terms' | 'faq' | 'emergency' | 'hospitals'>(() => {
     try {
       const pathParam = window.location.pathname.replace(/^\//, '');
@@ -736,7 +792,8 @@ export default function App() {
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
         'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
-        'terms', 'faq', 'story'
+        'terms', 'faq', 'story', 'edit-profile', 'post-opinion', 'request-form', 
+        'admin-login', 'chat-room', 'org-apply', 'emergency', 'hospitals'
       ];
 
       if (viewKey) {
@@ -811,7 +868,8 @@ export default function App() {
         'requests', 'find', 'feed', 'notifications', 'admin', 'chats', 
         'organizations', 'stats', 'profile', 'public-profile', 'org-dashboard', 
         'community', 'explore', 'nearby', 'home', 'request', 'requests', 'about', 'contact', 'privacy',
-        'terms', 'faq', 'story'
+        'terms', 'faq', 'story', 'edit-profile', 'post-opinion', 'request-form', 
+        'admin-login', 'chat-room', 'org-apply', 'emergency', 'hospitals'
       ];
       
       if (viewKey) {
@@ -2397,7 +2455,7 @@ export default function App() {
             let profileData = docSnap.data() as UserProfile;
             
             // Bootstrapped Admin Promotion
-            if (u.email === 'abmannancxb@gmail.com' && profileData.role !== 'admin') {
+            if ((u.email === 'abmannancxb@gmail.com' || u.email === 'abmhannancxb@gmail.com') && profileData.role !== 'admin') {
               profileData.role = 'admin';
               await updateDoc(doc(db, 'users', u.uid), { role: 'admin' });
             }
@@ -2413,7 +2471,7 @@ export default function App() {
             }
           } else {
             // New user or bootstrapped admin without profile yet
-            if (u.email === 'abmannancxb@gmail.com') {
+            if (u.email === 'abmannancxb@gmail.com' || u.email === 'abmhannancxb@gmail.com') {
               const adminProfile: UserProfile = {
                 uid: u.uid,
                 displayName: u.displayName || 'Head Admin',
@@ -2499,7 +2557,7 @@ export default function App() {
 
   // Sync profile role for bootstrap admin
   useEffect(() => {
-    if (user?.email === 'abmannancxb@gmail.com' && profile && profile.role !== 'admin') {
+    if ((user?.email === 'abmannancxb@gmail.com' || user?.email === 'abmhannancxb@gmail.com') && profile && profile.role !== 'admin') {
       const updateRole = async () => {
         try {
           await setDoc(doc(db, 'users', user.uid), { ...profile, role: 'admin' }, { merge: true });
@@ -3937,9 +3995,9 @@ export default function App() {
               {!showRequestsOverlay ? (
                 <div className="w-full h-full overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-rose-50/10 pt-20 pb-28 px-4 scrollbar-none scroll-smooth">
                   <div className="w-full max-w-2xl mx-auto space-y-6 pb-6 animate-in fade-in slide-in-from-bottom-5 duration-500">
-                           {/* 1. Urgent SOS Alert Banner */}
-                    {settings?.homeShowEmergencyBanner !== false && (() => {
-                      const pendingRequests = requests.filter(r => r.status === 'Pending');
+                    {/* 1. Urgent SOS Alert Banner - Floating, Swipeable and Dismissible Card */}
+                    {settings?.homeShowEmergencyBanner !== false && showEmergencyAfterDelay && (() => {
+                      const pendingRequests = requests.filter(r => r.status === 'Pending' && !dismissedEmergencyIds.includes(r.id));
                       // Find Urgent first, then Critical, then Normal
                       let activeAlert = pendingRequests.find(r => r.urgency === 'Urgent');
                       if (!activeAlert) {
@@ -3955,109 +4013,107 @@ export default function App() {
                         activeAlert = pendingRequests[0];
                       }
 
-                      if (!activeAlert) {
-                        return (
-                          <div 
-                            onClick={() => {
-                              resetFilters();
-                              setView('requests');
-                              setTimeout(() => {
-                                setShowRequestsOverlay(true);
-                              }, 100);
-                            }}
-                            className="bg-[#F0FDF4] border border-[#DCFCE7] border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] py-4 px-5 flex items-center justify-between shadow-[0_4px_16px_rgba(22,163,74,0.02)] cursor-pointer hover:bg-[#E8FBF0] transition-all duration-300 relative select-none"
-                          >
-                            <div className="flex items-center gap-4 min-w-0">
-                              {/* Green Beacon Siren Icon */}
-                              <div className="relative shrink-0 select-none flex items-center justify-center">
-                                <div className="absolute inset-0 bg-emerald-500/10 rounded-full animate-ping pointer-events-none scale-110" />
-                                <svg width="48" height="48" viewBox="0 0 48 48" className="w-12 h-12 shrink-0" fill="none">
-                                  <path d="M11 17C9 19.5 9 24.5 11 27" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" />
-                                  <path d="M7 14C4.5 17.5 4.5 26.5 7 30" stroke="#86EFAC" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M37 17C39 19.5 39 24.5 37 27" stroke="#16A34A" strokeWidth="2.5" strokeLinecap="round" />
-                                  <path d="M41 14C43.5 17.5 43.5 26.5 41 30" stroke="#86EFAC" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M24 7V11" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M16 10L18.5 13.5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M32 10L29.5 13.5" stroke="#16A34A" strokeWidth="2" strokeLinecap="round" />
-                                  <path d="M17 22C17 17.58 20.13 14 24 14C27.87 14 31 17.58 31 22V28H17V22Z" fill="#15803D" />
-                                  <path d="M15 28C15 27 16 26 17 26H31C32 26 33 27 33 28V31C33 32.5 31.5 33.5 30 33.5H18C16.5 33.5 15 32.5 15 31V28Z" fill="#166534" />
-                                  <rect x="18" y="32" width="12" height="2" rx="1" fill="#14532D" />
-                                  <text x="24.2" y="22.5" fill="#FFFFFF" fontSize="6.5" fontWeight="950" fontFamily="sans-serif" textAnchor="middle" letterSpacing="0.05">SAFE</text>
-                                </svg>
-                              </div>
-
-                              <div className="min-w-0 leading-snug">
-                                <div className="text-[14px] sm:text-[15px] font-bold text-slate-900 tracking-tight">
-                                  <span className="text-[#16A34A] font-black mr-1">All Clear:</span>
-                                  All emergency requests responded to!
-                                </div>
-                                <div className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">
-                                  No active urgent alerts in Bangladesh
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <ChevronRight className="w-5 h-5 text-[#16A34A] shrink-0" />
-                          </div>
-                        );
-                      }
+                      if (!activeAlert) return null;
 
                       const postedTime = activeAlert.createdAt ? formatLastSeen(activeAlert.createdAt) : 'some time ago';
                       const hospitalName = activeAlert.hospital || activeAlert.thana || activeAlert.district || 'Hospital';
 
                       return (
-                        <div 
-                          onClick={() => {
-                            setFilterBloodGroup(activeAlert.bloodGroup);
-                            resetFilters();
-                            setView('requests');
-                            setMatchingDonorsRequest(activeAlert);
-                            setTimeout(() => {
-                              setShowRequestsOverlay(true);
-                            }, 100);
-                          }}
-                          className="bg-[#FFF5F5] border border-[#FFE3E3] border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] py-4 px-5 flex items-center justify-between shadow-[0_4px_16px_rgba(255,23,68,0.02)] cursor-pointer hover:bg-[#FFEAEA] transition-all duration-300 relative select-none"
-                        >
-                          <div className="flex items-center gap-4 min-w-0">
-                            {/* Custom Red SOS Siren Icon */}
-                            <div className="relative shrink-0 select-none flex items-center justify-center">
-                              {/* Background pulsing ring */}
-                              <div className="absolute inset-0 bg-red-500/10 rounded-full animate-ping pointer-events-none scale-110" />
-                              <svg width="48" height="48" viewBox="0 0 48 48" className="w-12 h-12 shrink-0" fill="none">
-                                {/* Sound waves left */}
-                                <path d="M11 17C9 19.5 9 24.5 11 27" stroke="#E53935" strokeWidth="2.5" strokeLinecap="round" />
-                                <path d="M7 14C4.5 17.5 4.5 26.5 7 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
-                                {/* Sound waves right */}
-                                <path d="M37 17C39 19.5 39 24.5 37 27" stroke="#E53935" strokeWidth="2.5" strokeLinecap="round" />
-                                <path d="M41 14C43.5 17.5 43.5 26.5 41 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
-                                {/* Top beacon rays */}
-                                <path d="M24 7V11" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
-                                <path d="M16 10L18.5 13.5" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
-                                <path d="M32 10L29.5 13.5" stroke="#E53935" strokeWidth="2" strokeLinecap="round" />
-                                {/* Red dome light */}
-                                <path d="M17 22C17 17.58 20.13 14 24 14C27.87 14 31 17.58 31 22V28H17V22Z" fill="#D32F2F" />
-                                {/* Metal bottom base */}
-                                <path d="M15 28C15 27 16 26 17 26H31C32 26 33 27 33 28V31C33 32.5 31.5 33.5 30 33.5H18C16.5 33.5 15 32.5 15 31V28Z" fill="#C62828" />
-                                {/* Base highlights */}
-                                <rect x="18" y="32" width="12" height="2" rx="1" fill="#B71C1C" />
-                                {/* SOS Text inside red dome */}
-                                <text x="24.2" y="22.5" fill="#FFFFFF" fontSize="7.5" fontWeight="900" fontFamily="sans-serif" textAnchor="middle" letterSpacing="0.1">SOS</text>
-                              </svg>
-                            </div>
+                        <AnimatePresence mode="wait">
+                          <motion.div
+                            key={activeAlert.id}
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={{ left: 0.7, right: 0.7 }}
+                            onDragEnd={(event, info) => {
+                              if (info.offset.x > 100 || info.offset.x < -100) {
+                                setDismissedEmergencyIds(prev => [...prev, activeAlert!.id]);
+                                if (addToast) {
+                                  addToast("Alert Swiped", "You successfully dismissed the emergency request.", "info");
+                                }
+                              }
+                            }}
+                            initial={{ opacity: 0, x: '100vw', scale: 0.98 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: '-100vw', scale: 0.95 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 120 }}
+                            className="fixed top-[72px] left-4 right-4 max-w-md mx-auto z-[95] bg-gradient-to-br from-[#1E050A] via-slate-950 to-[#2A050D] border border-rose-500/30 text-white rounded-[18px] py-2 px-3.5 shadow-[0_12px_40px_rgba(225,29,72,0.3)] backdrop-blur-xl pointer-events-auto select-none cursor-grab active:cursor-grabbing hover:border-rose-500/45 transition-all duration-300"
+                            title="Drag left or right to dismiss"
+                          >
+                            <div className="flex items-center gap-3 relative">
+                              {/* Custom Red SOS Siren Icon */}
+                              <div className="relative shrink-0 select-none flex items-center justify-center">
+                                <div className="absolute inset-0 bg-rose-500/25 rounded-full animate-ping pointer-events-none scale-125" />
+                                <svg width="28" height="28" viewBox="0 0 48 48" className="w-7 h-7 shrink-0" fill="none">
+                                  <path d="M11 17C9 19.5 9 24.5 11 27" stroke="#FF2D55" strokeWidth="2.5" strokeLinecap="round" />
+                                  <path d="M7 14C4.5 17.5 4.5 26.5 7 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M37 17C39 19.5 39 24.5 37 27" stroke="#FF2D55" strokeWidth="2.5" strokeLinecap="round" />
+                                  <path d="M41 14C43.5 17.5 43.5 26.5 41 30" stroke="#FF8A80" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M24 7V11" stroke="#FF2D55" strokeWidth="2.5" strokeLinecap="round" />
+                                  <path d="M16 10L18.5 13.5" stroke="#FF2D55" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M32 10L29.5 13.5" stroke="#FF2D55" strokeWidth="2" strokeLinecap="round" />
+                                  <path d="M17 22C17 17.58 20.13 14 24 14C27.87 14 31 17.58 31 22V28H17V22Z" fill="#D32F2F" />
+                                  <path d="M15 28C15 27 16 26 17 26H31C32 26 33 27 33 28V31C33 32.5 31.5 33.5 30 33.5H18C16.5 33.5 15 32.5 15 31V28Z" fill="#C62828" />
+                                  <rect x="18" y="32" width="12" height="2" rx="1" fill="#B71C1C" />
+                                  <text x="24.2" y="22.5" fill="#FFFFFF" fontSize="6" fontWeight="950" fontFamily="sans-serif" textAnchor="middle" letterSpacing="0.1">SOS</text>
+                                </svg>
+                              </div>
 
-                            <div className="min-w-0 leading-snug">
-                              <div className="text-[14px] sm:text-[15px] font-bold text-slate-900 tracking-tight">
-                                <span className="text-[#E53935] font-black mr-1">Urgent:</span>
-                                {activeAlert.bloodGroup} Blood Needed in {hospitalName}
+                              {/* Interactive Text Details Column */}
+                              <div 
+                                onClick={() => {
+                                  setFilterBloodGroup(activeAlert!.bloodGroup);
+                                  resetFilters();
+                                  setView('requests');
+                                  setMatchingDonorsRequest(activeAlert);
+                                  setTimeout(() => {
+                                    setShowRequestsOverlay(true);
+                                  }, 100);
+                                }}
+                                className="flex-1 min-w-0 flex flex-col cursor-pointer text-left py-0.5 justify-center"
+                              >
+                                {/* Line 1: Group Blood Needed */}
+                                <div className="text-[11px] sm:text-[12px] font-black text-rose-400 tracking-tight leading-none flex items-center gap-1.5">
+                                  <span className="bg-rose-500/25 text-rose-300 px-1 py-0.5 rounded text-[6.5px] font-black tracking-widest uppercase">URGENT</span>
+                                  <span>{activeAlert.bloodGroup} Group Blood Needed</span>
+                                </div>
+                                
+                                {/* Line 2: Hospital name with small hospital icon next */}
+                                <div className="flex items-center gap-1 text-[9.5px] sm:text-[10px] text-slate-300 font-semibold mt-1 min-w-0">
+                                  <Building className="w-3 h-3 text-rose-400/80 shrink-0" />
+                                  <span className="truncate">{hospitalName}</span>
+                                </div>
+
+                                {/* Line 3: Time with time icon font small size */}
+                                <div className="flex items-center gap-1 text-[8.5px] sm:text-[9px] text-slate-400 mt-0.5 leading-none">
+                                  <Clock className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                  <span>Posted {postedTime}</span>
+                                </div>
                               </div>
-                              <div className="text-[11px] sm:text-xs text-slate-500 font-medium mt-1">
-                                Posted {postedTime}
+
+                              {/* Close button & Swiping helper visual handle */}
+                              <div className="flex flex-col items-center justify-between h-10 shrink-0 pl-1 border-l border-white/5">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDismissedEmergencyIds(prev => [...prev, activeAlert!.id]);
+                                    if (addToast) {
+                                      addToast("Alert Dismissed", "You closed the emergency banner.", "info");
+                                    }
+                                  }}
+                                  className="w-5 h-5 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
+                                  title="Close Banner"
+                                >
+                                  <X className="w-3 h-3 text-slate-400 hover:text-white" />
+                                </button>
+                                
+                                <div className="flex gap-0.5 items-center justify-center opacity-40">
+                                  <span className="text-[5.5px] font-black tracking-widest text-slate-400 uppercase leading-none">SWIPE</span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                          
-                          <ChevronRight className="w-5 h-5 text-[#E53935] shrink-0" />
-                        </div>
+                          </motion.div>
+                        </AnimatePresence>
                       );
                     })()}
 
@@ -4069,6 +4125,7 @@ export default function App() {
                         setIsGuest={setIsGuest}
                         setAuthScreen={setAuthScreen}
                         handleLogin={handleLogin} 
+                        handleLogout={handleLogout}
                       />
                     </div>
 
@@ -6341,9 +6398,26 @@ export default function App() {
                 allUsers={allUsers}
                 onLeave={leaveOrganization}
                 onNavigateOrganizations={() => setView('organizations')}
-                onSuccess={(p) => { setProfile(p); setView('profile'); handleSetActiveChat(null); }}
+                onSuccess={(p) => { 
+                  setProfile(p); 
+                  setAllUsers(prev => {
+                    const exists = prev.some(u => u.uid === p.uid);
+                    if (exists) {
+                      return prev.map(u => u.uid === p.uid ? p : u);
+                    }
+                    return [...prev, p];
+                  });
+                  setView('profile'); 
+                  handleSetActiveChat(null); 
+                }}
                 onViewProfile={(uid) => onViewProfile(uid)}
-                onCancel={() => setView('profile')}
+                onCancel={() => {
+                  if (profile) {
+                    setView('profile');
+                  } else {
+                    setView('requests');
+                  }
+                }}
                 askConfirm={askConfirm}
                 addToast={addToast}
                 requestNotificationPermission={requestNotificationPermission}
@@ -6438,7 +6512,7 @@ export default function App() {
                 askConfirm={askConfirm}
                 notifyAdmins={notifyAdmins}
                 onViewProfile={(uid) => onViewProfile(uid)}
-                onEditProfile={() => setView('profile')}
+                onEditProfile={() => setView('edit-profile')}
               />
             </div>
           </motion.div>
@@ -10038,7 +10112,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
 
   const toggleUserRole = async (uid: string, currentRole: string | undefined) => {
     const newRole = currentRole === 'admin' ? 'user' : 'admin';
-    const isSuperAdmin = users.find(u => u.uid === uid)?.email === 'abmannancxb@gmail.com' || users.find(u => u.uid === uid)?.email === 'connect.abmannan@gmail.com';
+    const isSuperAdmin = users.find(u => u.uid === uid)?.email === 'abmannancxb@gmail.com' || users.find(u => u.uid === uid)?.email === 'abmhannancxb@gmail.com' || users.find(u => u.uid === uid)?.email === 'connect.abmannan@gmail.com';
     
     if (isSuperAdmin && newRole === 'user') {
       addToast("Restricted Action", "Super Administrators cannot be demoted for security reasons.", 'error');
@@ -14310,30 +14384,38 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
   const isOwner = user?.uid === request.requesterUid;
   const requesterProfile = allUsers.find(u => u.uid === request.requesterUid);
   const isUrgent = request.urgency === 'Urgent';
+  const postedTime = request.createdAt ? formatLastSeen(request.createdAt) : 'some time ago';
 
   return (
     <motion.div 
       layout
       initial={{ opacity: 0, scale: 0.98, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`bg-white rounded-3xl p-5 premium-down-shadow hover:shadow-2xl hover:-translate-y-0.5 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group ${
-        isUrgent 
-          ? 'border border-red-200 ring-2 ring-red-50/70 bg-gradient-to-b from-red-50/5 via-white to-white' 
-          : ''
-      }`}
+      className="bg-white rounded-3xl p-5 border border-slate-100/90 hover:shadow-xl hover:border-slate-200 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group"
     >
       {/* Absolute Decorative Background Vector */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl pointer-events-none group-hover:bg-red-500/10 transition-colors duration-500" />
 
-      {/* Urgency indicator strip layout */}
-      {isUrgent && (
-        <div className="absolute top-0 right-0 py-1.5 px-4 bg-gradient-to-r from-red-600 to-red-500 rounded-bl-2xl z-20 shadow-sm border-l border-b border-red-500/20">
-          <div className="flex items-center gap-1 leading-none">
-            <Zap className="w-3 h-3 text-white animate-pulse" />
-            <span className="text-[8px] font-black text-white uppercase tracking-widest">Urgent Need</span>
-          </div>
+      {/* Top Header Row with small status dot */}
+      <div className="flex items-center justify-between mb-3 relative z-10">
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              isUrgent ? 'bg-rose-400' : 'bg-emerald-400'
+            }`} />
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${
+              isUrgent ? 'bg-rose-500' : 'bg-emerald-500'
+            }`} />
+          </span>
+          <span className="text-[9.5px] font-black tracking-widest text-slate-400 uppercase font-mono leading-none">
+            {isUrgent ? 'URGENT' : 'NORMAL'}
+          </span>
         </div>
-      )}
+
+        <span className="text-[9.5px] font-black tracking-wider text-slate-400 uppercase font-mono leading-none">
+          {postedTime}
+        </span>
+      </div>
 
       {onDelete && (
         <button 
@@ -14352,57 +14434,46 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
       <div className="space-y-4">
         {/* Header combined Blood Group capsule, Hospital details */}
         <div className="flex gap-4 items-start relative z-10 pt-1">
-          {/* Blood Drop Capsule */}
-          <div className="relative overflow-hidden w-16 h-16 bg-gradient-to-b from-red-600 to-rose-700 rounded-2xl flex flex-col items-center justify-center shadow-lg shadow-red-500/15 border border-red-500/20 shrink-0">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-[40%] w-12 h-12 bg-white/10 rounded-[50%_50%_50%_20%] rotate-45 transform pointer-events-none" />
-            <span className="relative text-white font-black text-2xl tracking-tighter leading-none">{request.bloodGroup}</span>
-            <span className="relative text-[8px] text-red-100 font-extrabold uppercase tracking-widest mt-1">Factor</span>
+          {/* Circular Blood Group Indicator */}
+          <div className="relative overflow-hidden w-12 h-12 bg-gradient-to-br from-[#E11D48] to-[#9F1239] rounded-full flex flex-col items-center justify-center shadow-md shadow-red-500/10 border border-red-500/10 shrink-0 select-none">
+            <span className="relative text-white font-black text-lg tracking-tighter leading-none">{request.bloodGroup}</span>
+            <span className="relative text-[5px] text-red-100 font-extrabold uppercase tracking-widest mt-0.5">GROUP</span>
           </div>
 
           {/* Hospital & Info text */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 flex-wrap">
               <div className="space-y-1">
-                <h3 className="font-black text-slate-800 text-[15px] leading-snug group-hover:text-slate-900 transition-colors uppercase tracking-tight line-clamp-1">
+                <h3 className="font-black text-slate-800 text-sm leading-snug group-hover:text-slate-900 transition-colors uppercase tracking-tight line-clamp-1">
                   {request.hospital}
                 </h3>
                 
-                <div className="flex items-center gap-1.5 text-slate-500 text-[10px] font-bold">
+                <div className="flex items-center gap-1.5 text-slate-500 text-[10.5px] font-bold">
                   <MapPin className="w-3.5 h-3.5 text-red-500/80 shrink-0" />
                   <span className="truncate">{request.thana}, {request.district}</span>
                 </div>
               </div>
-
-              {/* Fulfilled Tag indicator */}
-              {request.status === 'Fulfilled' ? (
-                <div className="bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0 shadow-inner">
-                  <span className="text-[7px] font-black text-emerald-800 uppercase tracking-widest flex items-center gap-1">
-                    <CheckCircle className="w-2.5 h-2.5 text-emerald-600" /> Fulfilled
-                  </span>
-                </div>
-              ) : (
-                <div className="bg-rose-50 border border-rose-100/80 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0">
-                  <div className="w-1.5 h-1.5 bg-red-600 rounded-full animate-pulse" />
-                  <span className="text-[7.5px] font-black text-red-700 font-mono tracking-wider leading-none">
-                    {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Bags' : 'Bag' } Required
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
-        {/* Cause / Address details box */}
+        {/* Cause details box */}
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2.5">
-          <div className="flex gap-2 items-start text-xs text-slate-700 font-medium leading-relaxed">
-            <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 rounded-lg text-[8.5px] font-extrabold uppercase tracking-widest leading-none mt-0.5">Purpose</span>
-            <span className="flex-1 text-slate-700 font-semibold">{request.medicalReason}</span>
+          <div className="flex items-center justify-between border-b border-slate-200/40 pb-2 mb-1">
+            <span className="px-2 py-0.5 bg-slate-200/80 text-slate-700 rounded-lg text-[8px] font-extrabold uppercase tracking-widest leading-none">Purpose</span>
+            {request.status === 'Fulfilled' ? (
+              <span className="bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 text-[8.5px] font-black text-emerald-850 uppercase tracking-widest flex items-center gap-1">
+                Fulfilled
+              </span>
+            ) : (
+              <span className="bg-[#E11D48] text-white border border-[#BE123C] font-black text-[9px] uppercase tracking-wider px-2.5 py-0.5 rounded-full font-mono shadow-xs">
+                {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Bags' : 'Bag' } {request.bloodGroup} Needed
+              </span>
+            )}
           </div>
-          {request.hospitalAddress && (
-            <div className="text-[10px] text-slate-450 font-semibold flex gap-1.5 items-center italic pl-2 border-l border-slate-200">
-              <span>{request.hospitalAddress}</span>
-            </div>
-          )}
+          <div className="text-xs text-slate-700 font-semibold leading-relaxed">
+            {request.medicalReason}
+          </div>
         </div>
 
         {/* Requester Account metadata line */}
@@ -14511,10 +14582,11 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
 
           <a 
             href={`tel:${request.contactPhone}`}
-            className="w-11 h-11 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-all active:scale-95 border border-emerald-100/80 shadow-sm flex items-center justify-center shrink-0"
+            className="h-11 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-5 rounded-xl transition-all active:scale-95 shadow-md shadow-emerald-100/80 border border-emerald-500/20 flex items-center justify-center gap-1.5 shrink-0 text-[10px] font-black uppercase tracking-widest font-mono cursor-pointer"
             title="Call coordinate contact"
           >
-            <Phone className="w-4 h-4 stroke-[2.2]" />
+            <Phone className="w-4 h-4 text-white stroke-[2.5]" />
+            <span>CALL</span>
           </a>
         </div>
       </div>
@@ -14561,67 +14633,64 @@ function RequestCardRedesigned({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="bg-slate-50/95 border border-slate-200/85 rounded-2xl p-3 sm:p-3.5 shadow-xs hover:shadow-md hover:border-slate-350 transition-all relative overflow-hidden w-full text-left"
+      className="bg-white border border-slate-100/90 rounded-3xl p-4 hover:shadow-xl hover:border-slate-200 transition-all relative overflow-hidden w-full text-left"
     >
-      {/* Top Badges Row */}
-      <div className="flex items-center justify-between mb-2.5">
-        {/* Left badge: Emergency Status matching screenshot design */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${
-          isUrgent 
-            ? 'bg-rose-50 border-rose-200/60 text-rose-600' 
-            : isHigh 
-              ? 'bg-amber-50 border-amber-200/60 text-amber-700' 
-              : 'bg-blue-50 border-blue-200/60 text-blue-700'
-        }`}>
-          <span className="flex items-center gap-1 shrink-0">
-            <span className={`w-1.5 h-1.5 rounded-full ${isUrgent ? 'bg-rose-500' : isHigh ? 'bg-amber-500' : 'bg-blue-500'}`} />
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isUrgent ? 'bg-rose-550' : isHigh ? 'bg-amber-550' : 'bg-blue-550'}`} />
+      {/* Top Header Row with small status dot */}
+      <div className="flex items-center justify-between mb-3.5">
+        {/* Left: Small round shape (pulsing indicator) */}
+        <div className="flex items-center gap-1.5">
+          <span className="relative flex h-2 w-2">
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+              isUrgent ? 'bg-rose-400' : isHigh ? 'bg-amber-500' : 'bg-emerald-400'
+            }`} />
+            <span className={`relative inline-flex rounded-full h-2 w-2 ${
+              isUrgent ? 'bg-rose-500' : isHigh ? 'bg-amber-500' : 'bg-emerald-500'
+            }`} />
           </span>
-          <span>{isUrgent ? 'EMERGENCY URGENT' : isHigh ? 'HIGH PRIORITY' : 'NORMAL PRIORITY'}</span>
+          <span className="text-[9.5px] font-black tracking-widest text-slate-400 uppercase font-mono leading-none">
+            {isUrgent ? 'URGENT' : isHigh ? 'HIGH' : 'NORMAL'}
+          </span>
         </div>
 
-        {/* Right badge: Bag needed count */}
-        <div className="bg-slate-200/60 border border-slate-300/40 rounded-lg px-2.5 py-1 select-none">
-          <span className="text-[9px] font-black text-slate-600 tracking-widest uppercase">
-            {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'BAGS' : 'BAG' } NEEDED
-          </span>
-        </div>
+        <span className="text-[9.5px] font-black tracking-wider text-slate-400 uppercase font-mono leading-none">
+          {postedTime}
+        </span>
       </div>
 
       {/* Middle Content - Blood Group and Venue Details */}
-      <div className="flex gap-3 items-center mb-2.5">
-        {/* Large Crimson Rounded Square for Blood Group */}
-        <div className="w-[58px] h-[58px] rounded-2xl bg-gradient-to-br from-[#E11D48] to-[#9F1239] shadow-[0_4px_12px_rgba(225,29,72,0.15)] flex flex-col items-center justify-center select-none shrink-0 border border-rose-500/10">
-          <span className="text-xl font-black text-white tracking-tighter leading-none">{request.bloodGroup}</span>
-          <span className="text-[7px] font-black tracking-widest text-white/70 uppercase mt-0.5">GROUP</span>
+      <div className="flex gap-3 items-center mb-3">
+        {/* Small round shape for Blood Group (Circle Badge) */}
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#E11D48] to-[#9F1239] shadow-[0_3px_10px_rgba(225,29,72,0.12)] flex flex-col items-center justify-center select-none shrink-0 border border-rose-500/10">
+          <span className="text-[17px] font-black text-white tracking-tighter leading-none">{request.bloodGroup}</span>
+          <span className="text-[5.5px] font-black tracking-widest text-white/70 uppercase">GROUP</span>
         </div>
 
         {/* Hospital name and location details */}
         <div className="flex-1 min-w-0 text-left">
-          <h3 className="text-sm font-black text-slate-850 tracking-tight leading-snug truncate sm:whitespace-normal">
+          <h3 className="text-sm font-black text-slate-800 tracking-tight leading-snug truncate sm:whitespace-normal">
             {request.hospital}
           </h3>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1 leading-none">
+          <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 mt-1 leading-none">
             <MapPin className="w-3.5 h-3.5 text-[#FF3E5E] shrink-0" />
-            <span className="truncate font-semibold">{request.thana || 'Selected Jurisdiction'}, {request.district || 'Bangladesh'}</span>
+            <span className="truncate font-semibold">{request.thana || 'Selected Area'}, {request.district || 'Bangladesh'}</span>
           </div>
         </div>
       </div>
 
       {/* Case Details Box */}
-      <div className="bg-white border border-slate-200/50 rounded-xl p-3 mb-2.5 text-left shadow-2xs">
-        <span className="block text-[8px] font-black tracking-widest text-slate-400 uppercase">
-          PATIENT CASE DETAILS
-        </span>
-        <p className="text-xs text-slate-700 font-medium italic mt-1 leading-relaxed font-sans whitespace-pre-wrap">
+      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 mb-3.5 text-left shadow-2xs">
+        <div className="flex items-center justify-between border-b border-slate-200/50 pb-2 mb-2">
+          <span className="text-[8.5px] font-black tracking-widest text-slate-400 uppercase">
+            PATIENT CASE DETAILS
+          </span>
+          {/* Blood unit included in post here */}
+          <span className="bg-[#E11D48] text-white border border-[#BE123C] font-black text-[9px] uppercase tracking-wider px-2.5 py-0.5 rounded-full font-mono shadow-xs">
+            {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Bags' : 'Bag' } {request.bloodGroup} Needed
+          </span>
+        </div>
+        <p className="text-xs text-slate-700 font-medium italic leading-relaxed font-sans whitespace-pre-wrap">
           "{request.medicalReason || 'Describe the patient situation e.g. Surgery schedule requirements...'}"
         </p>
-        {request.hospitalAddress && (
-          <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-start gap-1 text-[10px] text-slate-550 italic leading-snug">
-            <span className="font-extrabold text-[#FF3E5E] shrink-0">Address:</span>
-            <span className="text-slate-600 font-semibold">{request.hospitalAddress}</span>
-          </div>
-        )}
       </div>
 
       {/* Divider and Sponsor / Actions block */}
@@ -14647,13 +14716,13 @@ function RequestCardRedesigned({
           </div>
         </div>
 
-        {/* Right: CALL CONTACT beside sponsor on same line */}
+        {/* Right: Premium CALL Button beside sponsor */}
         <a 
           href={`tel:${request.contactPhone}`}
-          className="bg-gradient-to-r from-[#059669] to-[#047857] hover:from-[#10B981] hover:to-[#059669] text-white px-3 py-1.8 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-1 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer shadow-xs shrink-0"
+          className="bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all hover:scale-[1.03] active:scale-95 cursor-pointer shadow-md shadow-emerald-100/80 border border-emerald-500/20 shrink-0 font-mono"
         >
-          <Phone className="w-3 h-3 text-white stroke-[2.5]" />
-          <span>CALL CONTACT</span>
+          <Phone className="w-3.5 h-3.5 text-white stroke-[2.8]" />
+          <span>CALL</span>
         </a>
       </div>
 
@@ -14793,27 +14862,34 @@ function RequestCardRedesigned({
   );
 }
 
+
 function PremiumHeroBannerCard({
   user,
   setView,
   setIsGuest,
   setAuthScreen,
   handleLogin,
+  handleLogout,
 }: {
   user: any;
   setView: (view: string) => void;
   setIsGuest: (v: boolean) => void;
   setAuthScreen: (v: 'login-email' | 'register') => void;
   handleLogin: () => void;
+  handleLogout?: () => void;
 }) {
   const isUserLoggedIn = !!user;
 
   return (
     <div 
-      className="bg-gradient-to-r from-[#FF1744] to-[#FF4D6D] rounded-[30px] p-6 sm:p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-[0_12px_40px_rgba(255,23,68,0.18)] relative overflow-hidden select-none w-full animate-in fade-in slide-in-from-bottom-5 duration-500"
+      className="bg-gradient-to-br from-slate-950 via-[#1F070C] to-[#360812] rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.18)] border border-rose-500/15 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
     >
       {/* Background soft glowing particles and ECG line in the design */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        {/* Modern glowing deep backdrop blur effects */}
+        <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[50px] mix-blend-screen" />
+        <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/20 rounded-full blur-[60px] mix-blend-screen" />
+        
         {/* Soft glowing particle dots */}
         <div className="absolute top-[20%] left-[10%] w-2 h-2 bg-white/40 rounded-full blur-[1px] animate-pulse" />
         <div className="absolute top-[75%] left-[25%] w-1.5 h-1.5 bg-white/30 rounded-full blur-[0.5px] animate-ping duration-1000" />
@@ -14841,19 +14917,19 @@ function PremiumHeroBannerCard({
       `}</style>
 
       {/* Content Columns */}
-      <div className="flex-1 text-center md:text-left z-10 space-y-6 max-w-xl">
+      <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
         {/* Left Side Texts */}
-        <div className="space-y-3">
-          <h2 className="text-2xl sm:text-3.5xl md:text-[34px] font-black text-white leading-tight tracking-tight">
+        <div className="space-y-1.5 sm:space-y-2.5">
+          <h2 className="text-xl sm:text-3xl md:text-[34px] font-black leading-tight tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-rose-100 to-white">
             You Can Be Someone's Hope. ❤️
           </h2>
-          <p className="text-sm sm:text-base text-white/90 font-medium leading-relaxed max-w-md mx-auto md:mx-0">
+          <p className="text-[11.5px] sm:text-xs md:text-sm text-rose-100/80 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
             Every blood donation is a chance to save a life. Join our community of heroes today.
           </p>
         </div>
 
         {/* Action Buttons: side by side, equal width, consistent spacing, pill-shaped */}
-        <div className="flex flex-row items-center justify-center md:justify-start gap-4 w-full">
+        <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
           {!isUserLoggedIn ? (
             <>
               <button
@@ -14861,33 +14937,41 @@ function PremiumHeroBannerCard({
                   setAuthScreen('register');
                   setIsGuest(false);
                 }}
-                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 max-w-[210px] bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-[0_4px_20px_rgba(255,255,255,0.25)] hover:bg-rose-50 hover:shadow-[0_6px_25px_rgba(255,255,255,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
               >
-                <span>👤+ Registration</span>
+                <span>👤 Join as Donor</span>
               </button>
               <button
                 onClick={() => {
                   setAuthScreen('login-email');
                   setIsGuest(false);
                 }}
-                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 max-w-[130px] bg-white/10 hover:bg-white/15 text-white border border-white/20 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer hover:border-white/30"
               >
-                <span>→ Log In</span>
+                <span>→ Login</span>
               </button>
             </>
           ) : (
             <>
               <button
-                onClick={() => setView('profile')}
-                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => setView('edit-profile')}
+                className="flex-1 max-w-[210px] bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-[0_4px_20px_rgba(255,255,255,0.25)] hover:bg-rose-50 hover:shadow-[0_6px_25px_rgba(255,255,255,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
               >
-                <span>👤 My Profile</span>
+                <span>👤 Join as Donor</span>
               </button>
               <button
-                onClick={() => setView('request-form')}
-                className="flex-1 max-w-[170px] bg-white text-[#FF1744] font-bold text-xs sm:text-sm py-3 px-4 rounded-full shadow-[0_4px_15px_rgba(0,0,0,0.08)] hover:bg-rose-50 hover:shadow-[0_6px_20px_rgba(0,0,0,0.12)] transition-all transform active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  if (handleLogout) {
+                    handleLogout();
+                  } else {
+                    signOut(auth);
+                  }
+                  setAuthScreen('login-email');
+                  setIsGuest(false);
+                }}
+                className="flex-1 max-w-[130px] bg-white/10 hover:bg-white/15 text-white border border-white/20 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer hover:border-white/30"
               >
-                <span>🩸 Post Request</span>
+                <span>→ Logout</span>
               </button>
             </>
           )}
@@ -14895,7 +14979,7 @@ function PremiumHeroBannerCard({
       </div>
 
       {/* Right Side 3D Vector Design */}
-      <div className="w-56 h-56 shrink-0 relative flex items-center justify-center z-10 select-none">
+      <div className="absolute right-[-10px] bottom-[-10px] w-28 h-28 opacity-15 sm:opacity-100 sm:relative sm:right-auto sm:bottom-auto sm:w-36 sm:h-36 md:w-52 md:h-52 shrink-0 flex items-center justify-center z-0 sm:z-10 select-none">
         <svg viewBox="0 0 240 240" className="w-full h-full drop-shadow-[0_12px_28px_rgba(0,0,0,0.15)]">
           <defs>
             {/* Glossy 3D Drop Radial Gradient */}
@@ -14996,6 +15080,7 @@ function PremiumHeroBannerCard({
     </div>
   );
 }
+
 
 function JoinDonorPromoCard({
   user,
@@ -16462,430 +16547,357 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
     }
   };
 
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const dCoords = DISTRICT_COORDS[formData.district] || { lat: 23.6850, lng: 90.3563 };
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.99 }}
       transition={{ duration: 0.3 }}
-      className="w-full max-w-[430px] md:max-w-xl lg:max-w-2xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-150/50 relative text-slate-800 font-sans pb-8 animate-fade-in"
+      className="w-full max-w-[430px] mx-auto bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8 animate-fade-in"
     >
-      {/* Cover Photo Banner */}
-      <div className="h-32 bg-slate-900 relative overflow-hidden">
-        {formData.coverURL ? (
-          <img 
-            src={formData.coverURL} 
-            className="w-full h-full object-cover opacity-80" 
-            alt="Cover Banner" 
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-r from-red-650 via-[#FF1744] to-red-600" />
-        )}
-        
-        {/* Soft Linear Gradient Mask */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#F6F8FC] via-slate-950/20 to-transparent" />
-        
-        {/* Cover Photo Upload Button - Minimal Pencil Icon */}
-        <button
-          type="button"
-          onClick={() => {
-            const url = prompt('Enter Cover Image URL (Facebook-style web link):');
-            if (url !== null) setFormData({ ...formData, coverURL: url });
-          }}
-          className="absolute top-4 right-4 bg-white/90 backdrop-blur-md text-slate-700 hover:bg-white p-2 rounded-full shadow-md transition-all hover:scale-105 active:scale-95 cursor-pointer"
-          title="Change Cover Art"
-        >
-          <Camera className="w-3.5 h-3.5" />
-        </button>
+      {/* Red point roof header shape */}
+      <div className="relative w-full h-11 overflow-visible mb-6" style={{ filter: 'drop-shadow(0px 6px 4px rgba(0,0,0,0.08))' }}>
+        <div className="w-full h-full bg-gradient-to-r from-[#FF1744] to-[#D50000]" style={{ clipPath: 'polygon(0 0, 100% 0, 50% 100%)' }} />
       </div>
 
-      {/* Main Container Overlap */}
-      <div className="px-5 -mt-12 relative z-10">
-        
-        {/* Header Block with Avatar and Page Title */}
-        {/* Header Block with Avatar and Page Title */}
-        <div className="flex flex-col items-center text-center mb-6">
-          <div 
-            onClick={handleImageClick}
-            className="relative group/photo cursor-pointer hover:scale-[1.03] active:scale-95 transition-all mb-3 select-none"
-            title="Click to select or upload profile avatar"
-          >
-            <img 
-              src={formData.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.displayName || 'Donor')}&background=fecdd3&color=e11d48&bold=true`} 
-              className="w-24 h-24 rounded-full object-cover border-4 border-white shadow-xl" 
-              alt="Avatar"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute bottom-1 right-1 bg-red-655 text-white w-7 h-7 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-              <Camera className="w-3.5 h-3.5" />
-            </div>
-          </div>
-          <input 
-            type="file" 
-            ref={photoInputRef} 
-            accept="image/*" 
-            onChange={handlePhotoChange} 
-            className="hidden" 
-          />
-
-          <h2 className="text-lg font-black text-slate-900 tracking-tight leading-none">
-            Edit Profile Registry
-          </h2>
-          <p className="text-[10px] uppercase tracking-widest font-black text-slate-400 mt-1.5">
-            Volunteering Credentials
-          </p>
-        </div>
+      <div className="px-6 relative z-10">
+        <h2 className="text-xl font-black text-slate-900 tracking-tight leading-none text-center mb-6">
+          Edit Profile Registry
+        </h2>
 
         {/* Unified Redesigned Edit Form */}
-        <form onSubmit={handleSubmit} className="space-y-4">
-              
-              {/* SECTION A: IDENTITY & CONTACT INFO */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <div className="p-2 bg-slate-50 rounded-lg text-slate-500">
-                    <UserIcon className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Clinical Identity Details</h3>
-                    <p className="text-[10px] font-bold text-slate-400 font-semibold leading-none">Manage names, gender and accessibility phone channels</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Name field */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Full Display Name</label>
-                    <input 
-                      required
-                      type="text"
-                      placeholder="e.g. Adnan Mannan"
-                      value={formData.displayName}
-                      onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
-                    />
-                  </div>
-
-                  {/* Phone Number Field */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Mobile Contact Phone</label>
-                    <input 
-                      required
-                      type="tel"
-                      placeholder="e.g. 01800000000"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
-                    />
-                  </div>
-                </div>
-
-                {/* Username Custom Handle Field */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                    <span>Unique Handle (Public Website Username)</span>
-                    <span className="text-[8px] font-extrabold text-[#ff2247] bg-rose-50 border border-rose-100 px-2.5 py-0.5 rounded-full uppercase tracking-widest leading-none">Custom link</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-xs font-black text-slate-900 font-mono select-none">bloodlink.bd/</span>
-                    </div>
-                    <input 
-                      type="text"
-                      placeholder="e.g. mannan"
-                      value={formData.username || ''}
-                      onChange={(e) => {
-                        const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
-                        setFormData({ ...formData, username: cleanVal });
-                      }}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-[#ff2247] focus:bg-white rounded-2xl pl-[112px] pr-4 py-3 text-xs font-black text-slate-905 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold font-mono"
-                    />
-                  </div>
-                </div>
-                  {formData.username && (
-                    <div className="mt-1 flex items-center gap-1 text-[10px] font-extrabold">
-                      {allUsers.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase() && u.uid !== user.uid) ? (
-                        <span className="text-red-600">
-                          ✖ Handle is currently claimed by another active donor. Choice is invalid.
-                        </span>
-                      ) : (
-                        <span className="text-emerald-600 animate-pulse">
-                          ✔ Handle is completely available! Your direct profile url: <strong>bloodlink.bd/{formData.username}</strong>
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                {/* Gender Switch */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Your Gender</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['male', 'female', 'other'] as const).map(g => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, gender: g })}
-                        className={`py-3 rounded-2xl font-black text-[10px] border-2 transition-all uppercase tracking-widest cursor-pointer flex items-center justify-center gap-1 ${
-                          formData.gender === g 
-                            ? 'bg-slate-900 border-slate-900 text-white shadow-md' 
-                            : 'bg-white border-slate-150 text-slate-500 hover:border-slate-300'
-                        }`}
-                      >
-                        {g === 'male' && <span className="text-[12px]">♂</span>}
-                        {g === 'female' && <span className="text-[12px]">♀</span>}
-                        {g === 'other' && <span className="text-[12px]">⚦</span>}
-                        <span>{g}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION B: CLINICAL/BLOOD PROFILE DETAILS */}
-              <div className="space-y-5">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <div className="p-2 bg-slate-50 rounded-lg text-red-500">
-                    <Droplets className="w-4 h-4 text-red-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Medical Parameters</h3>
-                    <p className="text-[10px] font-bold text-slate-400 font-semibold">Important medical status for routing matching requests</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Your Official Blood Group</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {BLOOD_GROUPS.map(g => (
-                      <button
-                        key={g}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, bloodGroup: g })}
-                        className={`py-3 rounded-2xl font-black text-xs border-2 transition-all cursor-pointer ${
-                          formData.bloodGroup === g 
-                            ? 'bg-red-600 border-red-600 text-white shadow-xl shadow-red-100 scale-[1.02]' 
-                            : 'bg-white border-slate-150 text-slate-600 hover:border-red-200 hover:bg-rose-50/5'
-                        }`}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Blood Group Compatibility Guidance Tooltip Card */}
-                {formData.bloodGroup && (
-                  <div className="bg-red-500/[0.02]/ animate-in p-4 rounded-2xl border border-red-500/10 fade-in duration-300">
-                    <div className="flex gap-2.5 items-start">
-                      <Heart className="w-5 h-5 text-red-500 shrink-0 fill-red-500 animate-pulse mt-0.5" />
-                      <div>
-                        <p className="text-[9px] font-black uppercase tracking-widest text-red-600">Bio-Compatibility Match Info</p>
-                        <p className="text-slate-600 text-[11px] font-semibold leading-relaxed mt-1">
-                          As an <strong className="text-slate-800 font-extrabold">{formData.bloodGroup}</strong> donor, you can save patients needing blood groups:{' '}
-                          <span className="font-extrabold text-red-600">
-                            {formData.bloodGroup === 'O-' && 'Everyone (Universal Donor!)'}
-                            {formData.bloodGroup === 'O+' && 'O+, A+, B+, AB+'}
-                            {formData.bloodGroup === 'A-' && 'A-, A+, AB-, AB+'}
-                            {formData.bloodGroup === 'A+' && 'A+, AB+'}
-                            {formData.bloodGroup === 'B-' && 'B-, B+, AB-, AB+'}
-                            {formData.bloodGroup === 'B+' && 'B+, AB+'}
-                            {formData.bloodGroup === 'AB-' && 'AB-, AB+'}
-                            {formData.bloodGroup === 'AB+' && 'AB+ Only (Universal Recipient!)'}
-                          </span>.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Weight & Height Input Group */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Weight Field */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Weight (KG)</label>
-                    <input 
-                      type="number"
-                      placeholder="e.g. 70"
-                      min="30"
-                      max="200"
-                      value={formData.weight !== undefined ? formData.weight : ''}
-                      onChange={(e) => {
-                        const val = e.target.value === '' ? undefined : Number(e.target.value);
-                        setFormData({ ...formData, weight: val });
-                      }}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold"
-                    />
-                  </div>
-
-                  {/* Height Field (Feet & Inches) */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Height (Feet/Inches)</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <input 
-                        type="number"
-                        placeholder="Ft"
-                        min="3"
-                        max="8"
-                        value={formData.heightFeet !== undefined ? formData.heightFeet : ''}
-                        onChange={(e) => {
-                          const val = e.target.value === '' ? undefined : Number(e.target.value);
-                          setFormData({ ...formData, heightFeet: val });
-                        }}
-                        className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-3 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold text-center"
-                      />
-                      <input 
-                        type="number"
-                        placeholder="In"
-                        min="0"
-                        max="11"
-                        value={formData.heightInches !== undefined ? formData.heightInches : ''}
-                        onChange={(e) => {
-                          const val = e.target.value === '' ? undefined : Number(e.target.value);
-                          setFormData({ ...formData, heightInches: val });
-                        }}
-                        className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-3 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all placeholder:text-black font-semibold text-center"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Last Donation date picker */}
-                <div className="space-y-1.5">
-                  <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center justify-between">
-                    <span>Last Clinically Donated Date</span>
-                    <span className="text-[8px] font-extrabold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-full uppercase tracking-widest leading-none">Optional</span>
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Calendar className="w-4 h-4 text-slate-400" />
-                    </div>
-                    <input 
-                      type="date"
-                      value={formData.lastDonationDate}
-                      onChange={(e) => setFormData({ ...formData, lastDonationDate: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl pl-11 pr-4 py-3 text-xs font-bold text-slate-700 focus:ring-4 focus:ring-red-500/10 outline-none transition-all cursor-pointer"
-                    />
-                  </div>
-
-                  {formData.lastDonationDate && (
-                    <div className="bg-emerald-500/[0.03]/ border border-emerald-500/10 p-3.5 rounded-2xl flex items-center gap-3 mt-2 animate-in fade-in duration-200">
-                      <Clock className="w-5 h-5 text-emerald-600 shrink-0" />
-                      <div>
-                        <p className="text-[9px] font-black uppercase text-emerald-700 tracking-wider">Next Safely Eligible Donation Date</p>
-                        <p className="text-[12.5px] font-black text-slate-800">
-                          {(() => {
-                            const lastDate = new Date(formData.lastDonationDate);
-                            const months = formData.gender === 'female' ? 4 : 3;
-                            lastDate.setMonth(lastDate.getMonth() + months);
-                            return formatDisplayDate(lastDate.toISOString().split('T')[0]);
-                          })()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-slate-400 font-semibold px-1">Allows automatic eligibility computation according to clinical protocol (3 months for males, 4 months for females).</p>
-                </div>
-              </div>
-
-              {/* SECTION C: REGIONAL / LOCATION SETTINGS */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-                  <div className="p-2 bg-slate-50 rounded-lg text-slate-500">
-                    <MapPin className="w-5 h-5 text-slate-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Regional Location</h3>
-                    <p className="text-[10px] font-bold text-slate-400 font-semibold animate-none">Discovery of local matching blood donors is based on these parameters</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* District select */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">District Residence</label>
-                    <select 
-                      required
-                      value={formData.district}
-                      onChange={(e) => setFormData({ ...formData, district: e.target.value, thana: '' })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 text-slate-700 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-semibold focus:ring-4 focus:ring-red-500/10 outline-none transition-all cursor-pointer"
-                    >
-                      <option value="">Select District</option>
-                      {Object.keys(BANGLADESH_LOCATIONS).map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Thana Select */}
-                  <div className="space-y-1.5">
-                    <label className="block text-[11px] font-extrabold text-slate-550 uppercase tracking-wider">Thana / Upazila</label>
-                    <select 
-                      required
-                      disabled={!formData.district}
-                      value={formData.thana}
-                      onChange={(e) => setFormData({ ...formData, thana: e.target.value })}
-                      className="w-full bg-slate-50 hover:bg-slate-50/50 text-slate-705 border border-slate-200 focus:border-red-500 focus:bg-white rounded-2xl px-4 py-3 text-xs font-semibold focus:ring-4 focus:ring-red-500/10 outline-none transition-all disabled:opacity-40 cursor-pointer"
-                    >
-                      <option value="">Select Thana</option>
-                      {formData.district && BANGLADESH_LOCATIONS[formData.district].map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION D: AVAILABILITY & UNION ASSOCIATION */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-slate-50 rounded-lg text-slate-500">
-                      <Heart className="w-5 h-5 text-slate-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Availability Status</h3>
-                      <p className="text-[10px] font-bold text-slate-400 font-semibold animate-none">Display status in public matchmaking and recipient searches</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-150">
-                  <div>
-                    <p className="text-xs font-black text-slate-900 uppercase tracking-wide">Ready & Available to Donate</p>
-                    <p className="text-[10px] text-slate-505 text-slate-500 font-semibold animate-none">Toggle to instantly appear in regional critical patient searches</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, isAvailable: !formData.isAvailable })}
-                    className={`w-14 h-8 rounded-full transition-colors relative cursor-pointer ${formData.isAvailable ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                  >
-                    <motion.div 
-                      animate={{ x: formData.isAvailable ? 26 : 4 }}
-                      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                      className="absolute top-1 w-6 h-6 bg-white rounded-full shadow-md animate-none"
-                    />
-                  </button>
-                </div>
-
-
-              </div>
-
-              {/* SAVE / SUBMIT ACTIONS AND LOGOUT FOOTER */}
-              <div className="pt-6 border-t border-slate-100 flex flex-col md:flex-row items-center gap-3">
-                <button 
-                  type="submit"
-                  disabled={saving}
-                  className="w-full md:flex-1 bg-slate-900 hover:bg-slate-850 text-white font-black text-xs uppercase tracking-[0.2em] py-4 rounded-2xl shadow-xl hover:shadow-slate-200/50 transition-all cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-center"
-                >
-                  {saving ? 'Synchronizing Profile...' : 'Save Profile Changes'}
-                </button>
-                <button 
-                  type="button"
-                  onClick={onLogout}
-                  className="w-full md:w-auto px-6 py-4 font-black text-[10px] uppercase text-red-500 hover:bg-rose-500/5 rounded-2xl border border-red-500/15 cursor-pointer transition-colors flex items-center justify-center gap-2 active:scale-95"
-                >
-                  <LogOut className="w-4 h-4 text-red-500 shrink-0" /> Sign Out
-                </button>
-              </div>
-            </form>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          
+          {/* FULL NAME */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-black/80">Full Name</label>
+            <input 
+              required
+              type="text"
+              placeholder="TYPE YOUR NAME"
+              value={formData.displayName}
+              onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+              className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-bold text-slate-800 outline-none uppercase tracking-wider focus:border-[#FF1744] transition-all placeholder:text-zinc-450"
+            />
           </div>
-        </motion.div>
-      );
+
+          {/* AREA */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-black/80">Area</label>
+            <div className="grid grid-cols-2 gap-4">
+              <select 
+                required
+                value={formData.district}
+                onChange={(e) => setFormData({ ...formData, district: e.target.value, thana: '' })}
+                className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-semibold text-slate-800 uppercase tracking-wider outline-none cursor-pointer focus:border-[#FF1744] transition-all"
+              >
+                <option value="">SELECT DISTRICT</option>
+                {Object.keys(BANGLADESH_LOCATIONS).map(d => (
+                  <option key={d} value={d} className="text-slate-800">{d.toUpperCase()}</option>
+                ))}
+              </select>
+              <select 
+                required
+                disabled={!formData.district}
+                value={formData.thana}
+                onChange={(e) => setFormData({ ...formData, thana: e.target.value })}
+                className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-semibold text-slate-800 uppercase tracking-wider outline-none cursor-pointer disabled:opacity-40 focus:border-[#FF1744] transition-all"
+              >
+                <option value="">SELECT THANA</option>
+                {formData.district && BANGLADESH_LOCATIONS[formData.district].map(t => (
+                  <option key={t} value={t} className="text-slate-800">{t.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* PHONE */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-black/80">Phone</label>
+            <input 
+              required
+              type="tel"
+              placeholder="TYPE PHONE NUMBER"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-bold text-slate-800 outline-none uppercase tracking-wider focus:border-[#FF1744] transition-all placeholder:text-zinc-450"
+            />
+          </div>
+
+          {/* LAST DONATION DATE */}
+          <div className="space-y-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-black/80">Last Donation Date</label>
+            <input 
+              type="date"
+              value={formData.lastDonationDate}
+              onChange={(e) => setFormData({ ...formData, lastDonationDate: e.target.value })}
+              className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-bold text-slate-800 outline-none uppercase tracking-wider focus:border-[#FF1744] transition-all cursor-pointer text-left"
+            />
+            {formData.lastDonationDate && (
+              <div className="text-[9px] font-bold text-[#FF1744] mt-1 uppercase tracking-wider">
+                Next Eligible: {(() => {
+                  const lastDate = new Date(formData.lastDonationDate);
+                  const months = formData.gender === 'female' ? 4 : 3;
+                  lastDate.setMonth(lastDate.getMonth() + months);
+                  return formatDisplayDate(lastDate.toISOString().split('T')[0]).toUpperCase();
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Blood Groups Section */}
+          <div className="space-y-3">
+            <div className="text-lg font-bold text-slate-900">Blood Groups</div>
+            <div className="flex flex-wrap gap-2">
+              {['A+', 'B+', 'AB+', 'O+', 'A-', 'B-', 'AB-', 'O-'].map(g => (
+                <button
+                  key={g}
+                  type="button"
+                  onClick={() => setFormData({ ...formData, bloodGroup: g })}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    formData.bloodGroup === g 
+                      ? 'bg-[#FF1744] border-[#FF1744] text-white shadow-sm' 
+                      : 'bg-white border-[#FF1744] text-[#FF1744] hover:bg-red-50/50'
+                  }`}
+                >
+                  {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* LOCATION Section */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-black/80">Location</label>
+            <div className="h-44 rounded-2xl overflow-hidden border border-slate-200 shadow-inner relative z-0">
+              <Map
+                defaultCenter={dCoords}
+                center={dCoords}
+                defaultZoom={formData.district ? 12 : 7}
+                gestureHandling={'cooperative'}
+                disableDefaultUI={true}
+                className="w-full h-full rounded-2xl"
+              >
+                {formData.district && <AdvancedMarker position={dCoords} />}
+              </Map>
+            </div>
+          </div>
+
+          {/* Collapsible Advanced Section */}
+          <div className="border-t border-b border-slate-100 py-3 mt-4">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-widest text-[#FF1744] hover:text-red-700 transition-colors cursor-pointer"
+            >
+              <span>{showAdvanced ? 'Hide Additional Details' : 'Edit Additional Details (Avatar, Handle, Gender, Weight)'}</span>
+              <motion.span animate={{ rotate: showAdvanced ? 180 : 0 }}>
+                ▼
+              </motion.span>
+            </button>
+
+            <AnimatePresence>
+              {showAdvanced && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden space-y-4 pt-3"
+                >
+                  {/* Profile Avatar Upload */}
+                  <div className="flex flex-col items-center text-center p-3 bg-slate-50 rounded-2xl">
+                    <div 
+                      onClick={handleImageClick}
+                      className="relative group/photo cursor-pointer hover:scale-[1.03] active:scale-95 transition-all mb-2 select-none"
+                      title="Click to select or upload profile avatar"
+                    >
+                      <img 
+                        src={formData.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.displayName || 'Donor')}&background=fecdd3&color=e11d48&bold=true`} 
+                        className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" 
+                        alt="Avatar"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="absolute bottom-0 right-0 bg-[#FF1744] text-white w-5 h-5 rounded-full flex items-center justify-center border border-white shadow-sm">
+                        <Camera className="w-2.5 h-2.5" />
+                      </div>
+                    </div>
+                    <input 
+                      type="file" 
+                      ref={photoInputRef} 
+                      accept="image/*" 
+                      onChange={handlePhotoChange} 
+                      className="hidden" 
+                    />
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Click to edit avatar photo</span>
+                    
+                    {/* Cover URL Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const url = prompt('Enter Cover Image URL (Facebook-style web link):');
+                        if (url !== null) setFormData({ ...formData, coverURL: url });
+                      }}
+                      className="mt-2 px-3 py-1 bg-white border border-slate-200 text-[10px] font-bold uppercase text-slate-600 rounded-lg shadow-sm hover:bg-slate-100 transition-all"
+                    >
+                      Change Cover Photo URL
+                    </button>
+                  </div>
+
+                  {/* Username Handle Input */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Unique Profile Handle</label>
+                    <div className="relative border-b border-slate-300 pb-1">
+                      <span className="text-xs text-slate-400 font-mono">bloodlink.bd/</span>
+                      <input 
+                        type="text"
+                        placeholder="username"
+                        value={formData.username || ''}
+                        onChange={(e) => {
+                          const cleanVal = e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "");
+                          setFormData({ ...formData, username: cleanVal });
+                        }}
+                        className="bg-transparent text-xs font-mono font-bold text-slate-800 outline-none w-2/3 ml-1"
+                      />
+                    </div>
+                    {formData.username && (
+                      <div className="text-[9px] font-semibold mt-1">
+                        {allUsers.some(u => u.username?.toLowerCase() === formData.username?.toLowerCase() && u.uid !== user.uid) ? (
+                          <span className="text-red-500">✖ Claimed by another active donor.</span>
+                        ) : (
+                          <span className="text-emerald-600">✔ Available! bloodlink.bd/{formData.username}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Gender Selection */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Your Gender</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['male', 'female', 'other'] as const).map(g => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, gender: g })}
+                          className={`py-2 rounded-xl font-bold text-[10px] border transition-all uppercase tracking-widest cursor-pointer ${
+                            formData.gender === g 
+                              ? 'bg-slate-900 border-slate-900 text-white shadow-sm' 
+                              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Weight and Height */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Weight (KG)</label>
+                      <input 
+                        type="number"
+                        placeholder="e.g. 70"
+                        min="30"
+                        max="200"
+                        value={formData.weight !== undefined ? formData.weight : ''}
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? undefined : Number(e.target.value);
+                          setFormData({ ...formData, weight: val });
+                        }}
+                        className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF1744] transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Height (Feet/Inches)</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input 
+                          type="number"
+                          placeholder="Ft"
+                          min="3"
+                          max="8"
+                          value={formData.heightFeet !== undefined ? formData.heightFeet : ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? undefined : Number(e.target.value);
+                            setFormData({ ...formData, heightFeet: val });
+                          }}
+                          className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-semibold text-slate-800 outline-none text-center focus:border-[#FF1744] transition-all"
+                        />
+                        <input 
+                          type="number"
+                          placeholder="In"
+                          min="0"
+                          max="11"
+                          value={formData.heightInches !== undefined ? formData.heightInches : ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? undefined : Number(e.target.value);
+                            setFormData({ ...formData, heightInches: val });
+                          }}
+                          className="w-full bg-transparent border-b border-slate-300 py-2 text-xs font-semibold text-slate-800 outline-none text-center focus:border-[#FF1744] transition-all"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Availability Toggle */}
+                  <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">Ready & Available to Donate</p>
+                      <p className="text-[9px] text-slate-400 font-medium">Appear in regional matching searches</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, isAvailable: !formData.isAvailable })}
+                      className={`w-12 h-6.5 rounded-full transition-colors relative cursor-pointer ${formData.isAvailable ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                    >
+                      <motion.div 
+                        animate={{ x: formData.isAvailable ? 22 : 3 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                        className="absolute top-0.5 w-5.5 h-5.5 bg-white rounded-full shadow-md"
+                      />
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* SAVE BUTTON */}
+          <div className="pt-4">
+            <button 
+              type="submit"
+              disabled={saving}
+              className="w-full bg-[#FF1744] hover:bg-red-700 text-white font-extrabold text-lg py-4 rounded-2xl shadow-lg shadow-red-200 transition-all cursor-pointer active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed text-center"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </form>
+
+        {/* FOOTER ACTIONS */}
+        <div className="mt-6 flex justify-between items-center border-t border-slate-100 pt-4 px-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs font-semibold text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+          >
+            ← Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="text-xs font-semibold text-red-500 hover:text-red-700 cursor-pointer transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
     }
 
 function NotificationsView({ requests, globalAlerts, profile, addToast, onDonationDone }: { requests: BloodRequest[], globalAlerts?: any[], profile: UserProfile | null, addToast: (title: string, message: string, type: Toast['type']) => void, onDonationDone: (req: BloodRequest) => void }) {
@@ -19699,6 +19711,7 @@ function UserProfileHistory({ donations, requests, currentUser, currentProfile, 
 
 function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile, onDeleteRequest, onDonationDone, addToast, allUsers, askConfirm, notifyAdmins, onViewProfile, onEditProfile }: { uid: string, onBack: () => void, onMessage: (uid: string) => void, currentUser: FirebaseUser | null, currentProfile: UserProfile | null, onDeleteRequest: (id: string) => void, onDonationDone: (req: BloodRequest) => void, addToast: (title: string, body: string, type: 'success' | 'error' | 'info') => void, allUsers: UserProfile[], askConfirm: any, notifyAdmins: any, onViewProfile: (uid: string) => void, onEditProfile?: () => void }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [userRequests, setUserRequests] = useState<BloodRequest[]>([]);
   const [donations, setDonations] = useState<DonationRecord[]>([]);
   const [userPosts, setUserPosts] = useState<CommunityPost[]>([]);
@@ -19717,6 +19730,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
 
     const loadData = async () => {
       setLoading(true);
+      setProfileLoaded(false);
       
       let targetUid = uid;
       
@@ -19761,6 +19775,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       }
 
       if (!targetUid) {
+        setProfileLoaded(true);
         setLoading(false);
         return;
       }
@@ -19770,7 +19785,13 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       unsubscribeProfile = onSnapshot(profileRef, (doc) => {
         if (doc.exists()) {
           setProfile(doc.data() as UserProfile);
+        } else {
+          setProfile(null);
         }
+        setProfileLoaded(true);
+      }, (err) => {
+        console.error("Profile fetch failed:", err);
+        setProfileLoaded(true);
       });
 
       // Load Requests (Need History) using resolved targetUid
@@ -19818,7 +19839,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
     };
   }, [uid, allUsers]);
 
-  if (loading) {
+  if (loading || !profileLoaded) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <Droplets className="w-12 h-12 text-red-500 animate-bounce" />
