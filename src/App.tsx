@@ -17673,14 +17673,22 @@ function CallOverlay({
     pc.ontrack = (event) => {
       console.log("Received remote track:", event.track.kind);
       if (pcRef.current === pc) {
-        const stream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
-        setRemoteStream(stream);
+        // Explicitly enable the received track
+        event.track.enabled = true;
+        console.log("Remote track enabled:", event.track.kind, event.track.id);
+
+        const baseStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
         
-        // Explicitly enable remote tracks
-        stream.getTracks().forEach(t => {
+        // Ensure all tracks in the stream are enabled
+        baseStream.getTracks().forEach(t => {
           t.enabled = true;
-          console.log("Remote track enabled:", t.kind, t.id);
         });
+
+        // To force React to detect a new stream reference and trigger updates (e.g. for checkVideo/hasRemoteVideo),
+        // we construct a new MediaStream instance from the tracks of the baseStream.
+        const newStream = new MediaStream(baseStream.getTracks());
+        console.log(`Updated remote stream tracks: audio=${newStream.getAudioTracks().length}, video=${newStream.getVideoTracks().length}`);
+        setRemoteStream(newStream);
       }
     };
 
