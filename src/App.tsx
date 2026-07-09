@@ -17418,16 +17418,28 @@ function CallOverlay({
   const setLocalVideoRef = useCallback((el: HTMLVideoElement | null) => {
     localVideoRef.current = el;
     if (el && localStream) {
-      el.srcObject = localStream;
-      el.play().catch(err => console.error("Local video play failed:", err));
+      if (el.srcObject !== localStream) {
+        el.srcObject = localStream;
+        el.play().catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error("Local video play failed:", err);
+          }
+        });
+      }
     }
   }, [localStream]);
 
   const setRemoteVideoRef = useCallback((el: HTMLVideoElement | null) => {
     remoteVideoRef.current = el;
     if (el && remoteStream) {
-      el.srcObject = remoteStream;
-      el.play().catch(err => console.error("Remote video play failed:", err));
+      if (el.srcObject !== remoteStream) {
+        el.srcObject = remoteStream;
+        el.play().catch(err => {
+          if (err.name !== 'AbortError') {
+            console.error("Remote video play failed:", err);
+          }
+        });
+      }
     }
   }, [remoteStream]);
 
@@ -17740,6 +17752,8 @@ function CallOverlay({
 
     let unsubCall: () => void = () => {};
     let signalingInProgress = false;
+    let offerProcessed = false;
+    let answerProcessed = false;
 
     try {
       if (!isIncoming) {
@@ -17766,15 +17780,17 @@ function CallOverlay({
 
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-          if (data?.answer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress) {
+          if (data?.answer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress && !answerProcessed) {
             try {
               signalingInProgress = true;
+              answerProcessed = true;
               console.log("Caller: Setting remote description (answer)...");
               await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
               if (pcRef.current !== pc || isClosed(pc)) return;
               await processQueue();
             } catch (e) {
               console.error("setRemoteDescription answer error", e);
+              answerProcessed = false;
             } finally {
               signalingInProgress = false;
             }
@@ -17784,9 +17800,10 @@ function CallOverlay({
         // Receiver waits for offer
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-          if (data?.offer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress) {
+          if (data?.offer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress && !offerProcessed) {
             try {
               signalingInProgress = true;
+              offerProcessed = true;
               console.log("Receiver: Setting remote description (offer)...");
               await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
               if (pcRef.current !== pc || isClosed(pc)) return;
@@ -17805,6 +17822,7 @@ function CallOverlay({
               console.log("Receiver: Answer sent.");
             } catch (e) {
               console.error("Receiver signaling error:", e);
+              offerProcessed = false;
             } finally {
               signalingInProgress = false;
             }
@@ -17873,15 +17891,14 @@ function CallOverlay({
         connected ? (
           <div className="absolute inset-0 z-0 bg-slate-950 flex items-center justify-center overflow-hidden">
             {/* Remote Video element */}
-            {hasRemoteVideo ? (
-              <video
-                ref={setRemoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center">
+            <video
+              ref={setRemoteVideoRef}
+              autoPlay
+              playsInline
+              className={`w-full h-full object-cover ${hasRemoteVideo ? 'block' : 'hidden'}`}
+            />
+            {!hasRemoteVideo && (
+              <div className="flex flex-col items-center justify-center absolute inset-0 bg-slate-950 z-10">
                 <img 
                   src={avatarUrl}
                   className="w-28 h-28 rounded-full object-cover border-4 border-white/10 p-1 mb-4 shadow-xl animate-pulse"
