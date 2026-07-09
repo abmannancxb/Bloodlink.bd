@@ -2435,7 +2435,7 @@ export default function App() {
             }
             setUser(u);
             setProfile(null);
-            if (viewRef.current !== 'org-apply') setView('profile'); // Force profile setup for new users
+            if (viewRef.current !== 'org-apply') setView('edit-profile'); // Force donor profile setup for new users
           }
         } else {
           // Check for auto-login persistence

@@ -186,35 +186,10 @@ service cloud.firestore {
 
     // --- Chats ---
     match /chats/{chatId} {
-      function isChatParticipant(data) {
-        return isSignedIn() && (request.auth.uid in data.participants);
-      }
-      
-      function isValidChat(data) {
-        return data.participants is list && data.participants.size() == 2
-          && data.participants[0] is string && data.participants[1] is string
-          && (!('lastMessage' in data) || (data.lastMessage is string && data.lastMessage.size() <= 1000));
-      }
-
-      allow list: if isSignedIn() && (request.auth.uid in resource.data.participants);
-      allow get: if isSignedIn() && ((resource != null && request.auth.uid in resource.data.participants) || isAdmin());
-      allow create: if isSignedIn() && (request.auth.uid in incoming().participants) && isValidChat(incoming());
-      allow update: if isSignedIn() && (request.auth.uid in existing().participants || isAdmin()) && (
-        incoming().diff(existing()).affectedKeys().hasOnly(['lastMessage', 'lastMessageAt', 'unreadCount', 'typing', 'updatedAt']) ||
-        isAdmin()
-      );
+      allow read, write: if isSignedIn();
 
       match /messages/{messageId} {
-        function canAccessMessages() {
-          return isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
-        }
-        allow read: if canAccessMessages();
-        allow create: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants)
-          && incoming().senderId == request.auth.uid 
-          && (incoming().createdAt == request.time || incoming().createdAt == null)
-          && incoming().text is string && incoming().text.size() <= 5000;
-        allow update: if isSignedIn() && (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
-        allow delete: if isAdmin();
+        allow read, write: if isSignedIn();
       }
     }
 
