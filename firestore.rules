@@ -327,5 +327,27 @@ service cloud.firestore {
       allow update: if isAdmin() && isValidHealthTip(incoming()) && incoming().createdAt == existing().createdAt;
       allow delete: if isAdmin();
     }
+
+    // --- Banners ---
+    match /banners/{bannerId} {
+      function isValidBanner(data) {
+        return data.title is string && data.title.size() <= 200
+          && data.subtitle is string && data.subtitle.size() <= 10000
+          && (!('buttonText' in data) || data.buttonText is string && data.buttonText.size() <= 100)
+          && (!('buttonLink' in data) || data.buttonLink is string && data.buttonLink.size() <= 1000)
+          && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 6000000))
+          && (!('bgColor' in data) || data.bgColor is string && data.bgColor.size() <= 1000)
+          && data.isActive is bool;
+      }
+
+      allow read, list: if true;
+      allow create: if isValidId(bannerId) && isAdmin() && isValidBanner(incoming())
+        && incoming().keys().hasAll(['title', 'subtitle', 'isActive', 'createdAt'])
+        && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidBanner(incoming()) 
+        && (incoming().createdAt == existing().createdAt)
+        && (!('updatedAt' in incoming()) || incoming().updatedAt == request.time || incoming().updatedAt == existing().updatedAt);
+      allow delete: if isAdmin();
+    }
   }
 }

@@ -297,4 +297,17 @@ export interface HealthTip {
   readTime?: string;
 }
 
+export interface AdminCustomBanner {
+  id: string;
+  title: string;
+  subtitle: string;
+  buttonText: string;
+  buttonLink: string;
+  imageUrl?: string;
+  bgColor?: string;
+  isActive: boolean;
+  createdAt: any;
+  createdBy?: string;
+}
+
 export { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';

@@ -51,6 +51,7 @@ export { auth, db, messaging };
 import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
 import AIBloodAssistant from './components/AIBloodAssistant';
 import { DonorCardModal } from './components/DonorCardModal';
+import AndroidBuildTab from './components/AndroidBuildTab';
 
 import { 
   OperationType,
@@ -72,7 +73,8 @@ import {
   OrganizationMember,
   getDonorId,
   AppEvent,
-  HealthTip
+  HealthTip,
+  AdminCustomBanner
 } from './types';
 export type { 
   UserProfile, 
@@ -92,7 +94,8 @@ export type {
   SystemSettings,
   OrganizationMember,
   AppEvent,
-  HealthTip
+  HealthTip,
+  AdminCustomBanner
 };
 export { OperationType };
 
@@ -196,7 +199,8 @@ import {
   Bot,
   QrCode,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Smartphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -549,6 +553,7 @@ export default function App() {
   const [orgApplications, setOrgApplications] = useState<OrganizationApplication[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
+  const [customBanners, setCustomBanners] = useState<AdminCustomBanner[]>([]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
@@ -710,7 +715,26 @@ export default function App() {
     return false;
   });
 
-  const [dismissedEmergencyIds, setDismissedEmergencyIds] = useState<string[]>([]);
+  const [dismissedEmergencyIds, setDismissedEmergencyIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('bloodlink_dismissed_emergencies');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const handleDismissEmergencyId = (id: string) => {
+    setDismissedEmergencyIds(prev => {
+      const next = prev.includes(id) ? prev : [...prev, id];
+      try {
+        localStorage.setItem('bloodlink_dismissed_emergencies', JSON.stringify(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
 
   const [showEmergencyAfterDelay, setShowEmergencyAfterDelay] = useState<boolean>(false);
 
@@ -2824,6 +2848,22 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  // Banners Firestore Listener (Anyone can view custom banners)
+  useEffect(() => {
+    const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const bns = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as AdminCustomBanner[];
+      setCustomBanners(bns);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'banners');
+    });
+
+    return unsubscribe;
+  }, []);
+
   // Admin/Chat: Users Listener
   useEffect(() => {
     // We need users for stats, maps, public profiles, and routing as well
@@ -4027,7 +4067,7 @@ export default function App() {
                             dragElastic={{ left: 0.7, right: 0.7 }}
                             onDragEnd={(event, info) => {
                               if (info.offset.x > 100 || info.offset.x < -100) {
-                                setDismissedEmergencyIds(prev => [...prev, activeAlert!.id]);
+                                handleDismissEmergencyId(activeAlert!.id);
                                 if (addToast) {
                                   addToast("Alert Swiped", "You successfully dismissed the emergency request.", "info");
                                 }
@@ -4096,7 +4136,7 @@ export default function App() {
                                 <button 
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDismissedEmergencyIds(prev => [...prev, activeAlert!.id]);
+                                    handleDismissEmergencyId(activeAlert!.id);
                                     if (addToast) {
                                       addToast("Alert Dismissed", "You closed the emergency banner.", "info");
                                     }
@@ -4126,6 +4166,7 @@ export default function App() {
                         setAuthScreen={setAuthScreen}
                         handleLogin={handleLogin} 
                         handleLogout={handleLogout}
+                        customBanners={customBanners}
                       />
                     </div>
 
@@ -6346,6 +6387,16 @@ export default function App() {
               />
 
               <div className="mt-12 pt-12 border-t border-slate-100 flex flex-col items-center gap-6">
+                {profile?.role === 'admin' && (
+                  <button
+                    onClick={() => setView('admin')}
+                    className="w-full max-w-sm py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-rose-500/25 cursor-pointer border border-rose-700"
+                  >
+                    <ShieldAlert className="w-4 h-4 text-white" />
+                    Enter Admin Control Panel
+                  </button>
+                )}
+
                 <div className="flex flex-col items-center gap-1">
               <div className="flex flex-col items-end">
                 <div className="flex items-center gap-1">
@@ -6423,6 +6474,7 @@ export default function App() {
                 requestNotificationPermission={requestNotificationPermission}
                 notifyAdmins={notifyAdmins}
                 onLogout={handleLogout}
+                mapId={effectiveMapId}
               />
             </div>
           </motion.div>
@@ -6456,6 +6508,7 @@ export default function App() {
                 hasUpdate={hasUpdate}
                 setHasUpdate={setHasUpdate}
                 events={events}
+                customBanners={customBanners}
               />
             </div>
           </motion.div>
@@ -7651,6 +7704,28 @@ export default function App() {
 
                 {/* 2. Menu Links Grid */}
                 <div className="grid grid-cols-2 gap-3.5">
+                  {/* Option: Admin Panel for Admin Roles */}
+                  {profile?.role === 'admin' && (
+                    <button
+                      onClick={() => {
+                        setShowHamburgerMenu(false);
+                        setView('admin');
+                      }}
+                      className="col-span-2 flex items-center justify-between p-4.5 rounded-2xl bg-gradient-to-r from-rose-500 to-rose-600 text-white text-left transition-all hover:opacity-95 cursor-pointer relative shadow-lg shadow-rose-500/25 border border-rose-600 active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-xl bg-white/15 text-white flex items-center justify-center shadow-inner">
+                          <ShieldAlert className="w-5.2 h-5.2 text-white" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black uppercase tracking-wider">Admin Control Panel</h4>
+                          <p className="text-[9px] text-rose-100 font-semibold mt-0.5">Manage users, requests & build Android app</p>
+                        </div>
+                      </div>
+                      <Smartphone className="w-5 h-5 text-rose-100 animate-bounce" />
+                    </button>
+                  )}
+
                   {/* Option: Community Feed */}
                   <button
                     onClick={() => {
@@ -9746,7 +9821,7 @@ const compressAndResizeImage = async (file: File, targetWidth = 800, targetHeigh
   });
 };
 
-function AdminPanel({ users, requests, posts, reports, organizations, orgApplications, adminUser, notifications, settings, onDeleteRequest, askConfirm, addToast, setView, hasUpdate, setHasUpdate, events }: { 
+function AdminPanel({ users, requests, posts, reports, organizations, orgApplications, adminUser, notifications, settings, onDeleteRequest, askConfirm, addToast, setView, hasUpdate, setHasUpdate, events, customBanners }: { 
   users: UserProfile[], 
   requests: BloodRequest[], 
   posts: CommunityPost[], 
@@ -9762,9 +9837,10 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   setView: (view: any) => void,
   hasUpdate: boolean,
   setHasUpdate: (v: boolean) => void,
-  events: AppEvent[]
+  events: AppEvent[],
+  customBanners: AdminCustomBanner[]
 }) {
-  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant' | 'blogs' | 'events'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant' | 'blogs' | 'events' | 'banners' | 'android-build'>('stats');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminHealthTips, setAdminHealthTips] = useState<HealthTip[]>([]);
   const [showCreateBlog, setShowCreateBlog] = useState(false);
@@ -9775,6 +9851,10 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   const [editBlogImageFileBase64, setEditBlogImageFileBase64] = useState<string>('');
   const [eventImageFileBase64, setEventImageFileBase64] = useState<string>('');
   const [editEventImageFileBase64, setEditEventImageFileBase64] = useState<string>('');
+  const [bannerImageFileBase64, setBannerImageFileBase64] = useState<string>('');
+  const [editBannerImageFileBase64, setEditBannerImageFileBase64] = useState<string>('');
+  const [showCreateBanner, setShowCreateBanner] = useState(false);
+  const [editingBanner, setEditingBanner] = useState<AdminCustomBanner | null>(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'health_tips'), (snapshot) => {
@@ -10206,6 +10286,89 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     }
   };
 
+  const handleToggleBannerActive = async (bannerId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'banners', bannerId), {
+        isActive: !currentStatus
+      });
+      addToast("Success", "Banner status updated.", "success");
+    } catch (err: any) {
+      addToast("Error", err.message || "Failed to update banner status.", "error");
+    }
+  };
+
+  const handleDeleteBanner = async (bannerId: string) => {
+    const confirm = await askConfirm(
+      "Delete Banner",
+      "Are you sure you want to permanently delete this banner? This action cannot be undone.",
+      "Delete",
+      "danger"
+    );
+    if (!confirm) return;
+
+    try {
+      await deleteDoc(doc(db, 'banners', bannerId));
+      addToast("Success", "Banner deleted successfully.", "success");
+    } catch (err: any) {
+      addToast("Error", err.message || "Failed to delete banner.", "error");
+    }
+  };
+
+  const handleSaveBanner = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const data = new FormData(form);
+    
+    const title = data.get('title') as string;
+    const subtitle = data.get('subtitle') as string;
+    const buttonText = data.get('buttonText') as string;
+    const buttonLink = data.get('buttonLink') as string;
+    const bgColor = data.get('bgColor') as string;
+    const isActive = data.get('isActive') === 'true';
+
+    if (!title.trim() || !subtitle.trim()) {
+      addToast("Error", "Title and Subtitle are required.", "error");
+      return;
+    }
+
+    try {
+      const imgBase64 = editingBanner ? editBannerImageFileBase64 : bannerImageFileBase64;
+      
+      const bannerData: any = {
+        title: title.trim(),
+        subtitle: subtitle.trim(),
+        buttonText: (buttonText || '').trim(),
+        buttonLink: (buttonLink || '').trim(),
+        bgColor: bgColor || '',
+        isActive: isActive,
+        updatedAt: serverTimestamp()
+      };
+
+      if (imgBase64) {
+        bannerData.imageUrl = imgBase64;
+      } else if (!editingBanner) {
+        bannerData.imageUrl = '';
+      }
+
+      if (editingBanner) {
+        await updateDoc(doc(db, 'banners', editingBanner.id), bannerData);
+        addToast("Success", "Banner updated successfully!", "success");
+        setEditingBanner(null);
+        setEditBannerImageFileBase64('');
+      } else {
+        bannerData.createdAt = serverTimestamp();
+        bannerData.createdBy = adminUser?.uid || 'admin';
+        await addDoc(collection(db, 'banners'), bannerData);
+        addToast("Success", "Banner created successfully!", "success");
+        setShowCreateBanner(false);
+        setBannerImageFileBase64('');
+      }
+      form.reset();
+    } catch (err: any) {
+      addToast("Error", err.message || "Failed to save banner.", "error");
+    }
+  };
+
   const menuItems = [
     { id: 'stats', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'users', label: 'User Base', icon: <Users className="w-4 h-4" /> },
@@ -10214,11 +10377,13 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'reports', label: 'Reports', icon: <ShieldAlert className="w-4 h-4" />, badge: stats.pendingReports > 0 ? stats.pendingReports : null },
     { id: 'blogs', label: 'Blogs & Health Tips', icon: <FileText className="w-4 h-4" /> },
     { id: 'events', label: 'Events & Campaigns', icon: <Calendar className="w-4 h-4" /> },
+    { id: 'banners', label: 'Banners System', icon: <Image className="w-4 h-4 text-rose-500" /> },
     { id: 'alerts', label: 'Alerts', icon: <Bell className="w-4 h-4" />, badge: notifications.filter(n => !n.isRead).length > 0 ? notifications.filter(n => !n.isRead).length : null },
     { id: 'ai-assistant', label: 'AI Assistant', icon: <Bot className="w-4 h-4 text-emerald-500" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-4 h-4" /> },
     { id: 'system', label: 'System', icon: <HardDrive className="w-4 h-4" /> },
     { id: 'gallery', label: 'Server Gallery', icon: <Image className="w-4 h-4" /> },
+    { id: 'android-build', label: 'Android Build', icon: <Smartphone className="w-4 h-4 text-sky-500" /> },
   ];
 
   return (
@@ -11829,6 +11994,10 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
           </motion.div>
         )}
 
+        {tab === 'android-build' && (
+          <AndroidBuildTab addToast={addToast} />
+        )}
+
         {tab === 'blogs' && (
           <motion.div
             key="blogs"
@@ -12687,6 +12856,315 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                 </>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {tab === 'banners' && (
+          <motion.div 
+            key="banners"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            {/* Header / Intro */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-xs">
+              <div className="space-y-1">
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                  📢 Custom Announcements & Banners
+                </h3>
+                <p className="text-xs text-slate-500 font-medium max-w-md">
+                  Design promotional cards or vital system messages displayed on the main home screen of logged-in users.
+                </p>
+              </div>
+              <button 
+                onClick={() => {
+                  setEditingBanner(null);
+                  setBannerImageFileBase64('');
+                  setShowCreateBanner(!showCreateBanner);
+                }}
+                className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-sm transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              >
+                {showCreateBanner ? 'View Banners' : '＋ Create New Banner'}
+              </button>
+            </div>
+
+            {/* Create / Edit Form Card */}
+            {(showCreateBanner || editingBanner) && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-6"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <h4 className="text-xs font-black uppercase tracking-widest text-slate-800">
+                    {editingBanner ? '✏️ Edit Banner Announcement' : '✨ Create Banner Announcement'}
+                  </h4>
+                  <button 
+                    onClick={() => {
+                      setShowCreateBanner(false);
+                      setEditingBanner(null);
+                      setBannerImageFileBase64('');
+                      setEditBannerImageFileBase64('');
+                    }}
+                    className="text-slate-400 hover:text-slate-600 text-xs font-bold uppercase tracking-wider font-sans"
+                  >
+                    Cancel
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveBanner} className="space-y-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Banner Title *</label>
+                      <input 
+                        type="text" 
+                        name="title" 
+                        placeholder="e.g. World Blood Donor Day 2026 🩸"
+                        defaultValue={editingBanner?.title || ''}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all font-sans"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Button Text</label>
+                      <input 
+                        type="text" 
+                        name="buttonText" 
+                        placeholder="e.g. Register Now"
+                        defaultValue={editingBanner?.buttonText || ''}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all font-sans"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Subtitle / Description *</label>
+                    <textarea 
+                      name="subtitle" 
+                      rows={3}
+                      placeholder="e.g. Join the mega volunteer campaign this Sunday. Free T-shirts, certificates, and lunch for all registered donors."
+                      defaultValue={editingBanner?.subtitle || ''}
+                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all resize-none font-sans"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Button Link / App Action</label>
+                      <select 
+                        name="buttonLink"
+                        defaultValue={editingBanner?.buttonLink || 'request-form'}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all font-sans bg-white"
+                      >
+                        <option value="request-form">➕ Request Blood Form (App view)</option>
+                        <option value="events">📅 Events & Campaigns List (App view)</option>
+                        <option value="blogs">📚 Blogs & Health Tips (App view)</option>
+                        <option value="edit-profile">⚙️ Profile settings (App view)</option>
+                        <option value="organizations">🏢 Organizations & Clubs (App view)</option>
+                        <option value="community">💬 Community Feed (App view)</option>
+                        <option value="https://google.com">🔗 Custom External Link (e.g. Google Form)</option>
+                      </select>
+                      <p className="text-[10px] text-slate-400 mt-1.5 font-medium">
+                        Select a view or you can enter a custom URL link during editing if desired.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Background Style / Theme Preset</label>
+                      <select 
+                        name="bgColor"
+                        defaultValue={editingBanner?.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950 border border-rose-500/20'}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-slate-400 transition-all font-sans bg-white"
+                      >
+                        <option value="bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950 border border-rose-500/20">🌹 Midnight Crimson Glow</option>
+                        <option value="bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 border border-slate-800">🌑 Dark Cosmic Slate</option>
+                        <option value="bg-gradient-to-br from-indigo-950 via-slate-950 to-[#1F0733] border border-indigo-500/25">🔮 Deep Nebula Purple</option>
+                        <option value="bg-gradient-to-br from-teal-950 via-slate-950 to-slate-900 border border-teal-500/25">🟢 Emerald Guardian Guard</option>
+                        <option value="bg-gradient-to-br from-rose-700 to-red-600 border border-rose-600">🔴 Crimson Solid Impact</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Optional Custom Background Image</label>
+                      <div className="border border-dashed border-slate-200 p-4 rounded-xl flex flex-col items-center justify-center gap-2 bg-slate-50/50">
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          id="banner-image-upload" 
+                          className="hidden" 
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              try {
+                                const base64 = await compressAndResizeImage(file, 900, 300);
+                                if (editingBanner) {
+                                  setEditBannerImageFileBase64(base64);
+                                } else {
+                                  setBannerImageFileBase64(base64);
+                                }
+                                addToast("Success", "Banner background image uploaded and compressed.", "success");
+                              } catch (err: any) {
+                                addToast("Error", "Failed to compress background image.", "error");
+                              }
+                            }
+                          }}
+                        />
+                        <label htmlFor="banner-image-upload" className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-[10px] font-bold text-slate-700 uppercase tracking-wider rounded-lg cursor-pointer transition-all active:scale-95">
+                          Choose Image File
+                        </label>
+                        <p className="text-[9px] text-slate-400 text-center font-medium">
+                          Ideal ratio is 3:1. Max size compressed on the fly.
+                        </p>
+                      </div>
+                      {(bannerImageFileBase64 || editBannerImageFileBase64 || editingBanner?.imageUrl) && (
+                        <div className="mt-3 relative inline-block">
+                          <img src={editingBanner ? (editBannerImageFileBase64 || editingBanner.imageUrl) : bannerImageFileBase64} alt="Preview" className="w-48 h-16 object-cover rounded-lg border border-slate-200 shadow-xs" />
+                          <button 
+                            type="button" 
+                            onClick={() => {
+                              if (editingBanner) {
+                                setEditBannerImageFileBase64('');
+                                editingBanner.imageUrl = '';
+                              } else {
+                                setBannerImageFileBase64('');
+                              }
+                            }}
+                            className="absolute -top-1.5 -right-1.5 bg-red-600 text-white rounded-full p-0.5 shadow-xs hover:bg-red-700 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Visibility Status</label>
+                      <div className="flex items-center gap-3 h-[60px]">
+                        <input 
+                          type="hidden" 
+                          name="isActive" 
+                          id="isActive-val" 
+                          defaultValue={editingBanner ? String(editingBanner.isActive) : 'true'} 
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            const valEl = document.getElementById('isActive-val') as HTMLInputElement;
+                            if (valEl) {
+                              const newVal = valEl.value === 'true' ? 'false' : 'true';
+                              valEl.value = newVal;
+                              e.currentTarget.className = newVal === 'true' 
+                                ? "px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs font-bold uppercase transition-all"
+                                : "px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold uppercase transition-all";
+                              e.currentTarget.innerHTML = newVal === 'true' ? "● Display Live" : "○ Draft / Hidden";
+                            }
+                          }}
+                          className={ (editingBanner ? editingBanner.isActive : true) 
+                            ? "px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-600 text-xs font-bold uppercase transition-all"
+                            : "px-4 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold uppercase transition-all"
+                          }
+                        >
+                          {(editingBanner ? editingBanner.isActive : true) ? "● Display Live" : "○ Draft / Hidden"}
+                        </button>
+                        <span className="text-[10px] text-slate-400 leading-tight font-medium">
+                          Active banners are automatically shown on the user's dashboard in a clean banner space.
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-md active:scale-95 cursor-pointer font-sans"
+                  >
+                    {editingBanner ? 'Save Changes' : 'Publish Announcement Banner'}
+                  </button>
+                </form>
+              </motion.div>
+            )}
+
+            {/* List of custom banners */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                Current Announcement Banners ({customBanners.length})
+              </h4>
+
+              {customBanners.length === 0 ? (
+                <div className="bg-white border border-slate-100 rounded-2xl p-8 text-center text-slate-400 text-xs font-medium space-y-2">
+                  <p>No custom announcements created yet.</p>
+                  <p className="text-[11px] text-slate-300">Publish your first custom banner using the button above.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {customBanners.map((b) => (
+                    <div 
+                      key={b.id}
+                      className="bg-white border border-slate-100 rounded-2xl p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+                    >
+                      <div className="flex items-start gap-4">
+                        {/* Image or Color Preview */}
+                        <div 
+                          className={`w-28 h-16 rounded-xl overflow-hidden shrink-0 border border-slate-100 relative ${b.bgColor || 'bg-slate-900'}`}
+                          style={b.imageUrl ? { backgroundImage: `url(${b.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+                        >
+                          {!b.imageUrl && (
+                            <div className="absolute inset-0 flex items-center justify-center text-[8px] font-extrabold uppercase text-white/40 tracking-wider">
+                              Preset
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-black text-slate-800">{b.title}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${b.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                              {b.isActive ? 'Active' : 'Draft'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 max-w-md font-medium leading-relaxed">{b.subtitle}</p>
+                          <div className="flex items-center gap-3 text-[10px] text-slate-400 font-bold">
+                            <span>Button: "{b.buttonText || 'None'}"</span>
+                            <span>•</span>
+                            <span className="text-rose-500">Action: {b.buttonLink || 'None'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-stretch md:self-auto justify-end border-t md:border-t-0 border-slate-50 pt-3 md:pt-0">
+                        <button
+                          onClick={() => handleToggleBannerActive(b.id, b.isActive)}
+                          className={`px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer ${b.isActive ? 'bg-slate-100 hover:bg-slate-200 text-slate-600' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-600'}`}
+                          title="Toggle Active Status"
+                        >
+                          {b.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingBanner(b);
+                            setEditBannerImageFileBase64(b.imageUrl || '');
+                            setShowCreateBanner(false);
+                          }}
+                          className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBanner(b.id)}
+                          className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Banner"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </motion.div>
         )}
 
@@ -14870,6 +15348,7 @@ function PremiumHeroBannerCard({
   setAuthScreen,
   handleLogin,
   handleLogout,
+  customBanners,
 }: {
   user: any;
   setView: (view: string) => void;
@@ -14877,8 +15356,121 @@ function PremiumHeroBannerCard({
   setAuthScreen: (v: 'login-email' | 'register') => void;
   handleLogin: () => void;
   handleLogout?: () => void;
+  customBanners?: AdminCustomBanner[];
 }) {
   const isUserLoggedIn = !!user;
+
+  // Filter only active custom banners
+  const activeBanners = (customBanners || []).filter(b => b.isActive);
+
+  if (isUserLoggedIn) {
+    // Show custom banner of the same size
+    const currentBanner = activeBanners[0]; // Show the most recent active custom banner
+
+    if (currentBanner) {
+      // Admin Custom Banner
+      const bgStyle = currentBanner.imageUrl 
+        ? { backgroundImage: `url(${currentBanner.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } 
+        : {};
+
+      return (
+        <div 
+          style={bgStyle}
+          className={`rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500 text-white ${currentBanner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
+        >
+          {/* Overlay to ensure text readability if there's a background image */}
+          {currentBanner.imageUrl && <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-none" />}
+
+          {/* Background particles and visual flair */}
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[50px]" />
+            <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[60px]" />
+          </div>
+
+          <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
+            <div className="space-y-1.5 sm:space-y-2.5">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-black tracking-widest uppercase">
+                📢 Announcement
+              </span>
+              <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
+                {currentBanner.title}
+              </h2>
+              <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
+                {currentBanner.subtitle}
+              </p>
+            </div>
+
+            <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
+              {currentBanner.buttonText && (
+                currentBanner.buttonLink.startsWith('http') ? (
+                  <a
+                    href={currentBanner.buttonLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="bg-white text-slate-900 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-slate-100 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>{currentBanner.buttonText}</span>
+                  </a>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (currentBanner.buttonLink) {
+                        setView(currentBanner.buttonLink as any);
+                      }
+                    }}
+                    className="bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-rose-50 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
+                  >
+                    <span>{currentBanner.buttonText}</span>
+                  </button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    } else {
+      // Logged in default fallback banner of the exact same size
+      return (
+        <div 
+          className="bg-gradient-to-br from-slate-900 via-[#180F11] to-slate-950 rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.1)] border border-slate-800 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
+        >
+          <div className="absolute inset-0 pointer-events-none overflow-hidden">
+            <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/10 rounded-full blur-[50px]" />
+            <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[60px]" />
+          </div>
+
+          <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
+            <div className="space-y-1.5 sm:space-y-2.5">
+              <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
+                🛡️ Hero Account Active
+              </span>
+              <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
+                Welcome back, {user.displayName || 'Donor'}! 👋
+              </h2>
+              <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-300/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
+                Your presence on our Bangladesh volunteer registry gives hope to thousands. Need blood or ready to donate? Choose an action below.
+              </p>
+            </div>
+
+            <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
+              <button
+                onClick={() => setView('request-form')}
+                className="bg-rose-600 text-white font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-lg hover:bg-rose-700 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>➕ Ask for Blood</span>
+              </button>
+              <button
+                onClick={() => setView('edit-profile')}
+                className="bg-white/10 hover:bg-white/15 text-white border border-white/10 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <span>⚙️ Manage Profile</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return (
     <div 
@@ -16312,7 +16904,7 @@ function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings, addToa
   );
 }
 
-function ProfileForm({ user, initialProfile, requests, donations, posts, allUsers, onLeave, onNavigateOrganizations, onSuccess, onViewProfile, onCancel, askConfirm, addToast, requestNotificationPermission, notifyAdmins, onLogout }: { 
+function ProfileForm({ user, initialProfile, requests, donations, posts, allUsers, onLeave, onNavigateOrganizations, onSuccess, onViewProfile, onCancel, askConfirm, addToast, requestNotificationPermission, notifyAdmins, onLogout, mapId }: { 
   user: FirebaseUser, 
   initialProfile: UserProfile | null, 
   requests: BloodRequest[], 
@@ -16328,7 +16920,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
   addToast: (title: string, body: string, type?: Toast['type'], requestId?: string) => void,
   requestNotificationPermission: () => Promise<void>,
   notifyAdmins: (title: string, body: string, link?: string) => Promise<void>,
-  onLogout: () => void
+  onLogout: () => void,
+  mapId?: string
 }) {
   const [historyTab, setHistoryTab] = useState<'donations' | 'requests'>('donations');
   const [formData, setFormData] = useState<UserProfile>({
@@ -16679,6 +17272,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                 defaultZoom={formData.district ? 12 : 7}
                 gestureHandling={'cooperative'}
                 disableDefaultUI={true}
+                mapId={mapId || 'DEMO_MAP_ID'}
                 className="w-full h-full rounded-2xl"
               >
                 {formData.district && <AdvancedMarker position={dCoords} />}

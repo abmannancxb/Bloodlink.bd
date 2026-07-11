@@ -886,6 +886,140 @@ Response JSON Schema:
     }
   });
 
+  // Android build state management
+  let androidBuildState = {
+    status: "idle", // "idle", "building", "success", "failed"
+    logs: "No build started yet. Click 'Trigger Build' to compile and sync native android assets.\n",
+    updatedAt: new Date().toISOString(),
+    downloadReady: false
+  };
+
+  // Helper to run commands asynchronously
+  const runBuildProcess = async () => {
+    const { exec } = await import("child_process");
+    androidBuildState.status = "building";
+    androidBuildState.logs = `[${new Date().toISOString()}] Started Android build & update process...\n`;
+    androidBuildState.logs += `[Step 1/3] Running 'npm run build' to bundle React production web assets...\n`;
+    androidBuildState.updatedAt = new Date().toISOString();
+    androidBuildState.downloadReady = false;
+
+    exec("npm run build", (buildErr, buildStdout, buildStderr) => {
+      if (buildErr) {
+        androidBuildState.status = "failed";
+        androidBuildState.logs += `\n❌ 'npm run build' failed!\nError:\n${buildErr.message}\nStderr:\n${buildStderr}\n`;
+        androidBuildState.updatedAt = new Date().toISOString();
+        return;
+      }
+
+      androidBuildState.logs += buildStdout + "\n";
+      androidBuildState.logs += `[Step 2/3] Running 'npx cap sync' to synchronize assets and plugins into Android project...\n`;
+      androidBuildState.updatedAt = new Date().toISOString();
+
+      exec("npx cap sync", (syncErr, syncStdout, syncStderr) => {
+        if (syncErr) {
+          androidBuildState.status = "failed";
+          androidBuildState.logs += `\n❌ 'npx cap sync' failed!\nError:\n${syncErr.message}\nStderr:\n${syncStderr}\n`;
+          androidBuildState.updatedAt = new Date().toISOString();
+          return;
+        }
+
+        androidBuildState.logs += syncStdout + "\n";
+        androidBuildState.logs += `[Step 3/3] Running Python compression script to generate source zip file...\n`;
+        androidBuildState.updatedAt = new Date().toISOString();
+
+        // Write python compression inline
+        const pythonZippingScript = `
+import zipfile
+import os
+
+zip_path = '/tmp/android_source.zip'
+if os.path.exists(zip_path):
+    os.remove(zip_path)
+
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    # 1. Add android/ directory recursively
+    for root, dirs, files in os.walk('android'):
+        for file in files:
+            file_path = os.path.join(root, file)
+            zipf.write(file_path, file_path)
+    # 2. Add capacitor.config.json and package.json
+    if os.path.exists('capacitor.config.json'):
+        zipf.write('capacitor.config.json', 'capacitor.config.json')
+    if os.path.exists('package.json'):
+        zipf.write('package.json', 'package.json')
+print("Successfully compressed android source code!")
+`;
+
+        fs.writeFile("/tmp/zip_script.py", pythonZippingScript, "utf-8")
+          .then(() => {
+            exec("python3 /tmp/zip_script.py", (pyErr, pyStdout, pyStderr) => {
+              if (pyErr) {
+                androidBuildState.status = "failed";
+                androidBuildState.logs += `\n❌ Python zip script failed!\nError:\n${pyErr.message}\nStderr:\n${pyStderr}\n`;
+                androidBuildState.updatedAt = new Date().toISOString();
+                return;
+              }
+
+              androidBuildState.logs += pyStdout + "\n";
+              androidBuildState.logs += `\n🎉 Android Gradle project successfully synced, compiled, and zipped!\n`;
+              androidBuildState.status = "success";
+              androidBuildState.downloadReady = true;
+              androidBuildState.updatedAt = new Date().toISOString();
+            });
+          })
+          .catch((fsErr: any) => {
+            androidBuildState.status = "failed";
+            androidBuildState.logs += `\n❌ Could not write Python zipping utility: ${fsErr.message}\n`;
+            androidBuildState.updatedAt = new Date().toISOString();
+          });
+      });
+    });
+  };
+
+  // Get current build status
+  app.get("/api/admin/build-android/status", (req, res) => {
+    res.json({
+      success: true,
+      state: androidBuildState
+    });
+  });
+
+  // Trigger new build
+  app.post("/api/admin/build-android", (req, res) => {
+    if (androidBuildState.status === "building") {
+      return res.json({
+        success: false,
+        message: "A build compilation is already in progress.",
+        state: androidBuildState
+      });
+    }
+
+    runBuildProcess()
+      .then(() => {
+        console.log("Asynchronous build process initiated.");
+      })
+      .catch((e) => {
+        console.error("Failed to start build:", e);
+      });
+
+    res.json({
+      success: true,
+      message: "Build process started successfully.",
+      state: androidBuildState
+    });
+  });
+
+  // Download resulting build zip
+  app.get("/api/admin/build-android/download", async (req, res) => {
+    const zipPath = "/tmp/android_source.zip";
+    try {
+      await fs.access(zipPath);
+      res.download(zipPath, "bloodlink-android-source.zip");
+    } catch (e) {
+      res.status(404).send("Android build zip file not found or build hasn't completed successfully.");
+    }
+  });
+
   // Robots.txt
   app.get("/robots.txt", (req, res) => {
     const host = 'bloodlink.bd';

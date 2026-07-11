@@ -260,9 +260,31 @@
         "readTime": { "type": "string" }
       },
       "required": ["title", "content", "createdAt", "createdBy"]
+    },
+    "AdminCustomBanner": {
+      "title": "Admin Custom Banner",
+      "description": "Custom promotional cards or vital system announcements displayed on the user dashboard.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "buttonText": { "type": "string" },
+        "buttonLink": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "bgColor": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "subtitle", "isActive", "createdAt"]
     }
   },
   "firestore": {
+    "/banners/{bannerId}": {
+      "schema": "AdminCustomBanner",
+      "description": "Announcement banners created by admins."
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles and donor status."
