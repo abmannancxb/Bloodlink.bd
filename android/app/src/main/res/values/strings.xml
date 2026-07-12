@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">BloodLink Bangladesh</string>
-    <string name="title_activity_main">BloodLink Bangladesh</string>
-    <string name="package_name">com.bloodlink.bangladesh</string>
-    <string name="custom_url_scheme">com.bloodlink.bangladesh</string>
-</resources>
