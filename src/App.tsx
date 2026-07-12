@@ -4265,23 +4265,22 @@ export default function App() {
                           onOverviewChange={setMapOverviewOpen}
                         />
 
-                        {/* Compass floating button inside shorter map view */}
-                        <div className="absolute top-4 left-4 z-20">
+                        {/* Modern Control Dock floating inside map view */}
+                        <div className="absolute top-4 left-4 z-20 flex flex-col gap-2 bg-white/90 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200/50 shadow-lg shadow-slate-900/5 select-none pointer-events-auto">
                           <button
                             type="button"
                             onClick={() => {
                               setMapResetKey?.(prev => prev + 1);
                               addToast("Recentered Map", "Compass target centered with active lifesavers", "info");
                             }}
-                            className="w-8 h-8 bg-white/90 backdrop-blur-sm hover:bg-white text-slate-700 active:scale-90 border border-slate-200/50 shadow-md rounded-full flex items-center justify-center transition-all group cursor-pointer"
+                            className="w-9 h-9 hover:bg-slate-50 text-slate-700 rounded-xl flex items-center justify-center transition-all group cursor-pointer active:scale-90"
                             title="Recenter Map View"
                           >
-                            <Compass className="w-4 h-4 text-red-600 group-hover:rotate-45 transition-transform duration-300" />
+                            <Compass className="w-4.5 h-4.5 text-red-650 group-hover:rotate-45 transition-transform duration-300" />
                           </button>
-                        </div>
+                          
+                          <div className="h-px bg-slate-100 mx-1" />
 
-                        {/* Full Screen Map toggle (Maximize/Minimize) button inside shorter map view */}
-                        <div className="absolute top-14 left-4 z-20 flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => {
@@ -4292,20 +4291,20 @@ export default function App() {
                                 "success"
                               );
                             }}
-                            className="w-8 h-8 bg-white/90 backdrop-blur-sm hover:bg-white text-slate-700 hover:text-slate-900 border border-slate-200/50 shadow-md rounded-full flex items-center justify-center transition-all hover:scale-105 active:scale-95 group font-black cursor-pointer"
+                            className="w-9 h-9 hover:bg-slate-50 text-slate-700 hover:text-slate-900 rounded-xl flex items-center justify-center transition-all hover:scale-105 active:scale-90 group cursor-pointer"
                             title={isMapExpanded ? "Minimize Map View" : "Maximize Map View"}
                           >
                             {isMapExpanded ? (
-                              <Minimize2 className="w-4 h-4 text-slate-700 group-hover:scale-110 transition-all duration-200" />
+                              <Minimize2 className="w-4.5 h-4.5 text-slate-700 group-hover:scale-115 transition-all duration-200" />
                             ) : (
-                              <Maximize2 className="w-4 h-4 text-red-650 group-hover:scale-110 transition-all duration-200" />
+                              <Maximize2 className="w-4.5 h-4.5 text-red-650 group-hover:scale-115 transition-all duration-200" />
                             )}
                           </button>
                         </div>
 
                         {/* Full Screen Header Overlay Banner */}
                         {isMapExpanded && (
-                          <div className="absolute top-4 left-16 z-[100000] bg-white/95 backdrop-blur-md rounded-2xl py-2 px-4 shadow-lg border border-slate-200/60 flex items-center gap-2 animate-fade-in shrink-0">
+                          <div className="absolute top-4 left-18 z-[100000] bg-white/95 backdrop-blur-md rounded-2xl py-2 px-4 shadow-lg border border-slate-200/60 flex items-center gap-2.5 animate-fade-in shrink-0 pointer-events-auto">
                             <span className="w-2.5 h-2.5 rounded-full bg-red-600 animate-pulse" />
                             <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">Emergency Lifesavers Map (Full View)</span>
                             <span className="text-[8px] text-slate-400 font-extrabold select-none pl-2 border-l border-slate-200 hidden sm:inline">Esc to restore</span>
@@ -4314,21 +4313,21 @@ export default function App() {
                       </div>
 
                       {/* Foreground Overlays Wrapper (pointer-events-none so users can click map through it) */}
-                      <div className="absolute inset-0 flex flex-col justify-end p-2 pointer-events-none z-10">
+                      <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none z-10">
                         
                         {/* C. Downsize Overlay: Quick Actions Bento Grid */}
                         {settings?.homeShowQuickActions !== false && (
-                          <div className="bg-white/85 backdrop-blur-md border border-white/50 rounded-[20px] p-1.5 shadow-[0_4px_24px_rgba(0,0,0,0.04)] select-none pointer-events-auto">
-                            <div className="grid grid-cols-4 gap-1">
+                          <div className="bg-white/90 backdrop-blur-md border border-white/60 rounded-[24px] p-2 shadow-[0_8px_32px_rgba(15,23,42,0.08)] select-none pointer-events-auto">
+                            <div className="grid grid-cols-4 gap-1.5">
                               <button 
                                 onClick={() => setView('find')}
-                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                className="flex flex-col items-center text-center p-1.5 rounded-2xl hover:bg-slate-50/80 transition-all group cursor-pointer active:scale-95"
                                 title="Search Active Donors"
                               >
-                                <div className="w-8 h-8 rounded-full bg-blue-50/80 text-blue-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
-                                  <Search className="w-3.5 h-3.5 text-blue-600" />
+                                <div className="w-9 h-9 rounded-xl bg-blue-50/80 text-blue-650 flex items-center justify-center group-hover:scale-105 duration-300 shadow-sm border border-blue-100/30">
+                                  <Search className="w-4 h-4 text-blue-600" />
                                 </div>
-                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Find Donor</span>
+                                <span className="text-[9px] font-black text-slate-800 tracking-tight mt-1.5 leading-none">Find Donor</span>
                               </button>
 
                               <button 
@@ -4336,13 +4335,13 @@ export default function App() {
                                   if (user) setView('request-form');
                                   else handleLogin();
                                 }}
-                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                className="flex flex-col items-center text-center p-1.5 rounded-2xl hover:bg-slate-50/80 transition-all group cursor-pointer active:scale-95"
                                 title="Create New Blood Request"
                               >
-                                <div className="w-8 h-8 rounded-full bg-red-50/80 text-[#FF1744] flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
-                                  <Droplet className="w-3.5 h-3.5 text-red-650 fill-red-650" />
+                                <div className="w-9 h-9 rounded-xl bg-red-50/80 text-[#FF1744] flex items-center justify-center group-hover:scale-105 duration-300 shadow-sm border border-red-100/30">
+                                  <Droplet className="w-4 h-4 text-red-650 fill-red-650" />
                                 </div>
-                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Request</span>
+                                <span className="text-[9px] font-black text-slate-800 tracking-tight mt-1.5 leading-none">Request</span>
                               </button>
 
                               <button 
@@ -4354,31 +4353,42 @@ export default function App() {
                                   }
                                   addToast("Hospitals Finder", "Search hospitals & clinics by District and Thana", "info");
                                 }}
-                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                className="flex flex-col items-center text-center p-1.5 rounded-2xl hover:bg-slate-50/80 transition-all group cursor-pointer active:scale-95"
                                 title="Search Hospitals & Clinics"
                               >
-                                <div className="w-8 h-8 rounded-full bg-teal-50/80 text-teal-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
-                                  <Building className="w-3.5 h-3.5 text-teal-600" />
+                                <div className="w-9 h-9 rounded-xl bg-teal-50/80 text-teal-650 flex items-center justify-center group-hover:scale-105 duration-300 shadow-sm border border-teal-100/30">
+                                  <Building className="w-4 h-4 text-teal-600" />
                                 </div>
-                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none">Hospitals</span>
+                                <span className="text-[9px] font-black text-slate-800 tracking-tight mt-1.5 leading-none">Hospitals</span>
                               </button>
 
                               <button 
                                 onClick={() => {
                                   setView('emergency');
                                 }}
-                                className="flex flex-col items-center text-center p-1 rounded-xl hover:bg-white/50 transition-colors group cursor-pointer"
+                                className="flex flex-col items-center text-center p-1.5 rounded-2xl hover:bg-slate-50/80 transition-all group cursor-pointer active:scale-95"
                                 title="Emergency Hotlines & Services"
                               >
-                                <div className="w-8 h-8 rounded-full bg-amber-50/80 text-amber-600 flex items-center justify-center group-hover:scale-105 duration-300 shadow-xs">
-                                   <Phone className="w-3.5 h-3.5 text-amber-600" />
+                                <div className="w-9 h-9 rounded-xl bg-amber-50/80 text-amber-650 flex items-center justify-center group-hover:scale-105 duration-300 shadow-sm border border-amber-100/30">
+                                   <Phone className="w-4 h-4 text-amber-600" />
                                 </div>
-                                <span className="text-[8.5px] font-black text-slate-800 tracking-tight mt-1 leading-none font-bold">Emergency</span>
+                                <span className="text-[9px] font-black text-slate-800 tracking-tight mt-1.5 leading-none font-bold">Emergency</span>
                               </button>
                             </div>
                           </div>
                         )}
                         
+                      </div>
+
+                      {/* Premium Floating Live Tracker Badge (Floating over Map) */}
+                      <div className="absolute top-4 right-4 z-20 bg-slate-900/90 backdrop-blur-md text-white py-1.5 px-3 rounded-2xl border border-slate-800 shadow-lg flex items-center gap-2 select-none pointer-events-auto">
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10b981] opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10b981]"></span>
+                        </span>
+                        <span className="text-[9px] font-black tracking-widest uppercase text-slate-100 font-mono">
+                          {activeDonors.length} Live Donors
+                        </span>
                       </div>
                     </div>
 
@@ -21325,7 +21335,17 @@ const BANGLADESH_BOUNDS = {
 const MAP_STYLES = [
   {
     "featureType": "all",
-    "elementType": "labels",
+    "elementType": "labels.text.fill",
+    "stylers": [{ "color": "#475569" }]
+  },
+  {
+    "featureType": "all",
+    "elementType": "labels.text.stroke",
+    "stylers": [{ "visibility": "on" }, { "color": "#ffffff" }, { "weight": 2.5 }]
+  },
+  {
+    "featureType": "all",
+    "elementType": "labels.icon",
     "stylers": [{ "visibility": "off" }]
   },
   {
@@ -21333,28 +21353,33 @@ const MAP_STYLES = [
     "elementType": "geometry.stroke",
     "stylers": [
       { "visibility": "on" },
-      { "color": "#cbd5e1" },
+      { "color": "#94a3b8" },
       { "weight": 1.5 }
     ]
   },
   {
     "featureType": "administrative.province",
     "elementType": "geometry.stroke",
-    "stylers": [{ "visibility": "on" }, { "color": "#e2e8f0" }, { "weight": 0.5 }]
+    "stylers": [{ "visibility": "on" }, { "color": "#cbd5e1" }, { "weight": 0.8 }]
   },
   {
     "featureType": "landscape",
     "elementType": "geometry",
-    "stylers": [{ "color": "#ffffff" }]
+    "stylers": [{ "color": "#f8fafc" }]
   },
   {
     "featureType": "water",
+    "elementType": "geometry",
+    "stylers": [{ "color": "#bae6fd" }]
+  },
+  {
+    "featureType": "road",
     "elementType": "geometry",
     "stylers": [{ "color": "#ffffff" }]
   },
   {
     "featureType": "road",
-    "stylers": [{ "visibility": "off" }]
+    "stylers": [{ "visibility": "on" }, { "color": "#f1f5f9" }, { "weight": 0.6 }]
   },
   {
     "featureType": "poi",

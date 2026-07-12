@@ -294,7 +294,7 @@ service cloud.firestore {
           && data.location is string && data.location.size() <= 200
           && data.eventDate is string && data.eventDate.size() <= 100
           && data.status is string && data.status in ['Active', 'Passed']
-          && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2000))
+          && (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 10000000))
           && data.createdBy == request.auth.uid;
       }
 
