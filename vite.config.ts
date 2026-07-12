@@ -36,7 +36,6 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),
-        'react-is': path.resolve(import.meta.dirname, 'node_modules/react-is'),
       },
     },
     server: {
