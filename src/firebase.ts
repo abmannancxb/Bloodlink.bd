@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { initializeFirestore, doc, getDocFromServer, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging';
+import { Capacitor } from '@capacitor/core';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const isDevelopment = typeof window !== 'undefined' && 
@@ -23,7 +24,7 @@ export const db = initializeFirestore(app, {
 export const auth = getAuth(app);
 
 // Guard messaging setup against unsupported browser/iframe sandbox contexts
-export const messaging = typeof window !== 'undefined' ? (() => {
+export const messaging = (typeof window !== 'undefined' && !Capacitor.isNativePlatform()) ? (() => {
   try {
     return getMessaging(app);
   } catch (err) {

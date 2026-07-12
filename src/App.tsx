@@ -48,6 +48,9 @@ import {
 } from 'recharts';
 import { auth, db, messaging } from './firebase';
 export { auth, db, messaging };
+import { Capacitor } from '@capacitor/core';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { PushNotifications } from '@capacitor/push-notifications';
 import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
 import AIBloodAssistant from './components/AIBloodAssistant';
 import { DonorCardModal } from './components/DonorCardModal';
@@ -566,6 +569,13 @@ export default function App() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
+
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setStyle({ style: Style.Light }).catch(err => console.warn(err));
+      StatusBar.setBackgroundColor({ color: '#ffffff' }).catch(err => console.warn(err));
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(err => console.warn(err));
+    }
+
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
@@ -1302,7 +1312,13 @@ export default function App() {
           const result = await navigator.permissions.query({ name: 'microphone' as any });
           if (result.state === 'granted') return true;
           if (result.state === 'denied') {
-            addToast("Mic Blocked", "Please enable microphone access in your browser settings.", 'error');
+            await askConfirm(
+              "Microphone Access Required",
+              "BloodLink Bangladesh requires microphone access to enable voice calls with blood request creators and donors. Please enable microphone permission in your system settings.",
+              "OK",
+              "info",
+              "Dismiss"
+            );
             return false;
           }
         } catch (e) {
@@ -1325,7 +1341,7 @@ export default function App() {
       console.warn("Permission check overall error", e);
       return true;
     }
-  }, [addToast]);
+  }, [addToast, askConfirm]);
 
   const ensureCameraPermission = useCallback(async (): Promise<boolean> => {
     try {
@@ -1334,7 +1350,13 @@ export default function App() {
           const result = await navigator.permissions.query({ name: 'camera' as any });
           if (result.state === 'granted') return true;
           if (result.state === 'denied') {
-            addToast("Camera Blocked", "Please enable camera access in your browser settings.", 'error');
+            await askConfirm(
+              "Camera Access Required",
+              "BloodLink Bangladesh requires camera access to enable video calls and image upload features. Please enable camera permission in your system settings.",
+              "OK",
+              "info",
+              "Dismiss"
+            );
             return false;
           }
         } catch (e) {
@@ -1346,7 +1368,7 @@ export default function App() {
       console.warn("Permission check overall error", e);
       return true;
     }
-  }, [addToast]);
+  }, [addToast, askConfirm]);
 
   const startVoiceCall = useCallback(async (targetUid: string) => {
     if (!user || !profile) {
@@ -1639,6 +1661,13 @@ export default function App() {
           console.error("Location error:", error);
           if (error.code === 1) { // PERMISSION_DENIED
             addToast("Permission Denied", "You can still use districts to find donors manually.", 'info');
+            askConfirm(
+              "Location Access Recommended",
+              "BloodLink Bangladesh uses your location to show nearby blood requests and voluntary donors on the live map. You can still search for donors manually by selecting districts and areas.",
+              "OK",
+              "info",
+              "Dismiss"
+            );
           }
         }
       );
@@ -2321,9 +2350,9 @@ export default function App() {
   const lastNotifiedRequestId = useRef<string | null>(null);
   const notifiedIds = useRef<Set<string>>(new Set());
 
-  // FCM Logic
+  // FCM Logic (Web only)
   useEffect(() => {
-    if (user && profile && !profile.fcmToken) {
+    if (user && profile && !profile.fcmToken && !Capacitor.isNativePlatform()) {
       const setupFCM = async () => {
         try {
           if (!('Notification' in window)) {
@@ -2361,9 +2390,81 @@ export default function App() {
     }
   }, [user, profile]);
 
-  // Foreground Message Handler
+  // Native Capacitor Android Push Notifications Setup (Capacitor only)
   useEffect(() => {
-    if (!messaging) return;
+    if (user && profile && Capacitor.isNativePlatform()) {
+      const setupNativePush = async () => {
+        try {
+          let permStatus = await PushNotifications.checkPermissions();
+          if (permStatus.receive === 'prompt') {
+            permStatus = await PushNotifications.requestPermissions();
+          }
+          
+          if (permStatus.receive === 'granted') {
+            // Register with APNS/FCM
+            await PushNotifications.register();
+          } else {
+            addToast("Notifications Disabled", "Notification permissions are required for emergency blood match alerts.", "warning");
+            await askConfirm(
+              "Enable Alerts",
+              "BloodLink Bangladesh relies on instant notifications to alert you when an emergency blood request matches your blood type in your district. Please enable notifications in your system settings.",
+              "OK",
+              "info",
+              "Dismiss"
+            );
+          }
+        } catch (e) {
+          console.error("Error setting up native push:", e);
+        }
+      };
+
+      const setupListeners = async () => {
+        await PushNotifications.addListener('registration', async (token) => {
+          console.log('Native Push Registration success, token:', token.value);
+          const currentToken = token.value;
+          if (currentToken && profile.fcmToken !== currentToken) {
+            try {
+              await updateDoc(doc(db, 'users', user.uid), { fcmToken: currentToken });
+              setProfile(prev => {
+                if (prev) {
+                  return { ...prev, fcmToken: currentToken };
+                }
+                return null;
+              });
+              console.log('Native FCM Token saved to Firestore.');
+            } catch (fsErr) {
+              console.error('Error saving native FCM token to Firestore:', fsErr);
+            }
+          }
+        });
+
+        await PushNotifications.addListener('registrationError', (error) => {
+          console.error('Native Push registration error:', error);
+        });
+
+        await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+          console.log('Native Push received in foreground:', notification);
+          playNotificationSound();
+          addToast(notification.title || "Match Found!", notification.body || "A new request needs attention.", "success");
+        });
+
+        await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+          console.log('Native Push action performed:', action);
+        });
+      };
+
+      setupNativePush();
+      setupListeners();
+
+      return () => {
+        PushNotifications.removeAllListeners();
+      };
+    }
+  }, [user, profile, askConfirm]);
+
+  // Foreground Message Handler (Web only)
+  useEffect(() => {
+    if (!messaging || Capacitor.isNativePlatform()) return;
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log('Foreground message received:', payload);
       if (payload.notification) {
