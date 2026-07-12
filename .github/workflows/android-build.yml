@@ -42,10 +42,13 @@ jobs:
 
       - name: Download clean Gradle Wrapper JAR
         run: |
+          mkdir -p android/gradle/wrapper
           curl -sSLo android/gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar
 
       - name: Grant Execute Permission to Gradle
-        run: chmod +x android/gradlew
+        run: |
+          sed -i 's/\r$//' android/gradlew
+          chmod +x android/gradlew
 
       - name: Build Android APK (Debug)
         run: |
