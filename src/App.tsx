@@ -4011,7 +4011,7 @@ export default function App() {
           />
         )}
 
-        <header className="fixed top-0 left-0 right-0 h-16 bg-white/95 backdrop-blur-md border-b border-slate-100 z-[100] px-4 py-2 flex items-center justify-between shadow-sm">
+        <header className="fixed top-0 left-0 right-0 h-16 safe-header bg-white/95 backdrop-blur-md border-b border-slate-100 z-[100] px-4 py-2 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => { setView('requests'); resetFilters(); }}>
             <svg className="w-8 h-8 drop-shadow-sm shrink-0 animate-in fade-in duration-300" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M50 5C50 5 90 40 90 65C90 84.33 72.09 100 50 100C27.91 100 10 84.33 10 65C10 40 50 5 50 5Z" fill="#ff1744"/>
@@ -15474,113 +15474,199 @@ function PremiumHeroBannerCard({
   // Filter only active custom banners
   const activeBanners = (customBanners || []).filter(b => b.isActive);
 
-  if (isUserLoggedIn) {
-    // Show custom banner of the same size
-    const currentBanner = activeBanners[0]; // Show the most recent active custom banner
+  // Show up to 3 most recently created active banners in a slideshow
+  const sliderBanners = activeBanners.slice(0, 3);
 
-    if (currentBanner) {
-      // Admin Custom Banner
-      const bgStyle = currentBanner.imageUrl 
-        ? { backgroundImage: `url(${currentBanner.imageUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } 
-        : {};
+  const [currentSlide, setCurrentSlide] = useState(0);
 
-      return (
-        <div 
-          style={bgStyle}
-          className={`rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500 text-white ${currentBanner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
-        >
-          {/* Overlay to ensure text readability if there's a background image */}
-          {currentBanner.imageUrl && <div className="absolute inset-0 bg-black/40 backdrop-blur-[1px] pointer-events-none" />}
+  // Automatically cycle through slides every 5 seconds
+  useEffect(() => {
+    if (sliderBanners.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [sliderBanners.length]);
 
-          {/* Background particles and visual flair */}
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[50px]" />
-            <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[60px]" />
-          </div>
-
-          <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
-            <div className="space-y-1.5 sm:space-y-2.5">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-black tracking-widest uppercase">
-                📢 Announcement
-              </span>
-              <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
-                {currentBanner.title}
-              </h2>
-              <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
-                {currentBanner.subtitle}
-              </p>
-            </div>
-
-            <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
-              {currentBanner.buttonText && (
-                currentBanner.buttonLink.startsWith('http') ? (
-                  <a
-                    href={currentBanner.buttonLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-white text-slate-900 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-slate-100 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <span>{currentBanner.buttonText}</span>
-                  </a>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (currentBanner.buttonLink) {
-                        setView(currentBanner.buttonLink as any);
+  if (sliderBanners.length > 0) {
+    return (
+      <div className="group relative rounded-[32px] overflow-hidden shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in duration-500 bg-black">
+        {/* Slides */}
+        <div className="w-full h-full relative">
+          {sliderBanners.map((banner, index) => {
+            const isSelected = index === currentSlide;
+            
+            if (banner.imageUrl) {
+              // Full-image mode (shows the uploaded banner photo as-is, with no text/buttons overlaid)
+              return (
+                <div
+                  key={banner.id}
+                  onClick={() => {
+                    if (banner.buttonLink) {
+                      if (banner.buttonLink.startsWith('http')) {
+                        window.open(banner.buttonLink, '_blank', 'noopener,noreferrer');
+                      } else {
+                        setView(banner.buttonLink);
                       }
-                    }}
-                    className="bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-rose-50 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
-                  >
-                    <span>{currentBanner.buttonText}</span>
-                  </button>
-                )
-              )}
-            </div>
-          </div>
+                    }
+                  }}
+                  className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out cursor-pointer flex items-center justify-center ${
+                    isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
+                  } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
+                >
+                  <img
+                    src={banner.imageUrl}
+                    alt={banner.title}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-contain mx-auto transition-transform duration-700 group-hover:scale-[1.01]"
+                  />
+                </div>
+              );
+            } else {
+              // Legacy text overlay mode (only used if no custom image is uploaded)
+              return (
+                <div
+                  key={banner.id}
+                  className={`absolute inset-0 p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 text-white transition-all duration-700 ease-in-out ${
+                    isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
+                  } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
+                >
+                  {/* Background particles and visual flair */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[50px]" />
+                    <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[60px]" />
+                  </div>
+
+                  <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
+                    <div className="space-y-1.5 sm:space-y-2.5">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-black tracking-widest uppercase">
+                        📢 Announcement
+                      </span>
+                      <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
+                        {banner.title}
+                      </h2>
+                      <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
+                        {banner.subtitle}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
+                      {banner.buttonText && (
+                        banner.buttonLink.startsWith('http') ? (
+                          <a
+                            href={banner.buttonLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-white text-slate-900 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-slate-100 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>{banner.buttonText}</span>
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (banner.buttonLink) {
+                                setView(banner.buttonLink as any);
+                              }
+                            }}
+                            className="bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-rose-50 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
+                          >
+                            <span>{banner.buttonText}</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          })}
         </div>
-      );
-    } else {
-      // Logged in default fallback banner of the exact same size
-      return (
-        <div 
-          className="bg-gradient-to-br from-slate-900 via-[#180F11] to-slate-950 rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.1)] border border-slate-800 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
-        >
-          <div className="absolute inset-0 pointer-events-none overflow-hidden">
-            <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/10 rounded-full blur-[50px]" />
-            <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[60px]" />
+
+        {/* Navigation Dots */}
+        {sliderBanners.length > 1 && (
+          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+            {sliderBanners.map((_, idx) => (
+              <button
+                key={idx}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCurrentSlide(idx);
+                }}
+                className={`w-2 h-2 rounded-full transition-all ${currentSlide === idx ? 'bg-white scale-125 w-4' : 'bg-white/40 hover:bg-white/60'}`}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Hover Navigation Arrows (using rotated ChevronRight for ChevronLeft) */}
+        {sliderBanners.length > 1 && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide(prev => (prev - 1 + sliderBanners.length) % sliderBanners.length);
+              }}
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
+            >
+              <ChevronRight className="w-5 h-5 rotate-180" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
+            >
+              <ChevronRight className="w-5 h-5" />
+            </button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  if (isUserLoggedIn) {
+    // Logged in default fallback banner of the exact same size
+    return (
+      <div 
+        className="bg-gradient-to-br from-slate-900 via-[#180F11] to-slate-950 rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.1)] border border-slate-800 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
+      >
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/10 rounded-full blur-[50px]" />
+          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[60px]" />
+        </div>
+
+        <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
+          <div className="space-y-1.5 sm:space-y-2.5">
+            <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
+              🛡️ Hero Account Active
+            </span>
+            <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
+              Welcome back, {user.displayName || 'Donor'}! 👋
+            </h2>
+            <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-300/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
+              Your presence on our Bangladesh volunteer registry gives hope to thousands. Need blood or ready to donate? Choose an action below.
+            </p>
           </div>
 
-          <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
-            <div className="space-y-1.5 sm:space-y-2.5">
-              <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
-                🛡️ Hero Account Active
-              </span>
-              <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
-                Welcome back, {user.displayName || 'Donor'}! 👋
-              </h2>
-              <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-300/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
-                Your presence on our Bangladesh volunteer registry gives hope to thousands. Need blood or ready to donate? Choose an action below.
-              </p>
-            </div>
-
-            <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
-              <button
-                onClick={() => setView('request-form')}
-                className="bg-rose-600 text-white font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-lg hover:bg-rose-700 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>➕ Ask for Blood</span>
-              </button>
-              <button
-                onClick={() => setView('edit-profile')}
-                className="bg-white/10 hover:bg-white/15 text-white border border-white/10 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-              >
-                <span>⚙️ Manage Profile</span>
-              </button>
-            </div>
+          <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
+            <button
+              onClick={() => setView('request-form')}
+              className="bg-rose-600 text-white font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-lg hover:bg-rose-700 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>➕ Ask for Blood</span>
+            </button>
+            <button
+              onClick={() => setView('edit-profile')}
+              className="bg-white/10 hover:bg-white/15 text-white border border-white/10 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <span>⚙️ Manage Profile</span>
+            </button>
           </div>
         </div>
-      );
-    }
+      </div>
+    );
   }
 
   return (
@@ -21683,7 +21769,7 @@ function ConfirmModal({ config }: { config: ConfirmConfig | null }) {
 
 function ToastContainer({ toasts, onRemove, onAction }: { toasts: Toast[], onRemove: (id: string) => void, onAction: (requestId: string) => void }) {
   return (
-    <div className="fixed top-4 left-4 right-4 sm:left-auto sm:right-4 sm:w-[400px] z-[9999] pointer-events-none flex flex-col gap-3">
+    <div className="fixed top-4 top-safe-toast left-4 right-4 sm:left-auto sm:right-4 sm:w-[400px] z-[9999] pointer-events-none flex flex-col gap-3">
       <AnimatePresence>
         {toasts.map(toast => (
           <motion.div
