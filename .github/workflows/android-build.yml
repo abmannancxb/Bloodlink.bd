@@ -40,6 +40,10 @@ jobs:
         run: |
           npx cap sync android
 
+      - name: Download clean Gradle Wrapper JAR
+        run: |
+          curl -sSLo android/gradle/wrapper/gradle-wrapper.jar https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar
+
       - name: Grant Execute Permission to Gradle
         run: chmod +x android/gradlew
 
