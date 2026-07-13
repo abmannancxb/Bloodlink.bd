@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "275980342094",
+    "project_id": "gen-lang-client-0156966945",
+    "storage_bucket": "gen-lang-client-0156966945.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:275980342094:android:d6896c21e6462719",
+        "android_client_info": {
+          "package_name": "com.bloodlink.bangladesh"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCQGaOC4tl9yOp37eyqdYcOYkCLAPI5qzI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "status": 1
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

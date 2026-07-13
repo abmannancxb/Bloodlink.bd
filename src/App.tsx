@@ -50,7 +50,8 @@ import {
 } from 'recharts';
 import { auth, db, messaging } from './firebase';
 export { auth, db, messaging };
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
+const BloodLinkNative = registerPlugin<any>('BloodLinkNative');
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { PushNotifications } from '@capacitor/push-notifications';
 import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
@@ -2392,6 +2393,27 @@ export default function App() {
     }
   }, [user, profile]);
 
+  // Native Notification Navigation Handler
+  const handleNotificationNavigation = useCallback((data: { chatId?: string; requestId?: string; type?: string }) => {
+    if (!data) return;
+    console.log("Navigating from notification data:", data);
+    if (data.chatId) {
+      const chat = chats.find(c => c.id === data.chatId);
+      if (chat) {
+        setActiveChat(chat);
+        setView('chat-room');
+      } else {
+        setView('chats');
+      }
+    } else if (data.requestId) {
+      setView('requests');
+      setShowRequestsOverlay(true);
+      setFilterDistrict('');
+      setFilterBloodGroup('');
+      setFilterThana('');
+    }
+  }, [chats]);
+
   // Native Capacitor Android Push Notifications Setup (Capacitor only)
   useEffect(() => {
     if (user && profile && Capacitor.isNativePlatform()) {
@@ -2452,6 +2474,10 @@ export default function App() {
 
         await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
           console.log('Native Push action performed:', action);
+          const data = action.notification.data;
+          if (data && (data.chatId || data.requestId)) {
+            handleNotificationNavigation(data);
+          }
         });
       };
 
@@ -2462,7 +2488,47 @@ export default function App() {
         PushNotifications.removeAllListeners();
       };
     }
-  }, [user, profile, askConfirm]);
+  }, [user, profile, askConfirm, handleNotificationNavigation]);
+
+  // Synchronize authenticated user details to Android SharedPreferences for background notification actions
+  useEffect(() => {
+    if (Capacitor.isNativePlatform() && user && profile) {
+      BloodLinkNative.setAuthUser({
+        uid: user.uid,
+        displayName: profile.displayName || 'Anonymous Donor',
+        email: profile.email || ''
+      }).catch((e: any) => console.error("Error setting native auth user:", e));
+    }
+  }, [user, profile]);
+
+  // Handle deep-linking when app launches or is resumed from a tapped notification
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    const checkNotification = async () => {
+      try {
+        const data = await BloodLinkNative.getInitialNotificationData();
+        if (data && (data.chatId || data.requestId)) {
+          handleNotificationNavigation(data);
+        }
+      } catch (err) {
+        console.error("Error in checkNotification:", err);
+      }
+    };
+
+    // Check on startup
+    checkNotification();
+
+    // Check on app resume
+    const onResume = () => {
+      setTimeout(checkNotification, 500);
+    };
+
+    document.addEventListener('resume', onResume);
+    return () => {
+      document.removeEventListener('resume', onResume);
+    };
+  }, [handleNotificationNavigation]);
 
   // Foreground Message Handler (Web only)
   useEffect(() => {

@@ -33,6 +33,39 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Custom Firebase Messaging Service for Professional Heads-up Notifications -->
+        <service
+            android:name=".MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!-- BroadcastReceiver for Notification Background Actions (Reply, Mark as Read, Accept, Decline, Mute) -->
+        <receiver
+            android:name=".NotificationActionReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.bloodlink.bangladesh.ACTION_REPLY" />
+                <action android:name="com.bloodlink.bangladesh.ACTION_MARK_READ" />
+                <action android:name="com.bloodlink.bangladesh.ACTION_MUTE" />
+                <action android:name="com.bloodlink.bangladesh.ACTION_ACCEPT_REQUEST" />
+                <action android:name="com.bloodlink.bangladesh.ACTION_DECLINE_REQUEST" />
+            </intent-filter>
+        </receiver>
+
+        <!-- FCM Notification Defaults -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@android:color/holo_red_dark" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="bloodlink_high_importance_channel" />
     </application>
 
     <!-- Permissions -->
