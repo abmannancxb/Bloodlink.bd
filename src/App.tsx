@@ -1628,7 +1628,7 @@ export default function App() {
 
   // Notifications Setup
   useEffect(() => {
-    if (user && 'Notification' in window && Notification.permission === 'default') {
+    if (user && 'Notification' in window && window.Notification && window.Notification.permission === 'default') {
       const timer = setTimeout(() => setShowNotificationConsent(true), 3000);
       return () => clearTimeout(timer);
     }
@@ -1640,9 +1640,9 @@ export default function App() {
   }, [user]);
 
   const requestNotificationPermission = async () => {
-    if (!('Notification' in window)) return;
+    if (!('Notification' in window) || !window.Notification) return;
     try {
-      const permission = await Notification.requestPermission();
+      const permission = await window.Notification.requestPermission();
       setShowNotificationConsent(false);
       if (permission === 'granted') {
         addToast("Alerts Active", "You will now receive matching blood request alerts.", 'success');
@@ -1939,8 +1939,8 @@ export default function App() {
             );
 
             // Browser Notification
-            if (Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-              new Notification(`New Message from ${senderName}`, {
+            if ('Notification' in window && window.Notification && window.Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+              new window.Notification(`New Message from ${senderName}`, {
                 body: c.lastMessage || "You have a new message on Blood Link.",
                 icon: '/logo.png',
                 tag: c.id
@@ -2306,10 +2306,10 @@ export default function App() {
 
   // Browser Notification Permission Setup
   useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
+    if ('Notification' in window && window.Notification && window.Notification.permission === 'default') {
       const requestPermission = async () => {
         try {
-          await Notification.requestPermission();
+          await window.Notification.requestPermission();
         } catch (e) {
           console.error("Notification permission request failed", e);
         }
@@ -2368,7 +2368,7 @@ export default function App() {
             return;
           }
 
-          const permission = await Notification.requestPermission();
+          const permission = await window.Notification.requestPermission();
           if (permission === 'granted') {
             // Register service worker explicitly for FCM
             const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
@@ -2537,10 +2537,12 @@ export default function App() {
       console.log('Foreground message received:', payload);
       if (payload.notification) {
         playNotificationSound();
-        new Notification(payload.notification.title || "Match Found!", {
-          body: payload.notification.body,
-          icon: '/logo.png'
-        });
+        if ('Notification' in window && window.Notification) {
+          new window.Notification(payload.notification.title || "Match Found!", {
+            body: payload.notification.body,
+            icon: '/logo.png'
+          });
+        }
       }
     });
     return unsubscribe;
@@ -2791,8 +2793,8 @@ export default function App() {
           
           playNotificationSound();
 
-          if (Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-            new Notification("Urgent Blood Request!", {
+          if ('Notification' in window && window.Notification && window.Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+            new window.Notification("Urgent Blood Request!", {
               body,
               icon: '/logo.png',
               tag: latestMatch.id
@@ -2922,9 +2924,9 @@ export default function App() {
       })) as Report[];
       
       // Notify admin of new pending reports
-      if (r.length > reports.length && r[0].status === 'pending' && Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+      if (r.length > reports.length && r[0].status === 'pending' && 'Notification' in window && window.Notification && window.Notification.permission === 'granted' && document.visibilityState === 'hidden') {
         playNotificationSound();
-        new Notification("New Report", {
+        new window.Notification("New Report", {
           body: "A new community post or comment has been reported.",
           icon: '/logo.png'
         });
@@ -2955,8 +2957,8 @@ export default function App() {
           playNotificationSound();
           
           // Browser Notification as well if hidden
-          if (Notification.permission === 'granted' && document.visibilityState === 'hidden') {
-            new Notification(newest.title, {
+          if ('Notification' in window && window.Notification && window.Notification.permission === 'granted' && document.visibilityState === 'hidden') {
+            new window.Notification(newest.title, {
               body: newest.body,
               icon: '/logo.png'
             });
@@ -17533,9 +17535,9 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
 
 function NotificationsView({ requests, globalAlerts, profile, addToast, onDonationDone }: { requests: BloodRequest[], globalAlerts?: any[], profile: UserProfile | null, addToast: (title: string, message: string, type: Toast['type']) => void, onDonationDone: (req: BloodRequest) => void }) {
   const [permission, setPermission] = useState<NotificationPermission>(
-    'Notification' in window ? Notification.permission : 'denied'
+    ('Notification' in window && window.Notification) ? window.Notification.permission : 'denied'
   );
-  const [isSupported] = useState('Notification' in window);
+  const [isSupported] = useState('Notification' in window && !!window.Notification);
 
   const [readAlerts, setReadAlerts] = useState<Record<string, number>>(() => {
     try {
@@ -17563,19 +17565,19 @@ function NotificationsView({ requests, globalAlerts, profile, addToast, onDonati
   });
 
   const requestPermission = async () => {
-    if (!isSupported) {
+    if (!isSupported || !window.Notification) {
       addToast("Not Supported", "Browser notifications are not supported on this device/browser.", 'warning');
       return;
     }
 
     try {
-      const result = await Notification.requestPermission();
+      const result = await window.Notification.requestPermission();
       setPermission(result);
       
       if (result === 'denied') {
         addToast("Permission Denied", "Notification permission was denied. Please enable it in your browser settings to receive alerts.", 'error');
       } else if (result === 'granted') {
-        new Notification("Notifications Enabled!", {
+        new window.Notification("Notifications Enabled!", {
           body: "You will now receive alerts for matching blood requests.",
           icon: '/logo.png'
         });
@@ -17602,8 +17604,8 @@ function NotificationsView({ requests, globalAlerts, profile, addToast, onDonati
       "This is a preview of how you will receive blood request alerts.",
       'success'
     );
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification("System Alert Active", {
+    if ('Notification' in window && window.Notification && window.Notification.permission === 'granted') {
+      new window.Notification("System Alert Active", {
         body: "You will receive matches for matching blood requests.",
         icon: '/logo.png'
       });
