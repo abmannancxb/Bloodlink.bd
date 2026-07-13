@@ -107,6 +107,21 @@ export { OperationType };
 
 declare const __APP_VERSION__: string;
 
+interface InAppHeadsUpAlert {
+  id: string;
+  title: string;
+  body: string;
+  type: 'chat' | 'blood_request';
+  chatId?: string;
+  requestId?: string;
+  senderId?: string;
+  senderName?: string;
+  avatarUrl?: string;
+  bloodGroup?: string;
+  hospital?: string;
+  timestamp: Date;
+}
+
 import { 
   Droplets, 
   Droplet,
@@ -564,6 +579,17 @@ export default function App() {
   const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [inAppHeadsUp, setInAppHeadsUp] = useState<InAppHeadsUpAlert | null>(null);
+  const [inAppReplyText, setInAppReplyText] = useState("");
+  const [inAppReplyExpanded, setInAppReplyExpanded] = useState(false);
+  const [mutedChats, setMutedChats] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('bloodlink_muted_chats');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1723,6 +1749,17 @@ export default function App() {
     lastMatchCount.current = relevantRequests.length;
   }, [relevantRequests.length]);
 
+  useEffect(() => {
+    if (!inAppHeadsUp) return;
+    if (inAppReplyExpanded) return;
+    
+    const timer = setTimeout(() => {
+      setInAppHeadsUp(null);
+    }, 8000);
+    
+    return () => clearTimeout(timer);
+  }, [inAppHeadsUp, inAppReplyExpanded]);
+
   const onViewProfile = (uid: string) => {
     setSelectedUserId(uid);
     setView('public-profile');
@@ -1938,6 +1975,24 @@ export default function App() {
               `chat:${c.id}`
             );
 
+            // In-app heads-up notification (WhatsApp style)
+            const isMuted = mutedChats.includes(c.id);
+            if (!isMuted) {
+              setInAppHeadsUp({
+                id: c.id,
+                title: senderName,
+                body: c.lastMessage || "You have a new message.",
+                type: 'chat',
+                chatId: c.id,
+                senderId: otherUid,
+                senderName: senderName,
+                avatarUrl: otherUser?.photoURL || '',
+                timestamp: new Date()
+              });
+              setInAppReplyText("");
+              setInAppReplyExpanded(false);
+            }
+
             // Browser Notification
             if ('Notification' in window && window.Notification && window.Notification.permission === 'granted' && document.visibilityState === 'hidden') {
               new window.Notification(`New Message from ${senderName}`, {
@@ -1958,7 +2013,7 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'chats'));
 
     return () => unsubscribe();
-  }, [user, allUsers, addToast]);
+  }, [user, allUsers, addToast, mutedChats]);
 
   const openChat = async (otherUserId: string) => {
     if (!user) {
@@ -2807,6 +2862,19 @@ export default function App() {
             'info',
             latestMatch.id
           );
+
+          // In-app heads-up notification (WhatsApp style)
+          setInAppHeadsUp({
+            id: latestMatch.id,
+            title: `Urgent ${latestMatch.bloodGroup} Request!`,
+            body: body,
+            type: 'blood_request',
+            requestId: latestMatch.id,
+            senderName: latestMatch.requesterName,
+            bloodGroup: latestMatch.bloodGroup,
+            hospital: latestMatch.hospital,
+            timestamp: new Date()
+          });
           
           // Mark all current matches as notified
           matchingRequests.forEach(r => notifiedIds.current.add(r.id));
@@ -3785,10 +3853,242 @@ export default function App() {
     );
   }
 
+  const sendInAppHeadsUpReply = async (chatId: string, replyText: string, otherUserId: string) => {
+    if (!user || !replyText.trim()) return;
+    try {
+      await addDoc(collection(db, `chats/${chatId}/messages`), {
+        senderId: user.uid,
+        text: replyText.trim(),
+        createdAt: serverTimestamp(),
+        read: false
+      });
+
+      await updateDoc(doc(db, 'chats', chatId), {
+        lastMessage: replyText.trim(),
+        lastMessageAt: serverTimestamp(),
+        [`unreadCount.${otherUserId}`]: increment(1)
+      });
+      addToast("Reply Sent", "Your reply has been sent successfully.", "success");
+      setInAppHeadsUp(null);
+    } catch (e) {
+      console.error("Failed to send in-app reply:", e);
+      addToast("Failed to Reply", "Could not send reply.", "error");
+    }
+  };
+
+  const markInAppChatAsRead = async (chatId: string) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'chats', chatId), {
+        [`unreadCount.${user.uid}`]: 0
+      });
+      addToast("Marked as Read", "Chat marked as read.", "success");
+      setInAppHeadsUp(null);
+    } catch (e) {
+      console.error("Failed to mark chat as read:", e);
+    }
+  };
+
+  const muteInAppConversation = async (chatId: string) => {
+    setMutedChats(prev => {
+      const updated = prev.includes(chatId) ? prev : [...prev, chatId];
+      localStorage.setItem('bloodlink_muted_chats', JSON.stringify(updated));
+      return updated;
+    });
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await BloodLinkNative.muteChat({ chatId, mute: true });
+      } catch (e) {
+        console.error("Error syncing mute to native:", e);
+      }
+    }
+    addToast("Chat Muted", "You will no longer receive sound alerts for this chat.", "info");
+    setInAppHeadsUp(null);
+  };
+
+  const acceptInAppBloodRequest = async (requestId: string) => {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, 'requests', requestId), {
+        status: 'Fulfilled',
+        responderUid: user.uid,
+        responderName: profile?.displayName || user.displayName || 'Anonymous Donor',
+        acceptedAt: serverTimestamp()
+      });
+      addToast("Request Accepted", "You have accepted this blood request! Marked as Fulfilled.", "success");
+      setInAppHeadsUp(null);
+    } catch (e) {
+      console.error("Failed to accept blood request:", e);
+      addToast("Failed to Accept", "Could not accept the request. Please try again.", "error");
+    }
+  };
+
   return (
     <APIProvider key={effectiveApiKey} apiKey={effectiveApiKey} version="weekly">
       <div className="h-dvh flex flex-col bg-slate-50 overflow-hidden relative">
         <ToastContainer toasts={toasts} onRemove={onRemoveToast} onAction={onActionToast} />
+
+        <AnimatePresence>
+          {inAppHeadsUp && (
+            <motion.div
+              id="inapp-heads-up-notification"
+              initial={{ opacity: 0, y: -100 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -100 }}
+              transition={{ type: "spring", damping: 20, stiffness: 120 }}
+              className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-[420px] z-[99999] bg-white rounded-2xl shadow-[0_15px_30px_rgba(0,0,0,0.12)] border border-slate-100 overflow-hidden pointer-events-auto"
+            >
+              {/* High Importance indicator strip */}
+              <div className={`h-1.5 w-full ${inAppHeadsUp.type === 'blood_request' ? 'bg-red-500' : 'bg-emerald-500'}`} />
+              
+              <div className="p-4">
+                {/* Header click triggers navigation to correct screen */}
+                <div 
+                  id="heads-up-banner-body"
+                  className="flex gap-3 cursor-pointer select-none"
+                  onClick={() => {
+                    if (inAppHeadsUp.type === 'chat' && inAppHeadsUp.chatId) {
+                      const chat = chats.find(c => c.id === inAppHeadsUp.chatId);
+                      if (chat) {
+                        handleSetActiveChat(chat);
+                        setView('chat-room');
+                      } else {
+                        setView('chats');
+                      }
+                    } else if (inAppHeadsUp.type === 'blood_request' && inAppHeadsUp.requestId) {
+                      setView('requests');
+                      setShowRequestsOverlay(true);
+                      setFilterDistrict('');
+                      setFilterBloodGroup('');
+                      setFilterThana('');
+                    }
+                    setInAppHeadsUp(null);
+                  }}
+                >
+                  {/* Left Icon or Photo */}
+                  {inAppHeadsUp.type === 'chat' ? (
+                    inAppHeadsUp.avatarUrl ? (
+                      <img 
+                        id="heads-up-avatar"
+                        src={inAppHeadsUp.avatarUrl} 
+                        alt="" 
+                        className="w-11 h-11 rounded-full object-cover border border-slate-100 shadow-sm shrink-0"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div id="heads-up-avatar-placeholder" className="w-11 h-11 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-sm border border-emerald-100 shadow-sm shrink-0">
+                        {inAppHeadsUp.title.charAt(0).toUpperCase()}
+                      </div>
+                    )
+                  ) : (
+                    <div id="heads-up-blood-icon" className="w-11 h-11 rounded-full bg-red-50 text-red-600 flex items-center justify-center border border-red-100 shadow-sm shrink-0">
+                      <Droplets className="w-6 h-6 animate-pulse text-red-500" />
+                    </div>
+                  )}
+
+                  {/* Text Contents */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p id="heads-up-title" className="font-extrabold text-slate-900 text-xs sm:text-sm truncate uppercase tracking-tight">
+                        {inAppHeadsUp.title}
+                      </p>
+                      <span id="heads-up-timestamp" className="text-[9px] text-slate-400 font-bold font-mono shrink-0 uppercase tracking-widest bg-slate-50 px-1.5 py-0.5 rounded">
+                        Just Now
+                      </span>
+                    </div>
+                    <p id="heads-up-message" className="text-xs text-slate-500 mt-1 font-medium leading-relaxed break-words line-clamp-2">
+                      {inAppHeadsUp.body}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Inline Reply input for chats */}
+                {inAppHeadsUp.type === 'chat' && inAppReplyExpanded && (
+                  <motion.div 
+                    id="heads-up-reply-container"
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-3 pt-3 border-t border-slate-100 flex gap-2 items-center"
+                  >
+                    <input 
+                      id="heads-up-reply-input"
+                      type="text"
+                      placeholder={`Reply to ${inAppHeadsUp.title}...`}
+                      value={inAppReplyText}
+                      onChange={(e) => setInAppReplyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          sendInAppHeadsUpReply(inAppHeadsUp.chatId!, inAppReplyText, inAppHeadsUp.senderId!);
+                        }
+                      }}
+                      className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/5 transition-all"
+                      autoFocus
+                    />
+                    <button
+                      id="heads-up-reply-submit"
+                      onClick={() => sendInAppHeadsUpReply(inAppHeadsUp.chatId!, inAppReplyText, inAppHeadsUp.senderId!)}
+                      disabled={!inAppReplyText.trim()}
+                      className="p-2.5 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:hover:bg-emerald-500 text-white rounded-xl transition-all shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95 shrink-0"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                )}
+
+                {/* Action buttons footer */}
+                <div id="heads-up-actions" className="flex gap-2 justify-end mt-4 pt-3 border-t border-slate-50">
+                  {inAppHeadsUp.type === 'chat' ? (
+                    <>
+                      <button 
+                        id="heads-up-action-reply"
+                        onClick={() => setInAppReplyExpanded(!inAppReplyExpanded)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${inAppReplyExpanded ? 'bg-emerald-50 text-emerald-600 border border-emerald-100/50' : 'bg-slate-50 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600'}`}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        Reply
+                      </button>
+                      <button 
+                        id="heads-up-action-mark-read"
+                        onClick={() => markInAppChatAsRead(inAppHeadsUp.chatId!)}
+                        className="px-2.5 py-1.5 bg-slate-50 hover:bg-emerald-50 text-slate-600 hover:text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Mark Read
+                      </button>
+                      <button 
+                        id="heads-up-action-mute"
+                        onClick={() => muteInAppConversation(inAppHeadsUp.chatId!)}
+                        className="px-2.5 py-1.5 bg-slate-50 hover:bg-red-50 text-slate-600 hover:text-red-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <BellOff className="w-3.5 h-3.5" />
+                        Mute
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button 
+                        id="heads-up-action-accept"
+                        onClick={() => acceptInAppBloodRequest(inAppHeadsUp.requestId!)}
+                        className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-red-500/15 cursor-pointer active:scale-95"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Accept Match
+                      </button>
+                      <button 
+                        id="heads-up-action-decline"
+                        onClick={() => setInAppHeadsUp(null)}
+                        className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Decline
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {lastCriticalError && (
           <motion.div 

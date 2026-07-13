@@ -46,6 +46,38 @@ public class BloodLinkNativePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void muteChat(PluginCall call) {
+        String chatId = call.getString("chatId");
+        boolean mute = call.getBoolean("mute", true);
+
+        if (chatId == null) {
+            call.reject("Chat ID cannot be null");
+            return;
+        }
+
+        Context context = getContext();
+        if (context == null) {
+            call.reject("Context is null");
+            return;
+        }
+
+        SharedPreferences prefs = context.getSharedPreferences("BloodLinkPrefs", Context.MODE_PRIVATE);
+        java.util.Set<String> mutedChats = new java.util.HashSet<>(prefs.getStringSet("muted_chats", new java.util.HashSet<>()));
+        if (mute) {
+            mutedChats.add(chatId);
+        } else {
+            mutedChats.remove(chatId);
+        }
+        prefs.edit().putStringSet("muted_chats", mutedChats).apply();
+
+        Log.d(TAG, "Chat mute state updated: " + chatId + " -> " + mute);
+        JSObject ret = new JSObject();
+        ret.put("status", "success");
+        ret.put("isMuted", mute);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void getInitialNotificationData(PluginCall call) {
         JSObject ret = new JSObject();
         if (getActivity() != null) {
