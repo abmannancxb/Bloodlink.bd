@@ -4330,15 +4330,6 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Can't Find A Donor Promo Card (Down in Analytics/Home Page) */}
-                    <div>
-                      <RequestBloodPromoCard 
-                        user={user} 
-                        setView={setView} 
-                        handleLogin={handleLogin} 
-                      />
-                    </div>
-
                     {/* 3 & 4. Integrated Map Combination Container (Map Background + Bento Overlaid Bottom) */}
                     <div className="relative -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full h-[480px] bg-slate-100 rounded-none sm:rounded-[36px] overflow-hidden border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between pointer-events-auto">
                       
@@ -13111,7 +13102,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                             const file = e.target.files?.[0];
                             if (file) {
                               try {
-                                const base64 = await compressAndResizeImage(file, 900, 300);
+                                const base64 = await compressAndResizeImage(file, 1200, 400);
                                 if (editingBanner) {
                                   setEditBannerImageFileBase64(base64);
                                 } else {
@@ -13128,7 +13119,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
                           Choose Image File
                         </label>
                         <p className="text-[9px] text-slate-400 text-center font-medium">
-                          Ideal ratio is 3:1. Max size compressed on the fly.
+                          Recommended size: 1200 x 400 px (3:1 Aspect Ratio). The image will be displayed fully as uploaded.
                         </p>
                       </div>
                       {(bannerImageFileBase64 || editBannerImageFileBase64 || editingBanner?.imageUrl) && (
@@ -15474,8 +15465,8 @@ function PremiumHeroBannerCard({
   // Filter only active custom banners
   const activeBanners = (customBanners || []).filter(b => b.isActive);
 
-  // Show up to 3 most recently created active banners in a slideshow
-  const sliderBanners = activeBanners.slice(0, 3);
+  // Show up to 5 most recently created active banners in a slideshow
+  const sliderBanners = activeBanners.slice(0, 5);
 
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -15488,384 +15479,141 @@ function PremiumHeroBannerCard({
     return () => clearInterval(interval);
   }, [sliderBanners.length]);
 
-  if (sliderBanners.length > 0) {
-    return (
-      <div className="group relative rounded-[32px] overflow-hidden shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in duration-500 bg-black">
-        {/* Slides */}
-        <div className="w-full h-full relative">
-          {sliderBanners.map((banner, index) => {
-            const isSelected = index === currentSlide;
-            
-            if (banner.imageUrl) {
-              // Full-image mode (shows the uploaded banner photo as-is, with no text/buttons overlaid)
-              return (
-                <div
-                  key={banner.id}
-                  onClick={() => {
-                    if (banner.buttonLink) {
-                      if (banner.buttonLink.startsWith('http')) {
-                        window.open(banner.buttonLink, '_blank', 'noopener,noreferrer');
-                      } else {
-                        setView(banner.buttonLink);
-                      }
-                    }
-                  }}
-                  className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out cursor-pointer flex items-center justify-center ${
-                    isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
-                  } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
-                >
-                  <img
-                    src={banner.imageUrl}
-                    alt={banner.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-contain mx-auto transition-transform duration-700 group-hover:scale-[1.01]"
-                  />
-                </div>
-              );
-            } else {
-              // Legacy text overlay mode (only used if no custom image is uploaded)
-              return (
-                <div
-                  key={banner.id}
-                  className={`absolute inset-0 p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 text-white transition-all duration-700 ease-in-out ${
-                    isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
-                  } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
-                >
-                  {/* Background particles and visual flair */}
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[50px]" />
-                    <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[60px]" />
-                  </div>
-
-                  <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
-                    <div className="space-y-1.5 sm:space-y-2.5">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/20 text-rose-300 text-[9px] font-black tracking-widest uppercase">
-                        📢 Announcement
-                      </span>
-                      <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
-                        {banner.title}
-                      </h2>
-                      <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
-                        {banner.subtitle}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
-                      {banner.buttonText && (
-                        banner.buttonLink.startsWith('http') ? (
-                          <a
-                            href={banner.buttonLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-white text-slate-900 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-slate-100 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <span>{banner.buttonText}</span>
-                          </a>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              if (banner.buttonLink) {
-                                setView(banner.buttonLink as any);
-                              }
-                            }}
-                            className="bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-6 rounded-full shadow-md hover:bg-rose-50 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
-                          >
-                            <span>{banner.buttonText}</span>
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            }
-          })}
-        </div>
-
-        {/* Navigation Dots */}
-        {sliderBanners.length > 1 && (
-          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
-            {sliderBanners.map((_, idx) => (
-              <button
-                key={idx}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentSlide(idx);
-                }}
-                className={`w-2 h-2 rounded-full transition-all ${currentSlide === idx ? 'bg-white scale-125 w-4' : 'bg-white/40 hover:bg-white/60'}`}
-                aria-label={`Go to slide ${idx + 1}`}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Hover Navigation Arrows (using rotated ChevronRight for ChevronLeft) */}
-        {sliderBanners.length > 1 && (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentSlide(prev => (prev - 1 + sliderBanners.length) % sliderBanners.length);
-              }}
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
-            >
-              <ChevronRight className="w-5 h-5 rotate-180" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
-              }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
-            >
-              <ChevronRight className="w-5 h-5" />
-            </button>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  if (isUserLoggedIn) {
-    // Logged in default fallback banner of the exact same size
-    return (
-      <div 
-        className="bg-gradient-to-br from-slate-900 via-[#180F11] to-slate-950 rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.1)] border border-slate-800 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
-      >
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/10 rounded-full blur-[50px]" />
-          <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[60px]" />
-        </div>
-
-        <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
-          <div className="space-y-1.5 sm:space-y-2.5">
-            <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-full text-[9px] font-black tracking-widest uppercase">
-              🛡️ Hero Account Active
-            </span>
-            <h2 className="text-xl sm:text-3xl md:text-[30px] font-black leading-tight tracking-tight text-white">
-              Welcome back, {user.displayName || 'Donor'}! 👋
-            </h2>
-            <p className="text-[11.5px] sm:text-xs md:text-sm text-slate-300/90 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
-              Your presence on our Bangladesh volunteer registry gives hope to thousands. Need blood or ready to donate? Choose an action below.
-            </p>
-          </div>
-
-          <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
-            <button
-              onClick={() => setView('request-form')}
-              className="bg-rose-600 text-white font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-lg hover:bg-rose-700 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>➕ Ask for Blood</span>
-            </button>
-            <button
-              onClick={() => setView('edit-profile')}
-              className="bg-white/10 hover:bg-white/15 text-white border border-white/10 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <span>⚙️ Manage Profile</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  if (sliderBanners.length === 0) {
+    return null;
   }
 
   return (
-    <div 
-      className="bg-gradient-to-br from-slate-950 via-[#1F070C] to-[#360812] rounded-[32px] p-5 sm:p-7 md:p-9 flex flex-col sm:flex-row items-center justify-between gap-6 sm:gap-8 shadow-[0_24px_60px_rgba(225,29,72,0.18)] border border-rose-500/15 relative overflow-hidden select-none w-full h-[26vh] min-h-[200px] sm:min-h-[225px] md:min-h-[245px] max-h-[285px] md:max-h-[305px] animate-in fade-in slide-in-from-bottom-5 duration-500"
-    >
-      {/* Background soft glowing particles and ECG line in the design */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        {/* Modern glowing deep backdrop blur effects */}
-        <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-600/15 rounded-full blur-[50px] mix-blend-screen" />
-        <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-600/20 rounded-full blur-[60px] mix-blend-screen" />
-        
-        {/* Soft glowing particle dots */}
-        <div className="absolute top-[20%] left-[10%] w-2 h-2 bg-white/40 rounded-full blur-[1px] animate-pulse" />
-        <div className="absolute top-[75%] left-[25%] w-1.5 h-1.5 bg-white/30 rounded-full blur-[0.5px] animate-ping duration-1000" />
-        <div className="absolute top-[15%] right-[45%] w-3 h-3 bg-white/20 rounded-full blur-[1px]" />
-        <div className="absolute bottom-[20%] right-[35%] w-2 h-2 bg-white/40 rounded-full blur-[0.5px] animate-pulse" />
-      </div>
-
-      <style>{`
-        @keyframes floatDrop {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-        }
-        @keyframes drawEcg {
-          0% { stroke-dashoffset: 600; }
-          100% { stroke-dashoffset: 0; }
-        }
-        .anim-float-drop-premium {
-          animation: floatDrop 3.5s ease-in-out infinite;
-        }
-        .anim-ecg-line-premium {
-          stroke-dasharray: 600;
-          stroke-dashoffset: 600;
-          animation: drawEcg 5s linear infinite;
-        }
-      `}</style>
-
-      {/* Content Columns */}
-      <div className="flex-1 text-center sm:text-left z-10 space-y-3 sm:space-y-4 max-w-xl">
-        {/* Left Side Texts */}
-        <div className="space-y-1.5 sm:space-y-2.5">
-          <h2 className="text-xl sm:text-3xl md:text-[34px] font-black leading-tight tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-rose-100 to-white">
-            You Can Be Someone's Hope. ❤️
-          </h2>
-          <p className="text-[11.5px] sm:text-xs md:text-sm text-rose-100/80 font-medium leading-relaxed max-w-md mx-auto sm:mx-0">
-            Every blood donation is a chance to save a life. Join our community of heroes today.
-          </p>
-        </div>
-
-        {/* Action Buttons: side by side, equal width, consistent spacing, pill-shaped */}
-        <div className="flex flex-row items-center justify-center sm:justify-start gap-3 w-full">
-          {!isUserLoggedIn ? (
-            <>
-              <button
+    <div className="group relative rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 w-full aspect-[3/1] animate-in fade-in duration-500 bg-black">
+      {/* Slides */}
+      <div className="w-full h-full relative">
+        {sliderBanners.map((banner, index) => {
+          const isSelected = index === currentSlide;
+          
+          if (banner.imageUrl) {
+            // Full-image mode (shows the uploaded banner photo as-is, with no text/buttons overlaid)
+            return (
+              <div
+                key={banner.id}
                 onClick={() => {
-                  setAuthScreen('register');
-                  setIsGuest(false);
-                }}
-                className="flex-1 max-w-[210px] bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-[0_4px_20px_rgba(255,255,255,0.25)] hover:bg-rose-50 hover:shadow-[0_6px_25px_rgba(255,255,255,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
-              >
-                <span>👤 Join as Donor</span>
-              </button>
-              <button
-                onClick={() => {
-                  setAuthScreen('login-email');
-                  setIsGuest(false);
-                }}
-                className="flex-1 max-w-[130px] bg-white/10 hover:bg-white/15 text-white border border-white/20 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer hover:border-white/30"
-              >
-                <span>→ Login</span>
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setView('edit-profile')}
-                className="flex-1 max-w-[210px] bg-white text-rose-600 font-extrabold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-[0_4px_20px_rgba(255,255,255,0.25)] hover:bg-rose-50 hover:shadow-[0_6px_25px_rgba(255,255,255,0.4)] transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
-              >
-                <span>👤 Join as Donor</span>
-              </button>
-              <button
-                onClick={() => {
-                  if (handleLogout) {
-                    handleLogout();
-                  } else {
-                    signOut(auth);
+                  if (banner.buttonLink) {
+                    if (banner.buttonLink.startsWith('http')) {
+                      window.open(banner.buttonLink, '_blank', 'noopener,noreferrer');
+                    } else {
+                      setView(banner.buttonLink);
+                    }
                   }
-                  setAuthScreen('login-email');
-                  setIsGuest(false);
                 }}
-                className="flex-1 max-w-[130px] bg-white/10 hover:bg-white/15 text-white border border-white/20 backdrop-blur-md font-bold text-[11px] sm:text-xs md:text-sm py-2.5 sm:py-3 px-4 sm:px-5 rounded-full shadow-md transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer hover:border-white/30"
+                className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out cursor-pointer flex items-center justify-center ${
+                  isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
+                } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
               >
-                <span>→ Logout</span>
-              </button>
-            </>
-          )}
+                <img
+                  src={banner.imageUrl}
+                  alt={banner.title}
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.01]"
+                />
+              </div>
+            );
+          } else {
+            // Legacy text overlay mode (only used if no custom image is uploaded)
+            return (
+              <div
+                key={banner.id}
+                className={`absolute inset-0 p-4 sm:p-6 md:p-8 flex flex-col items-center justify-center text-white transition-all duration-700 ease-in-out ${
+                  isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
+                } ${banner.bgColor || 'bg-gradient-to-br from-slate-900 via-rose-950 to-slate-950'}`}
+              >
+                {/* Background particles and visual flair */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                  <div className="absolute -top-16 -left-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[50px]" />
+                  <div className="absolute -bottom-16 -right-16 w-56 h-56 bg-rose-500/10 rounded-full blur-[60px]" />
+                </div>
+
+                <div className="text-center z-10 space-y-1.5 sm:space-y-3 max-w-xl px-4">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:py-1 rounded-full bg-rose-500/20 text-rose-300 text-[8px] sm:text-[9px] font-black tracking-widest uppercase">
+                    📢 Announcement
+                  </span>
+                  <h2 className="text-sm sm:text-2xl md:text-3xl font-black leading-tight tracking-tight text-white">
+                    {banner.title}
+                  </h2>
+                  <p className="text-[10px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto line-clamp-2">
+                    {banner.subtitle}
+                  </p>
+
+                  {banner.buttonText && (
+                    <div className="pt-1.5 sm:pt-3">
+                      {banner.buttonLink.startsWith('http') ? (
+                        <a
+                          href={banner.buttonLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex bg-white text-slate-900 font-extrabold text-[9px] sm:text-xs py-1.5 sm:py-2 px-4 sm:px-6 rounded-full shadow-md hover:bg-slate-100 transition-all transform hover:scale-[1.02] active:scale-95 items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <span>{banner.buttonText}</span>
+                        </a>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (banner.buttonLink) {
+                              setView(banner.buttonLink as any);
+                            }
+                          }}
+                          className="bg-white text-rose-600 font-extrabold text-[9px] sm:text-xs py-1.5 sm:py-2 px-4 sm:px-6 rounded-full shadow-md hover:bg-rose-50 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer border border-white"
+                        >
+                          <span>{banner.buttonText}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          }
+        })}
+      </div>
+
+      {/* Navigation Dots */}
+      {sliderBanners.length > 1 && (
+        <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
+          {sliderBanners.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentSlide(idx);
+              }}
+              className={`w-2 h-2 rounded-full transition-all ${currentSlide === idx ? 'bg-white scale-125 w-4' : 'bg-white/40 hover:bg-white/60'}`}
+              aria-label={`Go to slide ${idx + 1}`}
+            />
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Right Side 3D Vector Design */}
-      <div className="absolute right-[-10px] bottom-[-10px] w-28 h-28 opacity-15 sm:opacity-100 sm:relative sm:right-auto sm:bottom-auto sm:w-36 sm:h-36 md:w-52 md:h-52 shrink-0 flex items-center justify-center z-0 sm:z-10 select-none">
-        <svg viewBox="0 0 240 240" className="w-full h-full drop-shadow-[0_12px_28px_rgba(0,0,0,0.15)]">
-          <defs>
-            {/* Glossy 3D Drop Radial Gradient */}
-            <radialGradient id="dropGlossyPremium" cx="35%" cy="30%" r="65%">
-              <stop offset="0%" stopColor="#FFFFFF" />
-              <stop offset="15%" stopColor="#FFEAEA" />
-              <stop offset="45%" stopColor="#FF1744" />
-              <stop offset="85%" stopColor="#D50000" />
-              <stop offset="100%" stopColor="#7F0000" />
-            </radialGradient>
-            
-            {/* Outer soft glow for the blood drop */}
-            <filter id="softGlowDrop" x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="10" result="blur" />
-              <feComposite in="SourceGraphic" in2="blur" operator="over" />
-            </filter>
-
-            {/* Hand Gradient */}
-            <linearGradient id="caringHandsGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-              <stop offset="0%" stopColor="rgba(255, 255, 255, 0.4)" />
-              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.75)" />
-              <stop offset="100%" stopColor="rgba(255, 255, 255, 0.95)" />
-            </linearGradient>
-
-            {/* ECG Glow Path Gradient */}
-            <linearGradient id="ecgLineGlow" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="rgba(255, 255, 255, 0)" />
-              <stop offset="50%" stopColor="rgba(255, 255, 255, 0.35)" />
-              <stop offset="100%" stopColor="rgba(255, 255, 255, 0)" />
-            </linearGradient>
-          </defs>
-
-          {/* Faint heartbeat ECG line in the background */}
-          <path 
-            d="M 10 120 H 60 L 72 95 L 84 145 L 96 110 L 104 120 H 130 L 142 30 L 158 210 L 174 90 L 186 135 L 194 120 H 230" 
-            fill="none" 
-            stroke="url(#ecgLineGlow)" 
-            strokeWidth="3" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-            className="anim-ecg-line-premium"
-          />
-
-          {/* Glowing particle dots inside the SVG canvas */}
-          <circle cx="45" cy="60" r="3" fill="#FFFFFF" opacity="0.5" className="animate-pulse" />
-          <circle cx="205" cy="50" r="4" fill="#FFFFFF" opacity="0.6" className="animate-pulse" style={{ animationDelay: '1s' }} />
-          <circle cx="25" cy="160" r="2" fill="#FFFFFF" opacity="0.3" />
-          <circle cx="215" cy="170" r="3" fill="#FFFFFF" opacity="0.4" style={{ animationDelay: '0.5s' }} />
-
-          {/* Two Caring Open Hands cradling the drop */}
-          <g fill="url(#caringHandsGrad)">
-            {/* Left Caring Hand */}
-            <path d="M 40,175 C 52,162 76,165 96,172 C 108,176 112,181 112,184 C 102,184 85,181 68,182 C 56,183 48,189 40,197 C 34,190 34,182 40,175 Z" />
-            <path d="M 52,166 C 64,152 82,154 102,164 C 95,165 82,161 68,165 C 61,167 56,171 52,166 Z" opacity="0.85" />
-            <path d="M 46,198 C 62,192 90,194 111,199 C 96,202 74,202 57,204 C 51,204 48,201 46,198 Z" opacity="0.75" />
-            
-            {/* Right Caring Hand (Mirrored) */}
-            <path d="M 200,175 C 188,162 164,165 144,172 C 132,176 128,181 128,184 C 138,184 155,181 172,182 C 184,183 192,189 200,197 C 206,190 206,182 200,175 Z" />
-            <path d="M 188,166 C 176,152 158,154 138,164 C 145,165 158,161 172,165 C 179,167 184,171 188,166 Z" opacity="0.85" />
-            <path d="M 194,198 C 178,192 150,194 129,199 C 144,202 166,202 183,204 C 189,204 192,201 194,198 Z" opacity="0.75" />
-          </g>
-
-          {/* 3D Glossy Floating Blood Drop with Heart inside */}
-          <g className="anim-float-drop-premium" style={{ transformOrigin: 'center center' }}>
-            {/* Outer shadow/glow of the drop */}
-            <path 
-              d="M 120,55 C 120,55 85,105 85,130 A 35,35 0 0,0 155,130 C 155,105 120,55 120,55 Z" 
-              fill="#FF1744" 
-              opacity="0.4" 
-              filter="url(#softGlowDrop)" 
-            />
-            
-            {/* Main Drop Volume */}
-            <path 
-              d="M 120,55 C 120,55 85,105 85,130 A 35,35 0 0,0 155,130 C 155,105 120,55 120,55 Z" 
-              fill="url(#dropGlossyPremium)" 
-            />
-
-            {/* Gloss Highlight (Inner upper-left curve) */}
-            <path 
-              d="M 103,100 C 97,108 97,118 103,125 C 99,122 94,114 95,106 C 96,98 103,100 103,100 Z" 
-              fill="#FFFFFF" 
-              opacity="0.65" 
-            />
-
-            {/* Small high intensity gloss reflection ellipse */}
-            <ellipse cx="106" cy="85" rx="4.5" ry="8.5" transform="rotate(-30 106 85)" fill="#FFFFFF" opacity="0.85" />
-
-            {/* Pure White Heart inside the drop */}
-            <path 
-              d="M 120,132 C 118,130 110,121 110,114 C 110,108.5 114,105 119,105 C 121.7,105 123.5,106.5 124,108 C 124.5,106.5 126.3,105 129,105 C 134,105 138,108.5 138,114 C 138,121 130,130 128,132 L 124,136 Z" 
-              fill="#FFFFFF" 
-              className="drop-shadow-sm" 
-            />
-          </g>
-        </svg>
-      </div>
+      {/* Hover Navigation Arrows (using rotated ChevronRight for ChevronLeft) */}
+      {sliderBanners.length > 1 && (
+        <>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentSlide(prev => (prev - 1 + sliderBanners.length) % sliderBanners.length);
+            }}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
+          >
+            <ChevronRight className="w-5 h-5 rotate-180" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
+            }}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
+          >
+            <ChevronRight className="w-5 h-5" />
+          </button>
+        </>
+      )}
     </div>
   );
 }
