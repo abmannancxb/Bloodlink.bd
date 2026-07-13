@@ -1336,6 +1336,16 @@ export default function App() {
 
   const ensureMicPermission = useCallback(async (): Promise<boolean> => {
     try {
+      if (Capacitor.isNativePlatform()) {
+        try {
+          const res = await BloodLinkNative.requestMicrophonePermission();
+          console.log("Native microphone permission status:", res?.status);
+          if (res?.status === 'granted') return true;
+        } catch (err) {
+          console.error("Failed to request native microphone permission, trying web fallback", err);
+        }
+      }
+
       if (navigator.permissions && (navigator.permissions as any).query) {
         try {
           const result = await navigator.permissions.query({ name: 'microphone' as any });

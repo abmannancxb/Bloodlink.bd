@@ -17,8 +17,21 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
 
-@CapacitorPlugin(name = "BloodLinkNative")
+@CapacitorPlugin(
+    name = "BloodLinkNative",
+    permissions = {
+        @Permission(
+            alias = "microphone",
+            strings = { android.Manifest.permission.RECORD_AUDIO }
+        ),
+        @Permission(
+            alias = "notifications",
+            strings = { "android.permission.POST_NOTIFICATIONS" }
+        )
+    }
+)
 public class BloodLinkNativePlugin extends Plugin {
     private static final String TAG = "BloodLinkNativePlugin";
 
@@ -163,5 +176,85 @@ public class BloodLinkNativePlugin extends Plugin {
             Log.e(TAG, "Notification permission missing when publishing local test", e);
             call.reject("Permission missing: " + e.getMessage());
         }
+    }
+
+    @PluginMethod
+    public void requestMicrophonePermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            requestPermissionForAlias("microphone", call, "microphoneCallback");
+                        } catch (Exception e) {
+                            // Fallback to direct Android request
+                            String[] permissions = {android.Manifest.permission.RECORD_AUDIO};
+                            getActivity().requestPermissions(permissions, 12345);
+                            JSObject ret = new JSObject();
+                            ret.put("status", "requested");
+                            call.resolve(ret);
+                        }
+                    }
+                });
+            } else {
+                call.reject("Activity is null");
+            }
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("status", "granted");
+            call.resolve(ret);
+        }
+    }
+
+    @com.getcapacitor.PermissionCallback
+    private void microphoneCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (getPermissionState("microphone") == com.getcapacitor.PermissionState.GRANTED) {
+            ret.put("status", "granted");
+        } else {
+            ret.put("status", "denied");
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestNotificationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= 33) { // Android 13+
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            requestPermissionForAlias("notifications", call, "notificationsCallback");
+                        } catch (Exception e) {
+                            // Fallback to direct Android request
+                            String[] permissions = {"android.permission.POST_NOTIFICATIONS"};
+                            getActivity().requestPermissions(permissions, 54321);
+                            JSObject ret = new JSObject();
+                            ret.put("status", "requested");
+                            call.resolve(ret);
+                        }
+                    }
+                });
+            } else {
+                call.reject("Activity is null");
+            }
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("status", "granted");
+            call.resolve(ret);
+        }
+    }
+
+    @com.getcapacitor.PermissionCallback
+    private void notificationsCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
+            ret.put("status", "granted");
+        } else {
+            ret.put("status", "denied");
+        }
+        call.resolve(ret);
     }
 }
