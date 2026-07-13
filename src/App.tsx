@@ -14,8 +14,10 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
+  signInWithCredential,
   User as FirebaseUser
 } from 'firebase/auth';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import { 
   collection, 
   doc, 
@@ -3020,14 +3022,38 @@ export default function App() {
       // Ensure persistence is set before login
       await setPersistence(auth, browserLocalPersistence);
       
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      
-      console.log("Initiating login popup...");
-      const result = await signInWithPopup(auth, provider);
+      let userCredential;
+
+      if (Capacitor.isNativePlatform()) {
+        console.log("Capacitor Native Platform detected, starting Native Google Sign-In...");
+        const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || "275980342094-placeholder.apps.googleusercontent.com";
+        try {
+          GoogleAuth.initialize({
+            clientId: googleClientId,
+            scopes: ['profile', 'email'],
+            grantOfflineAccess: true,
+          });
+        } catch (initErr) {
+          console.warn("GoogleAuth already initialized or failed:", initErr);
+        }
+
+        const googleUser = await GoogleAuth.signIn();
+        const idToken = googleUser.authentication.idToken;
+        if (!idToken) {
+          throw new Error("No ID Token returned from Native Google Sign-In");
+        }
+        const credential = GoogleAuthProvider.credential(idToken);
+        userCredential = await signInWithCredential(auth, credential);
+      } else {
+        console.log("Web platform detected, starting Web Google Sign-In popup...");
+        const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
+        userCredential = await signInWithPopup(auth, provider);
+      }
+
       setIsCompletingLogin(true);
-      console.log("Login successful for user:", result.user.email);
-      addToast("Welcome!", `Signed in as ${result.user.displayName}`, 'success');
+      console.log("Login successful for user:", userCredential.user.email);
+      addToast("Welcome!", `Signed in as ${userCredential.user.displayName}`, 'success');
     } catch (error: any) {
       setIsCompletingLogin(false);
       if (error.code === 'auth/popup-closed-by-user') {
