@@ -186,7 +186,7 @@ public class BloodLinkNativePlugin extends Plugin {
                     @Override
                     public void run() {
                         try {
-                            requestPermissionForAlias("microphone", call, "microphoneCallback");
+                            BloodLinkNativePlugin.this.requestPermissionForAlias("microphone", call, "microphoneCallback");
                         } catch (Exception e) {
                             // Fallback to direct Android request
                             String[] permissions = {android.Manifest.permission.RECORD_AUDIO};
@@ -207,7 +207,7 @@ public class BloodLinkNativePlugin extends Plugin {
         }
     }
 
-    @com.getcapacitor.PermissionCallback
+    @com.getcapacitor.annotation.PermissionCallback
     private void microphoneCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("microphone") == com.getcapacitor.PermissionState.GRANTED) {
@@ -226,7 +226,7 @@ public class BloodLinkNativePlugin extends Plugin {
                     @Override
                     public void run() {
                         try {
-                            requestPermissionForAlias("notifications", call, "notificationsCallback");
+                            BloodLinkNativePlugin.this.requestPermissionForAlias("notifications", call, "notificationsCallback");
                         } catch (Exception e) {
                             // Fallback to direct Android request
                             String[] permissions = {"android.permission.POST_NOTIFICATIONS"};
@@ -247,7 +247,7 @@ public class BloodLinkNativePlugin extends Plugin {
         }
     }
 
-    @com.getcapacitor.PermissionCallback
+    @com.getcapacitor.annotation.PermissionCallback
     private void notificationsCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
