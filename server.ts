@@ -148,14 +148,13 @@ const inMemoryAiSettings = {
   aiTodayResetDate: new Date().toISOString().split('T')[0]
 };
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+export const app = express();
+const PORT = 3000;
 
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // AI Blood Assistant API Route
+// AI Blood Assistant API Route
   app.post("/api/gemini/blood-assistant", async (req, res) => {
     try {
       const { message, history, slots, currentUserPhone, donors, settings: clientSettings } = req.body;
@@ -1029,39 +1028,44 @@ print("Successfully compressed android source code!")
     res.send(`User-agent: *\nAllow: /\n\nSitemap: ${baseUrl}/sitemap.xml`);
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  // Vite middleware for development or serverless fallback
+  async function initDevOrListen() {
+    if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
 
-    // Dynamic routing fallback to handle non-static clean subpaths on reload
-    app.get('*all', async (req, res, next) => {
-      const url = req.originalUrl;
-      try {
-        const fs = await import("fs/promises");
-        const template = await fs.readFile(path.join(process.cwd(), 'index.html'), 'utf-8');
-        const html = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
-      } catch (e) {
-        next(e);
-      }
-    });
-  } else {
-    // Production static files
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      // Dynamic routing fallback to handle non-static clean subpaths on reload
+      app.get('*all', async (req, res, next) => {
+        const url = req.originalUrl;
+        try {
+          const fs = await import("fs/promises");
+          const template = await fs.readFile(path.join(process.cwd(), 'index.html'), 'utf-8');
+          const html = await vite.transformIndexHtml(url, template);
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+        } catch (e) {
+          next(e);
+        }
+      });
+    } else {
+      // Production static files
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*all', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-}
+  if (!process.env.VERCEL) {
+    initDevOrListen();
+  }
 
-startServer();
+export default app;

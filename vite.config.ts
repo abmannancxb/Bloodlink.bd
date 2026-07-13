@@ -2,9 +2,11 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import {defineConfig, loadEnv} from 'vite';
 
 const APP_VERSION = Date.now().toString();
+const __dirname = import.meta.dirname || path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -16,7 +18,7 @@ export default defineConfig(({mode}) => {
       {
         name: 'generate-version-json',
         buildStart() {
-          const publicDir = path.resolve(import.meta.dirname || '.', 'public');
+          const publicDir = path.resolve(__dirname, 'public');
           if (!fs.existsSync(publicDir)) fs.mkdirSync(publicDir);
           fs.writeFileSync(
             path.resolve(publicDir, 'version.json'),
@@ -35,7 +37,7 @@ export default defineConfig(({mode}) => {
     },
     resolve: {
       alias: {
-        '@': path.resolve(import.meta.dirname, '.'),
+        '@': path.resolve(__dirname, '.'),
       },
     },
     server: {
