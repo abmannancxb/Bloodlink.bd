@@ -4,6 +4,10 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -20,8 +24,15 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // server.ts
+var server_exports = {};
+__export(server_exports, {
+  app: () => app,
+  default: () => server_default
+});
+module.exports = __toCommonJS(server_exports);
 var import_express = __toESM(require("express"), 1);
 var import_path = __toESM(require("path"), 1);
 var import_promises = __toESM(require("fs/promises"), 1);
@@ -254,185 +265,184 @@ var inMemoryAiSettings = {
   aiTodayUsageCount: 0,
   aiTodayResetDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
 };
-async function startServer() {
-  const app = (0, import_express.default)();
-  const PORT = 3e3;
-  app.use(import_express.default.json({ limit: "50mb" }));
-  app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
-  app.post("/api/gemini/blood-assistant", async (req, res) => {
+var app = (0, import_express.default)();
+var PORT = 3e3;
+app.use(import_express.default.json({ limit: "50mb" }));
+app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
+app.post("/api/gemini/blood-assistant", async (req, res) => {
+  try {
+    const { message, history, slots, currentUserPhone, donors, settings: clientSettings } = req.body;
+    let geminiApiKey = process.env.GEMINI_API_KEY || "";
+    let groqApiKey = process.env.GROQ_API_KEY || "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";
+    let openaiApiKey = process.env.OPENAI_API_KEY || "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";
+    let aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
+    let aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
+    let aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
+    let aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
+    const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    if (inMemoryAiSettings.aiTodayResetDate !== todayStr) {
+      inMemoryAiSettings.aiTodayUsageCount = 0;
+      inMemoryAiSettings.aiTodayResetDate = todayStr;
+    }
+    let isFirestoreOperational = false;
     try {
-      const { message, history, slots, currentUserPhone, donors, settings: clientSettings } = req.body;
-      let geminiApiKey = process.env.GEMINI_API_KEY || "";
-      let groqApiKey = process.env.GROQ_API_KEY || "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";
-      let openaiApiKey = process.env.OPENAI_API_KEY || "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";
-      let aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
-      let aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
-      let aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
-      let aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
-      const todayStr = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-      if (inMemoryAiSettings.aiTodayResetDate !== todayStr) {
-        inMemoryAiSettings.aiTodayUsageCount = 0;
-        inMemoryAiSettings.aiTodayResetDate = todayStr;
-      }
-      let isFirestoreOperational = false;
-      try {
-        const settingsDoc = await adminDb.collection("settings").doc("global").get();
-        if (settingsDoc.exists) {
-          const settingsData = settingsDoc.data() || {};
-          if (settingsData.geminiApiKeyOverride && settingsData.geminiApiKeyOverride.trim() !== "") {
-            geminiApiKey = settingsData.geminiApiKeyOverride.trim();
-            inMemoryAiSettings.geminiApiKeyOverride = settingsData.geminiApiKeyOverride.trim();
-          }
-          if (settingsData.groqApiKeyOverride && settingsData.groqApiKeyOverride.trim() !== "") {
-            groqApiKey = settingsData.groqApiKeyOverride.trim();
-            inMemoryAiSettings.groqApiKeyOverride = settingsData.groqApiKeyOverride.trim();
-          }
-          if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== "") {
-            openaiApiKey = settingsData.openaiApiKeyOverride.trim();
-            inMemoryAiSettings.openaiApiKeyOverride = settingsData.openaiApiKeyOverride.trim();
-          } else {
-            try {
-              await adminDb.collection("settings").doc("global").set({
-                openaiApiKeyOverride: "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",
-                aiEnginePreference: "openai"
-              }, { merge: true });
-              openaiApiKey = "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";
-              inMemoryAiSettings.openaiApiKeyOverride = "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";
-              aiEnginePreference = "openai";
-              inMemoryAiSettings.aiEnginePreference = "openai";
-            } catch (err) {
-              console.warn("Could not auto-populate OpenAI key in existing Firestore settings:", err.message);
-            }
-          }
-          if (settingsData.aiEnginePreference) {
-            aiEnginePreference = settingsData.aiEnginePreference;
-            inMemoryAiSettings.aiEnginePreference = settingsData.aiEnginePreference;
-          } else {
-            aiEnginePreference = "openai";
-            inMemoryAiSettings.aiEnginePreference = "openai";
-          }
-          if (typeof settingsData.aiDailyLimit === "number") {
-            aiDailyLimit = settingsData.aiDailyLimit;
-            inMemoryAiSettings.aiDailyLimit = settingsData.aiDailyLimit;
-          }
-          aiTodayResetDate = settingsData.aiTodayResetDate || "";
-          aiTodayUsageCount = typeof settingsData.aiTodayUsageCount === "number" ? settingsData.aiTodayUsageCount : 0;
-          if (aiTodayResetDate !== todayStr) {
-            aiTodayUsageCount = 0;
-            aiTodayResetDate = todayStr;
-            try {
-              await adminDb.collection("settings").doc("global").set({
-                aiTodayUsageCount: 0,
-                aiTodayResetDate: todayStr
-              }, { merge: true });
-            } catch (err) {
-            }
-          }
-          inMemoryAiSettings.aiTodayUsageCount = aiTodayUsageCount;
-          inMemoryAiSettings.aiTodayResetDate = aiTodayResetDate;
-          isFirestoreOperational = true;
+      const settingsDoc = await adminDb.collection("settings").doc("global").get();
+      if (settingsDoc.exists) {
+        const settingsData = settingsDoc.data() || {};
+        if (settingsData.geminiApiKeyOverride && settingsData.geminiApiKeyOverride.trim() !== "") {
+          geminiApiKey = settingsData.geminiApiKeyOverride.trim();
+          inMemoryAiSettings.geminiApiKeyOverride = settingsData.geminiApiKeyOverride.trim();
+        }
+        if (settingsData.groqApiKeyOverride && settingsData.groqApiKeyOverride.trim() !== "") {
+          groqApiKey = settingsData.groqApiKeyOverride.trim();
+          inMemoryAiSettings.groqApiKeyOverride = settingsData.groqApiKeyOverride.trim();
+        }
+        if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== "") {
+          openaiApiKey = settingsData.openaiApiKeyOverride.trim();
+          inMemoryAiSettings.openaiApiKeyOverride = settingsData.openaiApiKeyOverride.trim();
         } else {
           try {
             await adminDb.collection("settings").doc("global").set({
-              aiEnginePreference: "openai",
-              geminiApiKeyOverride: "",
-              groqApiKeyOverride: "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",
               openaiApiKeyOverride: "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",
-              aiDailyLimit: 500,
+              aiEnginePreference: "openai"
+            }, { merge: true });
+            openaiApiKey = "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";
+            inMemoryAiSettings.openaiApiKeyOverride = "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";
+            aiEnginePreference = "openai";
+            inMemoryAiSettings.aiEnginePreference = "openai";
+          } catch (err) {
+            console.warn("Could not auto-populate OpenAI key in existing Firestore settings:", err.message);
+          }
+        }
+        if (settingsData.aiEnginePreference) {
+          aiEnginePreference = settingsData.aiEnginePreference;
+          inMemoryAiSettings.aiEnginePreference = settingsData.aiEnginePreference;
+        } else {
+          aiEnginePreference = "openai";
+          inMemoryAiSettings.aiEnginePreference = "openai";
+        }
+        if (typeof settingsData.aiDailyLimit === "number") {
+          aiDailyLimit = settingsData.aiDailyLimit;
+          inMemoryAiSettings.aiDailyLimit = settingsData.aiDailyLimit;
+        }
+        aiTodayResetDate = settingsData.aiTodayResetDate || "";
+        aiTodayUsageCount = typeof settingsData.aiTodayUsageCount === "number" ? settingsData.aiTodayUsageCount : 0;
+        if (aiTodayResetDate !== todayStr) {
+          aiTodayUsageCount = 0;
+          aiTodayResetDate = todayStr;
+          try {
+            await adminDb.collection("settings").doc("global").set({
               aiTodayUsageCount: 0,
               aiTodayResetDate: todayStr
-            });
-            isFirestoreOperational = true;
-            aiEnginePreference = "openai";
-            groqApiKey = "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";
-            openaiApiKey = "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";
+            }, { merge: true });
           } catch (err) {
-            console.warn("Could not auto-create missing Firestore settings:", err.message);
           }
         }
-      } catch (settingsError) {
-        console.warn("Firestore settings read permission restricted. Falling back to in-memory configurations dashboard:", settingsError.message || settingsError);
-      }
-      if (clientSettings) {
-        if (clientSettings.aiEnginePreference) {
-          aiEnginePreference = clientSettings.aiEnginePreference;
-          inMemoryAiSettings.aiEnginePreference = clientSettings.aiEnginePreference;
-        }
-        if (clientSettings.geminiApiKeyOverride && clientSettings.geminiApiKeyOverride.trim() !== "") {
-          geminiApiKey = clientSettings.geminiApiKeyOverride.trim();
-          inMemoryAiSettings.geminiApiKeyOverride = clientSettings.geminiApiKeyOverride.trim();
-        }
-        if (clientSettings.groqApiKeyOverride && clientSettings.groqApiKeyOverride.trim() !== "") {
-          groqApiKey = clientSettings.groqApiKeyOverride.trim();
-          inMemoryAiSettings.groqApiKeyOverride = clientSettings.groqApiKeyOverride.trim();
-        }
-        if (clientSettings.openaiApiKeyOverride && clientSettings.openaiApiKeyOverride.trim() !== "") {
-          openaiApiKey = clientSettings.openaiApiKeyOverride.trim();
-          inMemoryAiSettings.openaiApiKeyOverride = clientSettings.openaiApiKeyOverride.trim();
-        }
-        if (typeof clientSettings.aiDailyLimit === "number") {
-          aiDailyLimit = clientSettings.aiDailyLimit;
-          inMemoryAiSettings.aiDailyLimit = clientSettings.aiDailyLimit;
-        }
-        if (typeof clientSettings.aiTodayUsageCount === "number") {
-          if (clientSettings.aiTodayUsageCount > inMemoryAiSettings.aiTodayUsageCount) {
-            inMemoryAiSettings.aiTodayUsageCount = clientSettings.aiTodayUsageCount;
-          }
-        }
-      }
-      if (!isFirestoreOperational) {
-        if (inMemoryAiSettings.geminiApiKeyOverride && inMemoryAiSettings.geminiApiKeyOverride.trim() !== "") {
-          geminiApiKey = inMemoryAiSettings.geminiApiKeyOverride;
-        }
-        if (inMemoryAiSettings.groqApiKeyOverride && inMemoryAiSettings.groqApiKeyOverride.trim() !== "") {
-          groqApiKey = inMemoryAiSettings.groqApiKeyOverride;
-        }
-        if (inMemoryAiSettings.openaiApiKeyOverride && inMemoryAiSettings.openaiApiKeyOverride.trim() !== "") {
-          openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
-        }
-        aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
-        aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
-        aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
-        aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
-      }
-      if (aiTodayUsageCount >= aiDailyLimit) {
-        console.warn(`AI assistant message limit reached! Current count: ${aiTodayUsageCount}, Daily limit: ${aiDailyLimit}`);
-        return res.status(200).json({
-          success: true,
-          replyText: "\u0986\u09AE\u09BE\u09B0 \u09B8\u09BF\u09B8\u09CD\u099F\u09C7\u09AE\u09C7\u09B0 \u0995\u09BE\u099C \u099A\u09B2\u09AE\u09BE\u09A8, \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09AE\u09CD\u09AF\u09BE\u09A8\u09C1\u09AF\u09BC\u09BE\u09B2\u09BF \u0996\u09C1\u0981\u099C\u09C7 \u09A8\u09BF\u09A8\u0964 \u09A6\u09C1\u0983\u0996\u09BF\u09A4\u0964",
-          limitReached: true,
-          bloodGroup: slots?.bloodGroup || null,
-          district: slots?.district || null,
-          thana: slots?.thana || null,
-          hospital: slots?.hospital || null,
-          medicalReason: slots?.medicalReason || null,
-          contactPhone: slots?.contactPhone || null,
-          taskMode: slots?.taskMode || "idle",
-          actionTriggered: false,
-          requestFormTriggered: false,
-          updatedUsageCount: aiTodayUsageCount
-        });
-      }
-      const selectedDistrict = slots?.district;
-      const locationsPreview = {};
-      const allDistricts = Object.keys(BANGLADESH_LOCATIONS);
-      locationsPreview["AvailableDistricts_ChooseOne"] = allDistricts;
-      if (selectedDistrict && BANGLADESH_LOCATIONS[selectedDistrict]) {
-        locationsPreview[`Thanas_For_${selectedDistrict}`] = BANGLADESH_LOCATIONS[selectedDistrict];
+        inMemoryAiSettings.aiTodayUsageCount = aiTodayUsageCount;
+        inMemoryAiSettings.aiTodayResetDate = aiTodayResetDate;
+        isFirestoreOperational = true;
       } else {
-        const matchedDist = allDistricts.find((d) => d.toLowerCase() === String(selectedDistrict).trim().toLowerCase());
-        if (matchedDist) {
-          locationsPreview[`Thanas_For_${matchedDist}`] = BANGLADESH_LOCATIONS[matchedDist];
-        } else {
-          locationsPreview["Note"] = "Thanas Checklist for correct matching will be provided dynamically here once values are stored in slots.district.";
+        try {
+          await adminDb.collection("settings").doc("global").set({
+            aiEnginePreference: "openai",
+            geminiApiKeyOverride: "",
+            groqApiKeyOverride: "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",
+            openaiApiKeyOverride: "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",
+            aiDailyLimit: 500,
+            aiTodayUsageCount: 0,
+            aiTodayResetDate: todayStr
+          });
+          isFirestoreOperational = true;
+          aiEnginePreference = "openai";
+          groqApiKey = "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";
+          openaiApiKey = "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";
+        } catch (err) {
+          console.warn("Could not auto-create missing Firestore settings:", err.message);
         }
       }
-      const simpleDonorsList = Array.isArray(donors) ? donors.map((d) => ({
-        name: d.displayName || d.name || "",
-        bloodGroup: d.bloodGroup || "",
-        lastDonationDate: d.lastDonationDate || "\u0995\u0996\u09A8\u09CB \u09B0\u0995\u09CD\u09A4 \u09A6\u09C7\u09A8\u09A8\u09BF \u09AC\u09BE \u09A4\u09A5\u09CD\u09AF \u09A8\u09C7\u0987"
-      })) : [];
-      const systemInstruction = `You are a highly intelligent, polite, and friendly Bangla (\u09AC\u09BE\u0982\u09B2\u09BE\u09A6\u09C7\u09B6\u09C0 \u09AC\u09BE\u0982\u09B2\u09BE) voice and text assistant for 'BloodLink Bangladesh', behaving as Gemini Artificial Intelligence (\u099C\u09BF\u09AE\u09BF\u09A8\u09BF \u0986\u09B0\u09CD\u099F\u09BF\u09AB\u09BF\u09B6\u09BF\u09DF\u09BE\u09B2 \u098F\u0986\u0987).
+    } catch (settingsError) {
+      console.warn("Firestore settings read permission restricted. Falling back to in-memory configurations dashboard:", settingsError.message || settingsError);
+    }
+    if (clientSettings) {
+      if (clientSettings.aiEnginePreference) {
+        aiEnginePreference = clientSettings.aiEnginePreference;
+        inMemoryAiSettings.aiEnginePreference = clientSettings.aiEnginePreference;
+      }
+      if (clientSettings.geminiApiKeyOverride && clientSettings.geminiApiKeyOverride.trim() !== "") {
+        geminiApiKey = clientSettings.geminiApiKeyOverride.trim();
+        inMemoryAiSettings.geminiApiKeyOverride = clientSettings.geminiApiKeyOverride.trim();
+      }
+      if (clientSettings.groqApiKeyOverride && clientSettings.groqApiKeyOverride.trim() !== "") {
+        groqApiKey = clientSettings.groqApiKeyOverride.trim();
+        inMemoryAiSettings.groqApiKeyOverride = clientSettings.groqApiKeyOverride.trim();
+      }
+      if (clientSettings.openaiApiKeyOverride && clientSettings.openaiApiKeyOverride.trim() !== "") {
+        openaiApiKey = clientSettings.openaiApiKeyOverride.trim();
+        inMemoryAiSettings.openaiApiKeyOverride = clientSettings.openaiApiKeyOverride.trim();
+      }
+      if (typeof clientSettings.aiDailyLimit === "number") {
+        aiDailyLimit = clientSettings.aiDailyLimit;
+        inMemoryAiSettings.aiDailyLimit = clientSettings.aiDailyLimit;
+      }
+      if (typeof clientSettings.aiTodayUsageCount === "number") {
+        if (clientSettings.aiTodayUsageCount > inMemoryAiSettings.aiTodayUsageCount) {
+          inMemoryAiSettings.aiTodayUsageCount = clientSettings.aiTodayUsageCount;
+        }
+      }
+    }
+    if (!isFirestoreOperational) {
+      if (inMemoryAiSettings.geminiApiKeyOverride && inMemoryAiSettings.geminiApiKeyOverride.trim() !== "") {
+        geminiApiKey = inMemoryAiSettings.geminiApiKeyOverride;
+      }
+      if (inMemoryAiSettings.groqApiKeyOverride && inMemoryAiSettings.groqApiKeyOverride.trim() !== "") {
+        groqApiKey = inMemoryAiSettings.groqApiKeyOverride;
+      }
+      if (inMemoryAiSettings.openaiApiKeyOverride && inMemoryAiSettings.openaiApiKeyOverride.trim() !== "") {
+        openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
+      }
+      aiEnginePreference = inMemoryAiSettings.aiEnginePreference;
+      aiDailyLimit = inMemoryAiSettings.aiDailyLimit;
+      aiTodayUsageCount = inMemoryAiSettings.aiTodayUsageCount;
+      aiTodayResetDate = inMemoryAiSettings.aiTodayResetDate;
+    }
+    if (aiTodayUsageCount >= aiDailyLimit) {
+      console.warn(`AI assistant message limit reached! Current count: ${aiTodayUsageCount}, Daily limit: ${aiDailyLimit}`);
+      return res.status(200).json({
+        success: true,
+        replyText: "\u0986\u09AE\u09BE\u09B0 \u09B8\u09BF\u09B8\u09CD\u099F\u09C7\u09AE\u09C7\u09B0 \u0995\u09BE\u099C \u099A\u09B2\u09AE\u09BE\u09A8, \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09AE\u09CD\u09AF\u09BE\u09A8\u09C1\u09AF\u09BC\u09BE\u09B2\u09BF \u0996\u09C1\u0981\u099C\u09C7 \u09A8\u09BF\u09A8\u0964 \u09A6\u09C1\u0983\u0996\u09BF\u09A4\u0964",
+        limitReached: true,
+        bloodGroup: slots?.bloodGroup || null,
+        district: slots?.district || null,
+        thana: slots?.thana || null,
+        hospital: slots?.hospital || null,
+        medicalReason: slots?.medicalReason || null,
+        contactPhone: slots?.contactPhone || null,
+        taskMode: slots?.taskMode || "idle",
+        actionTriggered: false,
+        requestFormTriggered: false,
+        updatedUsageCount: aiTodayUsageCount
+      });
+    }
+    const selectedDistrict = slots?.district;
+    const locationsPreview = {};
+    const allDistricts = Object.keys(BANGLADESH_LOCATIONS);
+    locationsPreview["AvailableDistricts_ChooseOne"] = allDistricts;
+    if (selectedDistrict && BANGLADESH_LOCATIONS[selectedDistrict]) {
+      locationsPreview[`Thanas_For_${selectedDistrict}`] = BANGLADESH_LOCATIONS[selectedDistrict];
+    } else {
+      const matchedDist = allDistricts.find((d) => d.toLowerCase() === String(selectedDistrict).trim().toLowerCase());
+      if (matchedDist) {
+        locationsPreview[`Thanas_For_${matchedDist}`] = BANGLADESH_LOCATIONS[matchedDist];
+      } else {
+        locationsPreview["Note"] = "Thanas Checklist for correct matching will be provided dynamically here once values are stored in slots.district.";
+      }
+    }
+    const simpleDonorsList = Array.isArray(donors) ? donors.map((d) => ({
+      name: d.displayName || d.name || "",
+      bloodGroup: d.bloodGroup || "",
+      lastDonationDate: d.lastDonationDate || "\u0995\u0996\u09A8\u09CB \u09B0\u0995\u09CD\u09A4 \u09A6\u09C7\u09A8\u09A8\u09BF \u09AC\u09BE \u09A4\u09A5\u09CD\u09AF \u09A8\u09C7\u0987"
+    })) : [];
+    const systemInstruction = `You are a highly intelligent, polite, and friendly Bangla (\u09AC\u09BE\u0982\u09B2\u09BE\u09A6\u09C7\u09B6\u09C0 \u09AC\u09BE\u0982\u09B2\u09BE) voice and text assistant for 'BloodLink Bangladesh', behaving as Gemini Artificial Intelligence (\u099C\u09BF\u09AE\u09BF\u09A8\u09BF \u0986\u09B0\u09CD\u099F\u09BF\u09AB\u09BF\u09B6\u09BF\u09DF\u09BE\u09B2 \u098F\u0986\u0987).
 
 Core Guidelines & Conversational Paths:
 1. GREETINGS, SALAM & CHAT (\u09B8\u09BE\u09B2\u09BE\u09AE, \u09B6\u09C1\u09AD\u09C7\u099A\u09CD\u099B\u09BE \u0993 \u09B8\u09BE\u09A7\u09BE\u09B0\u09A3 \u0986\u09B2\u09BE\u09AA\u09A8):
@@ -528,426 +538,426 @@ Response JSON Schema:
   "actionTriggered": boolean,
   "requestFormTriggered": boolean
 }`;
-      let responseText = "{}";
-      let usedEngine = "";
-      const tryGemini = async () => {
-        if (!geminiApiKey) {
-          console.warn("Gemini API key is not configured.");
-          return false;
-        }
-        const modelsToTry = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
-        for (const currentModel of modelsToTry) {
-          try {
-            console.log(`Using Gemini SDK with model: ${currentModel}...`);
-            const ai = new import_genai.GoogleGenAI({
-              apiKey: geminiApiKey,
-              httpOptions: {
-                headers: {
-                  "User-Agent": "aistudio-build"
-                }
+    let responseText = "{}";
+    let usedEngine = "";
+    const tryGemini = async () => {
+      if (!geminiApiKey) {
+        console.warn("Gemini API key is not configured.");
+        return false;
+      }
+      const modelsToTry = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.1-flash-lite"];
+      for (const currentModel of modelsToTry) {
+        try {
+          console.log(`Using Gemini SDK with model: ${currentModel}...`);
+          const ai = new import_genai.GoogleGenAI({
+            apiKey: geminiApiKey,
+            httpOptions: {
+              headers: {
+                "User-Agent": "aistudio-build"
               }
-            });
-            const chatMessages = [
-              ...(history || []).map((msg) => ({
-                role: msg.role === "assistant" ? "model" : "user",
-                parts: [{ text: msg.text }]
-              })),
-              {
-                role: "user",
-                parts: [{ text: message }]
-              }
-            ];
-            const response = await ai.models.generateContent({
-              model: currentModel,
-              contents: chatMessages,
-              config: {
-                systemInstruction,
-                responseMimeType: "application/json",
-                responseSchema: {
-                  type: import_genai.Type.OBJECT,
-                  properties: {
-                    replyText: { type: import_genai.Type.STRING },
-                    bloodGroup: { type: import_genai.Type.STRING },
-                    district: { type: import_genai.Type.STRING },
-                    thana: { type: import_genai.Type.STRING },
-                    hospital: { type: import_genai.Type.STRING },
-                    medicalReason: { type: import_genai.Type.STRING },
-                    contactPhone: { type: import_genai.Type.STRING },
-                    taskMode: { type: import_genai.Type.STRING },
-                    actionTriggered: { type: import_genai.Type.BOOLEAN },
-                    requestFormTriggered: { type: import_genai.Type.BOOLEAN }
-                  },
-                  required: [
-                    "replyText",
-                    "bloodGroup",
-                    "district",
-                    "thana",
-                    "hospital",
-                    "medicalReason",
-                    "contactPhone",
-                    "taskMode",
-                    "actionTriggered",
-                    "requestFormTriggered"
-                  ]
-                }
-              }
-            });
-            if (response && response.text) {
-              responseText = response.text;
-              usedEngine = `gemini (${currentModel})`;
-              return true;
             }
-          } catch (geminiError) {
-            console.error(`Gemini model ${currentModel} error:`, geminiError.message || geminiError);
+          });
+          const chatMessages = [
+            ...(history || []).map((msg) => ({
+              role: msg.role === "assistant" ? "model" : "user",
+              parts: [{ text: msg.text }]
+            })),
+            {
+              role: "user",
+              parts: [{ text: message }]
+            }
+          ];
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: chatMessages,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: import_genai.Type.OBJECT,
+                properties: {
+                  replyText: { type: import_genai.Type.STRING },
+                  bloodGroup: { type: import_genai.Type.STRING },
+                  district: { type: import_genai.Type.STRING },
+                  thana: { type: import_genai.Type.STRING },
+                  hospital: { type: import_genai.Type.STRING },
+                  medicalReason: { type: import_genai.Type.STRING },
+                  contactPhone: { type: import_genai.Type.STRING },
+                  taskMode: { type: import_genai.Type.STRING },
+                  actionTriggered: { type: import_genai.Type.BOOLEAN },
+                  requestFormTriggered: { type: import_genai.Type.BOOLEAN }
+                },
+                required: [
+                  "replyText",
+                  "bloodGroup",
+                  "district",
+                  "thana",
+                  "hospital",
+                  "medicalReason",
+                  "contactPhone",
+                  "taskMode",
+                  "actionTriggered",
+                  "requestFormTriggered"
+                ]
+              }
+            }
+          });
+          if (response && response.text) {
+            responseText = response.text;
+            usedEngine = `gemini (${currentModel})`;
+            return true;
           }
+        } catch (geminiError) {
+          console.error(`Gemini model ${currentModel} error:`, geminiError.message || geminiError);
+        }
+      }
+      return false;
+    };
+    const tryGroq = async () => {
+      if (!groqApiKey) {
+        console.warn("Groq API key is not configured.");
+        return false;
+      }
+      try {
+        console.log("Using Groq API Key...");
+        const groq = new import_groq_sdk.default({ apiKey: groqApiKey });
+        const chatMessages = [
+          { role: "system", content: systemInstruction },
+          ...(history || []).map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.text
+          })),
+          { role: "user", content: message }
+        ];
+        const chatCompletion = await groq.chat.completions.create({
+          messages: chatMessages,
+          model: "llama-3.3-70b-versatile",
+          response_format: { type: "json_object" },
+          temperature: 0.1
+        });
+        if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
+          responseText = chatCompletion.choices[0].message.content;
+          usedEngine = "groq";
+          return true;
         }
         return false;
-      };
-      const tryGroq = async () => {
-        if (!groqApiKey) {
-          console.warn("Groq API key is not configured.");
-          return false;
+      } catch (groqError) {
+        console.error("Groq API error during query:", groqError.message || groqError);
+        return false;
+      }
+    };
+    const tryOpenAI = async () => {
+      if (!openaiApiKey) {
+        console.warn("OpenAI API key is not configured.");
+        return false;
+      }
+      try {
+        console.log("Using OpenAI API Key with gpt-4o-mini...");
+        const openai = new import_openai.default({ apiKey: openaiApiKey });
+        const chatMessages = [
+          { role: "system", content: systemInstruction },
+          ...(history || []).map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.text
+          })),
+          { role: "user", content: message }
+        ];
+        const chatCompletion = await openai.chat.completions.create({
+          messages: chatMessages,
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          temperature: 0.1
+        });
+        if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
+          responseText = chatCompletion.choices[0].message.content;
+          usedEngine = "openai";
+          return true;
         }
-        try {
-          console.log("Using Groq API Key...");
-          const groq = new import_groq_sdk.default({ apiKey: groqApiKey });
-          const chatMessages = [
-            { role: "system", content: systemInstruction },
-            ...(history || []).map((msg) => ({
-              role: msg.role === "assistant" ? "assistant" : "user",
-              content: msg.text
-            })),
-            { role: "user", content: message }
-          ];
-          const chatCompletion = await groq.chat.completions.create({
-            messages: chatMessages,
-            model: "llama-3.3-70b-versatile",
-            response_format: { type: "json_object" },
-            temperature: 0.1
-          });
-          if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
-            responseText = chatCompletion.choices[0].message.content;
-            usedEngine = "groq";
-            return true;
-          }
-          return false;
-        } catch (groqError) {
-          console.error("Groq API error during query:", groqError.message || groqError);
-          return false;
-        }
-      };
-      const tryOpenAI = async () => {
-        if (!openaiApiKey) {
-          console.warn("OpenAI API key is not configured.");
-          return false;
-        }
-        try {
-          console.log("Using OpenAI API Key with gpt-4o-mini...");
-          const openai = new import_openai.default({ apiKey: openaiApiKey });
-          const chatMessages = [
-            { role: "system", content: systemInstruction },
-            ...(history || []).map((msg) => ({
-              role: msg.role === "assistant" ? "assistant" : "user",
-              content: msg.text
-            })),
-            { role: "user", content: message }
-          ];
-          const chatCompletion = await openai.chat.completions.create({
-            messages: chatMessages,
-            model: "gpt-4o-mini",
-            response_format: { type: "json_object" },
-            temperature: 0.1
-          });
-          if (chatCompletion && chatCompletion.choices?.[0]?.message?.content) {
-            responseText = chatCompletion.choices[0].message.content;
-            usedEngine = "openai";
-            return true;
-          }
-          return false;
-        } catch (openaiError) {
-          console.error("OpenAI API error during query:", openaiError.message || openaiError);
-          return false;
-        }
-      };
-      if (aiEnginePreference === "openai") {
-        const ok = await tryOpenAI();
-        if (!ok) {
-          console.log("OpenAI failed, trying fallback to Gemini...");
-          const okGem = await tryGemini();
-          if (!okGem) {
-            console.log("Gemini fallback also failed, trying fallback to Groq...");
-            await tryGroq();
-          }
-        }
-      } else if (aiEnginePreference === "gemini") {
-        await tryGemini();
-      } else if (aiEnginePreference === "groq") {
-        await tryGroq();
-      } else if (aiEnginePreference === "both_groq") {
-        const ok = await tryGroq();
-        if (!ok) {
-          console.log("Groq failed or limit exceeded, trying fallback to Gemini...");
-          await tryGemini();
-        }
-      } else {
-        const ok = await tryGemini();
-        if (!ok) {
-          console.log("Gemini failed or limit exceeded, trying fallback to Groq...");
+        return false;
+      } catch (openaiError) {
+        console.error("OpenAI API error during query:", openaiError.message || openaiError);
+        return false;
+      }
+    };
+    if (aiEnginePreference === "openai") {
+      const ok = await tryOpenAI();
+      if (!ok) {
+        console.log("OpenAI failed, trying fallback to Gemini...");
+        const okGem = await tryGemini();
+        if (!okGem) {
+          console.log("Gemini fallback also failed, trying fallback to Groq...");
           await tryGroq();
         }
       }
-      if (!usedEngine) {
-        console.warn("All available AI Engines failed or keys are missing. Triggering precise fallback error.");
-        const textCleaned = String(message || "").toLowerCase();
-        let replyText = "\u0986\u09AE\u09BE\u09B0 \u09B8\u09BF\u09B8\u09CD\u099F\u09C7\u09AE\u09C7\u09B0 \u0995\u09BE\u099C \u099A\u09B2\u09AE\u09BE\u09A8, \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09AE\u09CD\u09AF\u09BE\u09A8\u09C1\u09AF\u09BC\u09BE\u09B2\u09BF \u0996\u09C1\u0981\u099C\u09C7 \u09A8\u09BF\u09A8\u0964 \u09A6\u09C1\u0983\u0996\u09BF\u09A4\u0964";
-        let finalTaskMode = slots?.taskMode || "idle";
-        const isGreeting = textCleaned.includes("\u09B9\u09CD\u09AF\u09BE\u09B2\u09CB") || textCleaned.includes("\u09B9\u09BE\u0987") || textCleaned.includes("hello") || textCleaned.includes("hi") || textCleaned.includes("\u09B8\u09BE\u09B2\u09BE\u09AE") || textCleaned.includes("salam") || textCleaned.includes("\u0986\u09B8\u09B8\u09BE\u09B2\u09BE\u09AE\u09C1");
-        const isIntro = textCleaned.includes("\u0995\u09C7 \u09A4\u09C1\u09AE\u09BF") || textCleaned.includes("\u09A4\u09C1\u09AE\u09BF \u0995\u09C7") || textCleaned.includes("\u09AA\u09B0\u09BF\u099A\u09DF") || textCleaned.includes("who are you") || textCleaned.includes("your name");
-        const isBenefits = textCleaned.includes("\u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8") || textCleaned.includes("\u0989\u09AA\u0995\u09BE\u09B0\u09BF\u09A4\u09BE") || textCleaned.includes("\u09B0\u0995\u09CD\u09A4 \u09A6\u09BF\u09B2\u09C7") || textCleaned.includes("benefit");
-        const isThanks = textCleaned.includes("\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6") || textCleaned.includes("thanks") || textCleaned.includes("thank you") || textCleaned.includes("\u09A5\u09CD\u09AF\u09BE\u0999\u09CD\u0995");
-        if (isGreeting) {
-          replyText = "\u0993\u09DF\u09BE\u09B2\u09BE\u0987\u0995\u09C1\u09AE \u0986\u09B8\u09B8\u09BE\u09B2\u09BE\u09AE! \u0986\u09B6\u09BE \u0995\u09B0\u09BF \u0986\u09B2\u09CD\u09B2\u09BE\u09B9\u09B0 \u09B0\u09B9\u09AE\u09A4\u09C7 \u09AD\u09BE\u09B2\u09CB \u0986\u099B\u09C7\u09A8\u0964 \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09B0\u0995\u09CD\u09A4\u09AC\u09A8\u09CD\u09A7\u09C1 AI \u09B8\u09B9\u0995\u09BE\u09B0\u09C0\u0964 \u0986\u099C \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u0995\u09C0\u09AD\u09BE\u09AC\u09C7 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09BF? \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09A4\u09C7 \u09AC\u09BE \u0986\u09AC\u09C7\u09A6\u09A8 \u09A4\u09C8\u09B0\u09BF \u0995\u09B0\u09A4\u09C7 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u09A6\u09BF\u09DF\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u09AA\u09CD\u09B0\u09B6\u09CD\u09A8 \u0995\u09B0\u09C1\u09A8!";
-        } else if (isIntro) {
-          replyText = "\u0986\u09AE\u09BF \u09AC\u09CD\u09B2\u09BE\u09A1\u09B2\u09BF\u0999\u09CD\u0995 \u098F\u0986\u0987 (BloodLink AI) \u09B8\u09B9\u0995\u09BE\u09B0\u09C0\u0964 \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09A6\u09CD\u09B0\u09C1\u09A4 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u0985\u09A8\u09C1\u09AF\u09BE\u09DF\u09C0 \u09B8\u09CD\u09AC\u09C7\u099A\u09CD\u099B\u09BE\u09B8\u09C7\u09AC\u09C0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09C7 \u09AA\u09C7\u09A4\u09C7 \u098F\u09AC\u0982 \u099C\u09B0\u09C1\u09B0\u09C0 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0986\u09AC\u09C7\u09A6\u09A8 \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09A4\u09C7 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09BF\u0964";
-        } else if (isBenefits) {
-          replyText = "\u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8 \u098F\u0995\u099F\u09BF \u09AA\u09B0\u09AE \u09AE\u09B9\u09CE \u0995\u09BE\u099C\u0964 \u09B0\u0995\u09CD\u09A4 \u09A6\u09BF\u09B2\u09C7 \u09B6\u09B0\u09C0\u09B0\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u0995\u09A3\u09BF\u0995\u09BE \u09AA\u09C1\u09A8\u09B0\u09C1\u099C\u09CD\u099C\u09C0\u09AC\u09BF\u09A4 \u09B9\u09DF, \u09B0\u0995\u09CD\u09A4\u09C7 \u0989\u09AA\u09BE\u09A6\u09BE\u09A8\u09C7\u09B0 \u09AD\u09BE\u09B0\u09B8\u09BE\u09AE\u09CD\u09AF \u09A0\u09BF\u0995 \u09A5\u09BE\u0995\u09C7 \u098F\u09AC\u0982 \u09B9\u09C3\u09A6\u09B0\u09CB\u0997 \u0993 \u09B8\u09CD\u099F\u09CD\u09B0\u09CB\u0995\u09C7\u09B0 \u099D\u09C1\u0981\u0995\u09BF \u0995\u09AE\u09C7\u0964 \u098F\u0995\u099F\u09BF \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8 \u09B8\u09B0\u09CD\u09AC\u09CB\u099A\u09CD\u099A \u09EA \u099C\u09A8\u09C7\u09B0 \u099C\u09C0\u09AC\u09A8 \u09AC\u09BE\u0981\u099A\u09BE\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7!";
-        } else if (isThanks) {
-          replyText = "\u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u0985\u09A8\u09C7\u0995 \u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6! \u09AC\u09CD\u09B2\u09BE\u09A1\u09B2\u09BF\u0999\u09CD\u0995 \u09AC\u09BE\u0982\u09B2\u09BE\u09A6\u09C7\u09B6\u09C7\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09A5\u09BE\u0995\u09C1\u09A8 \u098F\u09AC\u0982 \u09B8\u09CD\u09AC\u09C7\u099A\u09CD\u099B\u09BE\u09DF \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8\u09C7 \u098F\u0997\u09BF\u09DF\u09C7 \u0986\u09B8\u09C1\u09A8\u0964";
-        } else if (slots?.bloodGroup) {
-          if (textCleaned.includes("\u09B0\u0995\u09CD\u09A4 \u099A\u09BE\u0987") || textCleaned.includes("request") || textCleaned.includes("\u09A6\u09B0\u0995\u09BE\u09B0") || textCleaned.includes("\u09AA\u09CD\u09B0\u09DF\u09CB\u099C\u09A8")) {
-            replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 ${slots.bloodGroup} \u0997\u09CD\u09B0\u09C1\u09AA\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0986\u09AC\u09C7\u09A6\u09A8\u099F\u09BF\u09B0 \u09AC\u09BF\u09AC\u09B0\u09A3 \u09A8\u09CB\u099F \u0995\u09B0\u09C7\u099B\u09BF\u0964 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09A8\u09BF\u099A\u09C7\u09B0 'Publish Request' \u09AC\u09BE\u099F\u09A8 \u09AC\u09CD\u09AF\u09AC\u09B9\u09BE\u09B0 \u0995\u09B0\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u0986\u09AC\u09C7\u09A6\u09A8\u099F\u09BF \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09C1\u09A8 \u09AF\u09BE\u09A4\u09C7 \u09B8\u0995\u09B2\u09C7 \u09A6\u09C7\u0996\u09A4\u09C7 \u09AA\u09BE\u09DF\u0964`;
-            finalTaskMode = "create_request";
-          } else {
-            replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u099C\u09A8\u09CD\u09AF ${slots.bloodGroup} \u0997\u09CD\u09B0\u09C1\u09AA\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE\u09B0 \u09B8\u09A8\u09CD\u09A7\u09BE\u09A8 \u09AA\u09C7\u09DF\u09C7\u099B\u09BF\u0964 \u09A8\u09BF\u099A\u09C7 \u0995\u09BE\u099B\u09BE\u0995\u09BE\u099B\u09BF \u098F\u09B2\u09BE\u0995\u09BE\u09B0 \u0989\u09AA\u09AF\u09C1\u0995\u09CD\u09A4 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE\u09A6\u09C7\u09B0 \u09A6\u09C7\u0996\u09A4\u09C7 \u09AA\u09BE\u09AC\u09C7\u09A8 \u098F\u09AC\u0982 \u09A4\u09BE\u09A6\u09C7\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8\u0964`;
-            finalTaskMode = "search_donors";
-          }
+    } else if (aiEnginePreference === "gemini") {
+      await tryGemini();
+    } else if (aiEnginePreference === "groq") {
+      await tryGroq();
+    } else if (aiEnginePreference === "both_groq") {
+      const ok = await tryGroq();
+      if (!ok) {
+        console.log("Groq failed or limit exceeded, trying fallback to Gemini...");
+        await tryGemini();
+      }
+    } else {
+      const ok = await tryGemini();
+      if (!ok) {
+        console.log("Gemini failed or limit exceeded, trying fallback to Groq...");
+        await tryGroq();
+      }
+    }
+    if (!usedEngine) {
+      console.warn("All available AI Engines failed or keys are missing. Triggering precise fallback error.");
+      const textCleaned = String(message || "").toLowerCase();
+      let replyText = "\u0986\u09AE\u09BE\u09B0 \u09B8\u09BF\u09B8\u09CD\u099F\u09C7\u09AE\u09C7\u09B0 \u0995\u09BE\u099C \u099A\u09B2\u09AE\u09BE\u09A8, \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09AE\u09CD\u09AF\u09BE\u09A8\u09C1\u09AF\u09BC\u09BE\u09B2\u09BF \u0996\u09C1\u0981\u099C\u09C7 \u09A8\u09BF\u09A8\u0964 \u09A6\u09C1\u0983\u0996\u09BF\u09A4\u0964";
+      let finalTaskMode = slots?.taskMode || "idle";
+      const isGreeting = textCleaned.includes("\u09B9\u09CD\u09AF\u09BE\u09B2\u09CB") || textCleaned.includes("\u09B9\u09BE\u0987") || textCleaned.includes("hello") || textCleaned.includes("hi") || textCleaned.includes("\u09B8\u09BE\u09B2\u09BE\u09AE") || textCleaned.includes("salam") || textCleaned.includes("\u0986\u09B8\u09B8\u09BE\u09B2\u09BE\u09AE\u09C1");
+      const isIntro = textCleaned.includes("\u0995\u09C7 \u09A4\u09C1\u09AE\u09BF") || textCleaned.includes("\u09A4\u09C1\u09AE\u09BF \u0995\u09C7") || textCleaned.includes("\u09AA\u09B0\u09BF\u099A\u09DF") || textCleaned.includes("who are you") || textCleaned.includes("your name");
+      const isBenefits = textCleaned.includes("\u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8") || textCleaned.includes("\u0989\u09AA\u0995\u09BE\u09B0\u09BF\u09A4\u09BE") || textCleaned.includes("\u09B0\u0995\u09CD\u09A4 \u09A6\u09BF\u09B2\u09C7") || textCleaned.includes("benefit");
+      const isThanks = textCleaned.includes("\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6") || textCleaned.includes("thanks") || textCleaned.includes("thank you") || textCleaned.includes("\u09A5\u09CD\u09AF\u09BE\u0999\u09CD\u0995");
+      if (isGreeting) {
+        replyText = "\u0993\u09DF\u09BE\u09B2\u09BE\u0987\u0995\u09C1\u09AE \u0986\u09B8\u09B8\u09BE\u09B2\u09BE\u09AE! \u0986\u09B6\u09BE \u0995\u09B0\u09BF \u0986\u09B2\u09CD\u09B2\u09BE\u09B9\u09B0 \u09B0\u09B9\u09AE\u09A4\u09C7 \u09AD\u09BE\u09B2\u09CB \u0986\u099B\u09C7\u09A8\u0964 \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09B0\u0995\u09CD\u09A4\u09AC\u09A8\u09CD\u09A7\u09C1 AI \u09B8\u09B9\u0995\u09BE\u09B0\u09C0\u0964 \u0986\u099C \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u0995\u09C0\u09AD\u09BE\u09AC\u09C7 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09BF? \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09A4\u09C7 \u09AC\u09BE \u0986\u09AC\u09C7\u09A6\u09A8 \u09A4\u09C8\u09B0\u09BF \u0995\u09B0\u09A4\u09C7 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u09A6\u09BF\u09DF\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u09AA\u09CD\u09B0\u09B6\u09CD\u09A8 \u0995\u09B0\u09C1\u09A8!";
+      } else if (isIntro) {
+        replyText = "\u0986\u09AE\u09BF \u09AC\u09CD\u09B2\u09BE\u09A1\u09B2\u09BF\u0999\u09CD\u0995 \u098F\u0986\u0987 (BloodLink AI) \u09B8\u09B9\u0995\u09BE\u09B0\u09C0\u0964 \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u09A6\u09CD\u09B0\u09C1\u09A4 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u0985\u09A8\u09C1\u09AF\u09BE\u09DF\u09C0 \u09B8\u09CD\u09AC\u09C7\u099A\u09CD\u099B\u09BE\u09B8\u09C7\u09AC\u09C0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09C7 \u09AA\u09C7\u09A4\u09C7 \u098F\u09AC\u0982 \u099C\u09B0\u09C1\u09B0\u09C0 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0986\u09AC\u09C7\u09A6\u09A8 \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09A4\u09C7 \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09BF\u0964";
+      } else if (isBenefits) {
+        replyText = "\u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8 \u098F\u0995\u099F\u09BF \u09AA\u09B0\u09AE \u09AE\u09B9\u09CE \u0995\u09BE\u099C\u0964 \u09B0\u0995\u09CD\u09A4 \u09A6\u09BF\u09B2\u09C7 \u09B6\u09B0\u09C0\u09B0\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u0995\u09A3\u09BF\u0995\u09BE \u09AA\u09C1\u09A8\u09B0\u09C1\u099C\u09CD\u099C\u09C0\u09AC\u09BF\u09A4 \u09B9\u09DF, \u09B0\u0995\u09CD\u09A4\u09C7 \u0989\u09AA\u09BE\u09A6\u09BE\u09A8\u09C7\u09B0 \u09AD\u09BE\u09B0\u09B8\u09BE\u09AE\u09CD\u09AF \u09A0\u09BF\u0995 \u09A5\u09BE\u0995\u09C7 \u098F\u09AC\u0982 \u09B9\u09C3\u09A6\u09B0\u09CB\u0997 \u0993 \u09B8\u09CD\u099F\u09CD\u09B0\u09CB\u0995\u09C7\u09B0 \u099D\u09C1\u0981\u0995\u09BF \u0995\u09AE\u09C7\u0964 \u098F\u0995\u099F\u09BF \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8 \u09B8\u09B0\u09CD\u09AC\u09CB\u099A\u09CD\u099A \u09EA \u099C\u09A8\u09C7\u09B0 \u099C\u09C0\u09AC\u09A8 \u09AC\u09BE\u0981\u099A\u09BE\u09A4\u09C7 \u09AA\u09BE\u09B0\u09C7!";
+      } else if (isThanks) {
+        replyText = "\u0986\u09AA\u09A8\u09BE\u0995\u09C7 \u0985\u09A8\u09C7\u0995 \u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6! \u09AC\u09CD\u09B2\u09BE\u09A1\u09B2\u09BF\u0999\u09CD\u0995 \u09AC\u09BE\u0982\u09B2\u09BE\u09A6\u09C7\u09B6\u09C7\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09A5\u09BE\u0995\u09C1\u09A8 \u098F\u09AC\u0982 \u09B8\u09CD\u09AC\u09C7\u099A\u09CD\u099B\u09BE\u09DF \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A8\u09C7 \u098F\u0997\u09BF\u09DF\u09C7 \u0986\u09B8\u09C1\u09A8\u0964";
+      } else if (slots?.bloodGroup) {
+        if (textCleaned.includes("\u09B0\u0995\u09CD\u09A4 \u099A\u09BE\u0987") || textCleaned.includes("request") || textCleaned.includes("\u09A6\u09B0\u0995\u09BE\u09B0") || textCleaned.includes("\u09AA\u09CD\u09B0\u09DF\u09CB\u099C\u09A8")) {
+          replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 ${slots.bloodGroup} \u0997\u09CD\u09B0\u09C1\u09AA\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0986\u09AC\u09C7\u09A6\u09A8\u099F\u09BF\u09B0 \u09AC\u09BF\u09AC\u09B0\u09A3 \u09A8\u09CB\u099F \u0995\u09B0\u09C7\u099B\u09BF\u0964 \u0985\u09A8\u09C1\u0997\u09CD\u09B0\u09B9 \u0995\u09B0\u09C7 \u09A8\u09BF\u099A\u09C7\u09B0 'Publish Request' \u09AC\u09BE\u099F\u09A8 \u09AC\u09CD\u09AF\u09AC\u09B9\u09BE\u09B0 \u0995\u09B0\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u0986\u09AC\u09C7\u09A6\u09A8\u099F\u09BF \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09C1\u09A8 \u09AF\u09BE\u09A4\u09C7 \u09B8\u0995\u09B2\u09C7 \u09A6\u09C7\u0996\u09A4\u09C7 \u09AA\u09BE\u09DF\u0964`;
+          finalTaskMode = "create_request";
         } else {
-          replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE\u099F\u09BF \u09AA\u09C7\u09DF\u09C7\u099B\u09BF: "${message}"\u0964 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09A4\u09C7, \u0986\u09AC\u09C7\u09A6\u09A8 \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09A4\u09C7 \u09AC\u09BE \u09B8\u09BE\u09A7\u09BE\u09B0\u09A3 \u09AF\u09C7\u0995\u09CB\u09A8\u09CB \u09AA\u09CD\u09B0\u09B6\u09CD\u09A8 \u09A5\u09BE\u0995\u09B2\u09C7 \u09A6\u09DF\u09BE \u0995\u09B0\u09C7 \u09AC\u09BF\u09B8\u09CD\u09A4\u09BE\u09B0\u09BF\u09A4 \u09AC\u09B2\u09C1\u09A8 (\u09AF\u09C7\u09AE\u09A8: \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u0993 \u0986\u09AA\u09A8\u09BE\u09B0 \u099C\u09C7\u09B2\u09BE)\u0964 \u0986\u09AE\u09BF \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09BE\u09B0 \u099C\u09A8\u09CD\u09AF \u09AA\u09CD\u09B0\u09B8\u09CD\u09A4\u09C1\u09A4\u0964`;
+          replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u099C\u09A8\u09CD\u09AF ${slots.bloodGroup} \u0997\u09CD\u09B0\u09C1\u09AA\u09C7\u09B0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE\u09B0 \u09B8\u09A8\u09CD\u09A7\u09BE\u09A8 \u09AA\u09C7\u09DF\u09C7\u099B\u09BF\u0964 \u09A8\u09BF\u099A\u09C7 \u0995\u09BE\u099B\u09BE\u0995\u09BE\u099B\u09BF \u098F\u09B2\u09BE\u0995\u09BE\u09B0 \u0989\u09AA\u09AF\u09C1\u0995\u09CD\u09A4 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE\u09A6\u09C7\u09B0 \u09A6\u09C7\u0996\u09A4\u09C7 \u09AA\u09BE\u09AC\u09C7\u09A8 \u098F\u09AC\u0982 \u09A4\u09BE\u09A6\u09C7\u09B0 \u09B8\u09BE\u09A5\u09C7 \u09B8\u09B0\u09BE\u09B8\u09B0\u09BF \u09AF\u09CB\u0997\u09BE\u09AF\u09CB\u0997 \u0995\u09B0\u09A4\u09C7 \u09AA\u09BE\u09B0\u09AC\u09C7\u09A8\u0964`;
+          finalTaskMode = "search_donors";
         }
-        return res.status(200).json({
-          success: true,
-          replyText,
-          limitReached: false,
-          bloodGroup: slots?.bloodGroup || null,
-          district: slots?.district || null,
-          thana: slots?.thana || null,
-          hospital: slots?.hospital || null,
-          medicalReason: slots?.medicalReason || null,
-          contactPhone: slots?.contactPhone || null,
-          taskMode: finalTaskMode,
-          actionTriggered: false,
-          requestFormTriggered: false
-        });
+      } else {
+        replyText = `\u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09AC\u09BE\u09B0\u09CD\u09A4\u09BE\u099F\u09BF \u09AA\u09C7\u09DF\u09C7\u099B\u09BF: "${message}"\u0964 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09A4\u09C7, \u0986\u09AC\u09C7\u09A6\u09A8 \u09AA\u09CB\u09B8\u09CD\u099F \u0995\u09B0\u09A4\u09C7 \u09AC\u09BE \u09B8\u09BE\u09A7\u09BE\u09B0\u09A3 \u09AF\u09C7\u0995\u09CB\u09A8\u09CB \u09AA\u09CD\u09B0\u09B6\u09CD\u09A8 \u09A5\u09BE\u0995\u09B2\u09C7 \u09A6\u09DF\u09BE \u0995\u09B0\u09C7 \u09AC\u09BF\u09B8\u09CD\u09A4\u09BE\u09B0\u09BF\u09A4 \u09AC\u09B2\u09C1\u09A8 (\u09AF\u09C7\u09AE\u09A8: \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u0997\u09CD\u09B0\u09C1\u09AA \u0993 \u0986\u09AA\u09A8\u09BE\u09B0 \u099C\u09C7\u09B2\u09BE)\u0964 \u0986\u09AE\u09BF \u09B8\u09BE\u09B9\u09BE\u09AF\u09CD\u09AF \u0995\u09B0\u09BE\u09B0 \u099C\u09A8\u09CD\u09AF \u09AA\u09CD\u09B0\u09B8\u09CD\u09A4\u09C1\u09A4\u0964`;
       }
-      inMemoryAiSettings.aiTodayUsageCount += 1;
-      try {
-        await adminDb.collection("settings").doc("global").set({
-          aiTodayUsageCount: import_firestore.FieldValue.increment(1),
-          aiTodayResetDate: todayStr
-        }, { merge: true });
-        console.log(`Incremented AI usage counter in Firestore settings/global.`);
-      } catch (incError) {
-        console.warn("Firestore write permissions restricted on Cloud Run service account, using in-memory live tracking counter fallback safely.");
+      return res.status(200).json({
+        success: true,
+        replyText,
+        limitReached: false,
+        bloodGroup: slots?.bloodGroup || null,
+        district: slots?.district || null,
+        thana: slots?.thana || null,
+        hospital: slots?.hospital || null,
+        medicalReason: slots?.medicalReason || null,
+        contactPhone: slots?.contactPhone || null,
+        taskMode: finalTaskMode,
+        actionTriggered: false,
+        requestFormTriggered: false
+      });
+    }
+    inMemoryAiSettings.aiTodayUsageCount += 1;
+    try {
+      await adminDb.collection("settings").doc("global").set({
+        aiTodayUsageCount: import_firestore.FieldValue.increment(1),
+        aiTodayResetDate: todayStr
+      }, { merge: true });
+      console.log(`Incremented AI usage counter in Firestore settings/global.`);
+    } catch (incError) {
+      console.warn("Firestore write permissions restricted on Cloud Run service account, using in-memory live tracking counter fallback safely.");
+    }
+    let data = {};
+    try {
+      let cleanText = responseText.trim();
+      if (cleanText.startsWith("```")) {
+        cleanText = cleanText.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/, "").trim();
       }
-      let data = {};
-      try {
-        let cleanText = responseText.trim();
-        if (cleanText.startsWith("```")) {
-          cleanText = cleanText.replace(/^```json/i, "").replace(/^```/i, "").replace(/```$/, "").trim();
-        }
-        data = JSON.parse(cleanText);
-      } catch (parseErr) {
-        console.error("JSON parse error:", parseErr, "Raw response was:", responseText);
-        data = {
-          replyText: "\u0986\u09AE\u09BF \u09AC\u09C1\u099D\u09A4\u09C7 \u09AA\u09C7\u09B0\u09C7\u099B\u09BF, \u09A6\u09DF\u09BE \u0995\u09B0\u09C7 \u0986\u09AC\u09BE\u09B0 \u09AC\u09B2\u09C1\u09A8\u0964",
-          bloodGroup: slots?.bloodGroup || null,
-          district: slots?.district || null,
-          thana: slots?.thana || null,
-          hospital: slots?.hospital || null,
-          medicalReason: slots?.medicalReason || null,
-          contactPhone: slots?.contactPhone || null,
-          taskMode: slots?.taskMode || "idle",
-          actionTriggered: false,
-          requestFormTriggered: false
-        };
-      }
-      const cleanInputSlot = (val) => {
-        if (!val) return null;
-        const s = String(val).trim().toLowerCase();
-        if (s === "null" || s === "undefined" || s === "") return null;
-        return val;
+      data = JSON.parse(cleanText);
+    } catch (parseErr) {
+      console.error("JSON parse error:", parseErr, "Raw response was:", responseText);
+      data = {
+        replyText: "\u0986\u09AE\u09BF \u09AC\u09C1\u099D\u09A4\u09C7 \u09AA\u09C7\u09B0\u09C7\u099B\u09BF, \u09A6\u09DF\u09BE \u0995\u09B0\u09C7 \u0986\u09AC\u09BE\u09B0 \u09AC\u09B2\u09C1\u09A8\u0964",
+        bloodGroup: slots?.bloodGroup || null,
+        district: slots?.district || null,
+        thana: slots?.thana || null,
+        hospital: slots?.hospital || null,
+        medicalReason: slots?.medicalReason || null,
+        contactPhone: slots?.contactPhone || null,
+        taskMode: slots?.taskMode || "idle",
+        actionTriggered: false,
+        requestFormTriggered: false
       };
-      const prevBloodGroup = cleanInputSlot(slots?.bloodGroup);
-      const prevDistrict = cleanInputSlot(slots?.district);
-      const prevThana = cleanInputSlot(slots?.thana);
-      const prevHospital = cleanInputSlot(slots?.hospital);
-      const prevMedicalReason = cleanInputSlot(slots?.medicalReason);
-      const prevContactPhone = cleanInputSlot(slots?.contactPhone);
-      const returnedBloodGroup = cleanInputSlot(data.bloodGroup);
-      const returnedDistrict = cleanInputSlot(data.district);
-      const returnedThana = cleanInputSlot(data.thana);
-      const returnedHospital = cleanInputSlot(data.hospital);
-      const returnedMedicalReason = cleanInputSlot(data.medicalReason);
-      const returnedContactPhone = cleanInputSlot(data.contactPhone);
-      if (!returnedBloodGroup && prevBloodGroup) data.bloodGroup = prevBloodGroup;
-      if (!returnedDistrict && prevDistrict) data.district = prevDistrict;
-      if (!returnedThana && prevThana) data.thana = prevThana;
-      if (!returnedHospital && prevHospital) data.hospital = prevHospital;
-      if (!returnedMedicalReason && prevMedicalReason) data.medicalReason = prevMedicalReason;
-      if (!returnedContactPhone && prevContactPhone) data.contactPhone = prevContactPhone;
-      if (data.taskMode === "create_request" && !data.contactPhone && currentUserPhone) {
-        data.contactPhone = currentUserPhone;
-        if (!data.replyText.includes(currentUserPhone)) {
-          data.replyText = `\u0985\u09AC\u09B6\u09CD\u09AF\u0987, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u098F\u0995\u09BE\u0989\u09A8\u09CD\u099F\u09C7\u09B0 \u09B8\u099A\u09B2 \u09AB\u09CB\u09A8 \u09A8\u09AE\u09CD\u09AC\u09B0\u099F\u09BF (${currentUserPhone}) \u09B8\u0982\u09AF\u09C1\u0995\u09CD\u09A4 \u0995\u09B0\u09C7 \u09A8\u09BF\u09DF\u09C7\u099B\u09BF\u0964 ` + data.replyText;
-        }
-      }
-      const finalBloodGroup = cleanInputSlot(data.bloodGroup);
-      const finalDistrict = cleanInputSlot(data.district);
-      const finalThana = cleanInputSlot(data.thana);
-      if (data.taskMode === "search_donors" && finalBloodGroup && finalDistrict && finalThana) {
-        data.actionTriggered = true;
-        data.replyText = data.replyText || "\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09A6\u09C7\u0993\u09DF\u09BE \u0997\u09CD\u09B0\u09C1\u09AA \u098F\u09AC\u0982 \u098F\u09B2\u09BE\u0995\u09BE \u0985\u09A8\u09C1\u09AF\u09BE\u09DF\u09C0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09C7 \u09A6\u09BF\u099A\u09CD\u099B\u09BF\u0964";
-      }
-      if (data.taskMode === "create_request" && finalBloodGroup && finalDistrict && finalThana && data.hospital && data.medicalReason && data.contactPhone) {
-        data.requestFormTriggered = true;
-        data.replyText = data.replyText || "\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09A6\u09C7\u0993\u09DF\u09BE \u09A4\u09A5\u09CD\u09AF\u0997\u09C1\u09B2\u09CB \u09A6\u09BF\u09DF\u09C7 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u09B0\u09BF\u0995\u09CB\u09DF\u09C7\u09B8\u09CD\u099F \u09A4\u09C8\u09B0\u09BF \u0995\u09B0\u09C7 \u09A6\u09BF\u099A\u09CD\u099B\u09BF\u0964";
-      }
-      res.json({
-        success: true,
-        ...data,
-        updatedUsageCount: inMemoryAiSettings.aiTodayUsageCount
-      });
-    } catch (error) {
-      console.error("Error in blood-assistant API:", error);
-      res.status(500).json({ success: false, error: error.message });
     }
-  });
-  app.get("/api/openai/speech", async (req, res) => {
-    try {
-      const text = String(req.query.text || "").trim();
-      if (!text) {
-        return res.status(400).send("No text provided");
+    const cleanInputSlot = (val) => {
+      if (!val) return null;
+      const s = String(val).trim().toLowerCase();
+      if (s === "null" || s === "undefined" || s === "") return null;
+      return val;
+    };
+    const prevBloodGroup = cleanInputSlot(slots?.bloodGroup);
+    const prevDistrict = cleanInputSlot(slots?.district);
+    const prevThana = cleanInputSlot(slots?.thana);
+    const prevHospital = cleanInputSlot(slots?.hospital);
+    const prevMedicalReason = cleanInputSlot(slots?.medicalReason);
+    const prevContactPhone = cleanInputSlot(slots?.contactPhone);
+    const returnedBloodGroup = cleanInputSlot(data.bloodGroup);
+    const returnedDistrict = cleanInputSlot(data.district);
+    const returnedThana = cleanInputSlot(data.thana);
+    const returnedHospital = cleanInputSlot(data.hospital);
+    const returnedMedicalReason = cleanInputSlot(data.medicalReason);
+    const returnedContactPhone = cleanInputSlot(data.contactPhone);
+    if (!returnedBloodGroup && prevBloodGroup) data.bloodGroup = prevBloodGroup;
+    if (!returnedDistrict && prevDistrict) data.district = prevDistrict;
+    if (!returnedThana && prevThana) data.thana = prevThana;
+    if (!returnedHospital && prevHospital) data.hospital = prevHospital;
+    if (!returnedMedicalReason && prevMedicalReason) data.medicalReason = prevMedicalReason;
+    if (!returnedContactPhone && prevContactPhone) data.contactPhone = prevContactPhone;
+    if (data.taskMode === "create_request" && !data.contactPhone && currentUserPhone) {
+      data.contactPhone = currentUserPhone;
+      if (!data.replyText.includes(currentUserPhone)) {
+        data.replyText = `\u0985\u09AC\u09B6\u09CD\u09AF\u0987, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u098F\u0995\u09BE\u0989\u09A8\u09CD\u099F\u09C7\u09B0 \u09B8\u099A\u09B2 \u09AB\u09CB\u09A8 \u09A8\u09AE\u09CD\u09AC\u09B0\u099F\u09BF (${currentUserPhone}) \u09B8\u0982\u09AF\u09C1\u0995\u09CD\u09A4 \u0995\u09B0\u09C7 \u09A8\u09BF\u09DF\u09C7\u099B\u09BF\u0964 ` + data.replyText;
       }
-      let openaiApiKey = process.env.OPENAI_API_KEY || "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";
-      try {
-        const settingsDoc = await adminDb.collection("settings").doc("global").get();
-        if (settingsDoc.exists) {
-          const settingsData = settingsDoc.data() || {};
-          if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== "") {
-            openaiApiKey = settingsData.openaiApiKeyOverride.trim();
-          }
-        }
-      } catch (err) {
-        if (inMemoryAiSettings.openaiApiKeyOverride) {
-          openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
-        }
-      }
-      const openai = new import_openai.default({ apiKey: openaiApiKey });
-      const mp3 = await openai.audio.speech.create({
-        model: "tts-1",
-        voice: "shimmer",
-        // Natural high-quality female voice friendly for Bangladeshi assistant
-        input: text
-      });
-      const buffer = Buffer.from(await mp3.arrayBuffer());
-      res.set("Content-Type", "audio/mpeg");
-      res.send(buffer);
-    } catch (error) {
-      if (error && (error.status === 429 || error.message?.includes("quota") || error.message?.includes("billing"))) {
-        console.warn("OpenAI API Speech synthesis exceeded quota/billing limits. Local TTS fallbacks will activate automatically.");
-        return res.status(429).send("Speech generation unavailable: Quota or billing limit exceeded.");
-      }
-      console.error("Error in openai-speech API:", error);
-      res.status(500).send("Speech generation failed: " + error.message);
     }
-  });
-  app.get(["/sitemap.xml", "/sitemap"], async (req, res) => {
+    const finalBloodGroup = cleanInputSlot(data.bloodGroup);
+    const finalDistrict = cleanInputSlot(data.district);
+    const finalThana = cleanInputSlot(data.thana);
+    if (data.taskMode === "search_donors" && finalBloodGroup && finalDistrict && finalThana) {
+      data.actionTriggered = true;
+      data.replyText = data.replyText || "\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09A6\u09C7\u0993\u09DF\u09BE \u0997\u09CD\u09B0\u09C1\u09AA \u098F\u09AC\u0982 \u098F\u09B2\u09BE\u0995\u09BE \u0985\u09A8\u09C1\u09AF\u09BE\u09DF\u09C0 \u09B0\u0995\u09CD\u09A4\u09A6\u09BE\u09A4\u09BE \u0996\u09C1\u0981\u099C\u09C7 \u09A6\u09BF\u099A\u09CD\u099B\u09BF\u0964";
+    }
+    if (data.taskMode === "create_request" && finalBloodGroup && finalDistrict && finalThana && data.hospital && data.medicalReason && data.contactPhone) {
+      data.requestFormTriggered = true;
+      data.replyText = data.replyText || "\u09A7\u09A8\u09CD\u09AF\u09AC\u09BE\u09A6, \u0986\u09AE\u09BF \u0986\u09AA\u09A8\u09BE\u09B0 \u09A6\u09C7\u0993\u09DF\u09BE \u09A4\u09A5\u09CD\u09AF\u0997\u09C1\u09B2\u09CB \u09A6\u09BF\u09DF\u09C7 \u09B0\u0995\u09CD\u09A4\u09C7\u09B0 \u09B0\u09BF\u0995\u09CB\u09DF\u09C7\u09B8\u09CD\u099F \u09A4\u09C8\u09B0\u09BF \u0995\u09B0\u09C7 \u09A6\u09BF\u099A\u09CD\u099B\u09BF\u0964";
+    }
+    res.json({
+      success: true,
+      ...data,
+      updatedUsageCount: inMemoryAiSettings.aiTodayUsageCount
+    });
+  } catch (error) {
+    console.error("Error in blood-assistant API:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+app.get("/api/openai/speech", async (req, res) => {
+  try {
+    const text = String(req.query.text || "").trim();
+    if (!text) {
+      return res.status(400).send("No text provided");
+    }
+    let openaiApiKey = process.env.OPENAI_API_KEY || "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";
     try {
-      const xml = await getSitemapXml();
-      res.header("Content-Type", "application/xml; charset=utf-8");
-      res.send(xml);
+      const settingsDoc = await adminDb.collection("settings").doc("global").get();
+      if (settingsDoc.exists) {
+        const settingsData = settingsDoc.data() || {};
+        if (settingsData.openaiApiKeyOverride && settingsData.openaiApiKeyOverride.trim() !== "") {
+          openaiApiKey = settingsData.openaiApiKeyOverride.trim();
+        }
+      }
     } catch (err) {
-      res.status(500).send("Error generating dynamic sitemap");
+      if (inMemoryAiSettings.openaiApiKeyOverride) {
+        openaiApiKey = inMemoryAiSettings.openaiApiKeyOverride;
+      }
     }
-  });
-  app.post("/api/admin/generate-sitemap", async (req, res) => {
+    const openai = new import_openai.default({ apiKey: openaiApiKey });
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "shimmer",
+      // Natural high-quality female voice friendly for Bangladeshi assistant
+      input: text
+    });
+    const buffer = Buffer.from(await mp3.arrayBuffer());
+    res.set("Content-Type", "audio/mpeg");
+    res.send(buffer);
+  } catch (error) {
+    if (error && (error.status === 429 || error.message?.includes("quota") || error.message?.includes("billing"))) {
+      console.warn("OpenAI API Speech synthesis exceeded quota/billing limits. Local TTS fallbacks will activate automatically.");
+      return res.status(429).send("Speech generation unavailable: Quota or billing limit exceeded.");
+    }
+    console.error("Error in openai-speech API:", error);
+    res.status(500).send("Speech generation failed: " + error.message);
+  }
+});
+app.get(["/sitemap.xml", "/sitemap"], async (req, res) => {
+  try {
+    const xml = await getSitemapXml();
+    res.header("Content-Type", "application/xml; charset=utf-8");
+    res.send(xml);
+  } catch (err) {
+    res.status(500).send("Error generating dynamic sitemap");
+  }
+});
+app.post("/api/admin/generate-sitemap", async (req, res) => {
+  try {
+    const xml = await getSitemapXml();
+    let publicWritten = false;
+    let distWritten = false;
     try {
-      const xml = await getSitemapXml();
-      let publicWritten = false;
-      let distWritten = false;
-      try {
-        await import_promises.default.writeFile(import_path.default.join(process.cwd(), "public", "sitemap.xml"), xml, "utf-8");
-        publicWritten = true;
-      } catch (err) {
-        console.warn("Could not write to public/sitemap.xml:", err.message);
-      }
-      try {
-        await import_promises.default.writeFile(import_path.default.join(process.cwd(), "dist", "sitemap.xml"), xml, "utf-8");
-        distWritten = true;
-      } catch (err) {
-        console.warn("Could not write to dist/sitemap.xml:", err.message);
-      }
-      const outcomeMessage = publicWritten || distWritten ? `Sitemap successfully generated! (public: ${publicWritten ? "Yes" : "No"}, dist: ${distWritten ? "Yes" : "No"})` : "Sitemap served dynamically (Static sitemap files couldn't be written due to read-only hosting environment, but is active!)";
-      res.json({
-        success: true,
-        message: outcomeMessage,
-        details: { publicWritten, distWritten }
-      });
-    } catch (error) {
-      res.status(500).json({ success: false, error: error.message });
+      await import_promises.default.writeFile(import_path.default.join(process.cwd(), "public", "sitemap.xml"), xml, "utf-8");
+      publicWritten = true;
+    } catch (err) {
+      console.warn("Could not write to public/sitemap.xml:", err.message);
     }
-  });
-  let androidBuildState = {
-    status: "idle",
-    // "idle", "building", "success", "failed"
-    logs: "No build started yet. Click 'Trigger Build' to compile and sync native android assets.\n",
-    updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    downloadReady: false
-  };
-  const runBuildProcess = async () => {
-    const { exec } = await import("child_process");
-    androidBuildState.status = "building";
-    androidBuildState.logs = `[${(/* @__PURE__ */ new Date()).toISOString()}] Started Android build & update process...
+    try {
+      await import_promises.default.writeFile(import_path.default.join(process.cwd(), "dist", "sitemap.xml"), xml, "utf-8");
+      distWritten = true;
+    } catch (err) {
+      console.warn("Could not write to dist/sitemap.xml:", err.message);
+    }
+    const outcomeMessage = publicWritten || distWritten ? `Sitemap successfully generated! (public: ${publicWritten ? "Yes" : "No"}, dist: ${distWritten ? "Yes" : "No"})` : "Sitemap served dynamically (Static sitemap files couldn't be written due to read-only hosting environment, but is active!)";
+    res.json({
+      success: true,
+      message: outcomeMessage,
+      details: { publicWritten, distWritten }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+var androidBuildState = {
+  status: "idle",
+  // "idle", "building", "success", "failed"
+  logs: "No build started yet. Click 'Trigger Build' to compile and sync native android assets.\n",
+  updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+  downloadReady: false
+};
+var runBuildProcess = async () => {
+  const { exec } = await import("child_process");
+  androidBuildState.status = "building";
+  androidBuildState.logs = `[${(/* @__PURE__ */ new Date()).toISOString()}] Started Android build & update process...
 `;
-    androidBuildState.logs += `[Step 1/3] Running 'npm run build' to bundle React production web assets...
+  androidBuildState.logs += `[Step 1/3] Running 'npm run build' to bundle React production web assets...
 `;
-    androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-    androidBuildState.downloadReady = false;
-    exec("npm run build", (buildErr, buildStdout, buildStderr) => {
-      if (buildErr) {
-        androidBuildState.status = "failed";
-        androidBuildState.logs += `
+  androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+  androidBuildState.downloadReady = false;
+  exec("npm run build", (buildErr, buildStdout, buildStderr) => {
+    if (buildErr) {
+      androidBuildState.status = "failed";
+      androidBuildState.logs += `
 \u274C 'npm run build' failed!
 Error:
 ${buildErr.message}
 Stderr:
 ${buildStderr}
 `;
-        androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        return;
-      }
-      androidBuildState.logs += buildStdout + "\n";
-      androidBuildState.logs += `[Step 2/3] Running 'npx cap sync' to synchronize assets and plugins into Android project...
-`;
       androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-      exec("npx cap sync", (syncErr, syncStdout, syncStderr) => {
-        if (syncErr) {
-          androidBuildState.status = "failed";
-          androidBuildState.logs += `
+      return;
+    }
+    androidBuildState.logs += buildStdout + "\n";
+    androidBuildState.logs += `[Step 2/3] Running 'npx cap sync' to synchronize assets and plugins into Android project...
+`;
+    androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+    exec("npx cap sync", (syncErr, syncStdout, syncStderr) => {
+      if (syncErr) {
+        androidBuildState.status = "failed";
+        androidBuildState.logs += `
 \u274C 'npx cap sync' failed!
 Error:
 ${syncErr.message}
 Stderr:
 ${syncStderr}
 `;
-          androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          return;
-        }
-        androidBuildState.logs += syncStdout + "\n";
-        androidBuildState.logs += `[Step 3/3] Running Python compression script to generate source zip file...
-`;
         androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-        const pythonZippingScript = `
+        return;
+      }
+      androidBuildState.logs += syncStdout + "\n";
+      androidBuildState.logs += `[Step 3/3] Running Python compression script to generate source zip file...
+`;
+      androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+      const pythonZippingScript = `
 import zipfile
 import os
 
@@ -968,81 +978,82 @@ with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         zipf.write('package.json', 'package.json')
 print("Successfully compressed android source code!")
 `;
-        import_promises.default.writeFile("/tmp/zip_script.py", pythonZippingScript, "utf-8").then(() => {
-          exec("python3 /tmp/zip_script.py", (pyErr, pyStdout, pyStderr) => {
-            if (pyErr) {
-              androidBuildState.status = "failed";
-              androidBuildState.logs += `
+      import_promises.default.writeFile("/tmp/zip_script.py", pythonZippingScript, "utf-8").then(() => {
+        exec("python3 /tmp/zip_script.py", (pyErr, pyStdout, pyStderr) => {
+          if (pyErr) {
+            androidBuildState.status = "failed";
+            androidBuildState.logs += `
 \u274C Python zip script failed!
 Error:
 ${pyErr.message}
 Stderr:
 ${pyStderr}
 `;
-              androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-              return;
-            }
-            androidBuildState.logs += pyStdout + "\n";
-            androidBuildState.logs += `
+            androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
+            return;
+          }
+          androidBuildState.logs += pyStdout + "\n";
+          androidBuildState.logs += `
 \u{1F389} Android Gradle project successfully synced, compiled, and zipped!
 `;
-            androidBuildState.status = "success";
-            androidBuildState.downloadReady = true;
-            androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
-          });
-        }).catch((fsErr) => {
-          androidBuildState.status = "failed";
-          androidBuildState.logs += `
-\u274C Could not write Python zipping utility: ${fsErr.message}
-`;
+          androidBuildState.status = "success";
+          androidBuildState.downloadReady = true;
           androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
         });
+      }).catch((fsErr) => {
+        androidBuildState.status = "failed";
+        androidBuildState.logs += `
+\u274C Could not write Python zipping utility: ${fsErr.message}
+`;
+        androidBuildState.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
       });
     });
-  };
-  app.get("/api/admin/build-android/status", (req, res) => {
-    res.json({
-      success: true,
+  });
+};
+app.get("/api/admin/build-android/status", (req, res) => {
+  res.json({
+    success: true,
+    state: androidBuildState
+  });
+});
+app.post("/api/admin/build-android", (req, res) => {
+  if (androidBuildState.status === "building") {
+    return res.json({
+      success: false,
+      message: "A build compilation is already in progress.",
       state: androidBuildState
     });
+  }
+  runBuildProcess().then(() => {
+    console.log("Asynchronous build process initiated.");
+  }).catch((e) => {
+    console.error("Failed to start build:", e);
   });
-  app.post("/api/admin/build-android", (req, res) => {
-    if (androidBuildState.status === "building") {
-      return res.json({
-        success: false,
-        message: "A build compilation is already in progress.",
-        state: androidBuildState
-      });
-    }
-    runBuildProcess().then(() => {
-      console.log("Asynchronous build process initiated.");
-    }).catch((e) => {
-      console.error("Failed to start build:", e);
-    });
-    res.json({
-      success: true,
-      message: "Build process started successfully.",
-      state: androidBuildState
-    });
+  res.json({
+    success: true,
+    message: "Build process started successfully.",
+    state: androidBuildState
   });
-  app.get("/api/admin/build-android/download", async (req, res) => {
-    const zipPath = "/tmp/android_source.zip";
-    try {
-      await import_promises.default.access(zipPath);
-      res.download(zipPath, "bloodlink-android-source.zip");
-    } catch (e) {
-      res.status(404).send("Android build zip file not found or build hasn't completed successfully.");
-    }
-  });
-  app.get("/robots.txt", (req, res) => {
-    const host = "bloodlink.bd";
-    const baseUrl = `https://${host}`;
-    res.type("text/plain");
-    res.send(`User-agent: *
+});
+app.get("/api/admin/build-android/download", async (req, res) => {
+  const zipPath = "/tmp/android_source.zip";
+  try {
+    await import_promises.default.access(zipPath);
+    res.download(zipPath, "bloodlink-android-source.zip");
+  } catch (e) {
+    res.status(404).send("Android build zip file not found or build hasn't completed successfully.");
+  }
+});
+app.get("/robots.txt", (req, res) => {
+  const host = "bloodlink.bd";
+  const baseUrl = `https://${host}`;
+  res.type("text/plain");
+  res.send(`User-agent: *
 Allow: /
 
 Sitemap: ${baseUrl}/sitemap.xml`);
-  });
+});
+async function initDevOrListen() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
@@ -1072,5 +1083,12 @@ Sitemap: ${baseUrl}/sitemap.xml`);
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
-startServer();
+if (!process.env.VERCEL) {
+  initDevOrListen();
+}
+var server_default = app;
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  app
+});
 //# sourceMappingURL=server.cjs.map
