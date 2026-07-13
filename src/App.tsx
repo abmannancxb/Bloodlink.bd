@@ -2501,6 +2501,24 @@ export default function App() {
         await PushNotifications.addListener('registration', async (token) => {
           console.log('Native Push Registration success, token:', token.value);
           const currentToken = token.value;
+
+          // Explicitly print FCM token to logs
+          console.log("==================================================");
+          console.log("             BLOODLINK FCM TOKEN                  ");
+          console.log(currentToken);
+          console.log("==================================================");
+
+          // Show a local test notification after the app starts
+          try {
+            await BloodLinkNative.showTestNotification({
+              title: "BloodLink Alerts Active 🩸",
+              body: "Device successfully registered! You will receive high-priority notifications for emergency blood matches."
+            });
+            console.log("Test notification triggered successfully via BloodLinkNative.");
+          } catch (notiErr) {
+            console.error("Failed to trigger local test notification:", notiErr);
+          }
+
           if (currentToken && profile.fcmToken !== currentToken) {
             try {
               await updateDoc(doc(db, 'users', user.uid), { fcmToken: currentToken });

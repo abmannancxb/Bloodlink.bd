@@ -1,9 +1,16 @@
 package com.bloodlink.bangladesh;
 
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.os.Build;
 import android.util.Log;
+
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -102,5 +109,59 @@ public class BloodLinkNativePlugin extends Plugin {
             }
         }
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void showTestNotification(PluginCall call) {
+        Context context = getContext();
+        if (context == null) {
+            call.reject("Context is null");
+            return;
+        }
+
+        String title = call.getString("title", "Test Notification");
+        String body = call.getString("body", "This is a local test notification from BloodLink Bangladesh.");
+
+        String channelId = "bloodlink_high_importance_channel";
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    channelId,
+                    "BloodLink Notifications",
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setDescription("Direct blood match notifications and messaging alerts");
+            channel.enableLights(true);
+            channel.setLightColor(Color.RED);
+            channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{100, 200, 300, 400, 500});
+
+            NotificationManager manager = context.getSystemService(NotificationManager.class);
+            if (manager != null) {
+                manager.createNotificationChannel(channel);
+            }
+        }
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId)
+                .setSmallIcon(context.getApplicationInfo().icon)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setShowWhen(true)
+                .setWhen(System.currentTimeMillis())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setColor(Color.RED);
+
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+        try {
+            notificationManager.notify((int) System.currentTimeMillis(), builder.build());
+            JSObject ret = new JSObject();
+            ret.put("status", "success");
+            call.resolve(ret);
+        } catch (SecurityException e) {
+            Log.e(TAG, "Notification permission missing when publishing local test", e);
+            call.reject("Permission missing: " + e.getMessage());
+        }
     }
 }
