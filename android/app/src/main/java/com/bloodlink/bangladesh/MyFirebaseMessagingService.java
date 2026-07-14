@@ -81,6 +81,21 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     }
 
     @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent != null && "com.bloodlink.bangladesh.INITIALIZE_HEADLESS".equals(intent.getAction())) {
+            Log.d(TAG, "FCM background service initialized via headless task registration on Android 10+.");
+            try {
+                com.google.firebase.messaging.FirebaseMessaging.getInstance().setAutoInitEnabled(true);
+                Log.d(TAG, "Firebase Cloud Messaging auto-initialization successfully enabled.");
+            } catch (Exception e) {
+                Log.e(TAG, "Error initializing FCM in headless task: " + e.getMessage());
+            }
+            return START_STICKY;
+        }
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    @Override
     public void onNewToken(@NonNull String token) {
         super.onNewToken(token);
         Log.d(TAG, "Refreshed token: " + token);
