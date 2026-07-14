@@ -19,11 +19,14 @@ import androidx.core.app.RemoteInput;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FieldValue;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,6 +34,45 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     private static final String TAG = "MyFirebaseMsgService";
     private static final String CHANNEL_ID = "bloodlink_high_importance_channel";
     private static final String CHANNEL_NAME = "BloodLink Notifications";
+
+    private void logDiagnostic(String type, String status, String title, String body, Map<String, String> payload, String action, String errorMessage) {
+        try {
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
+            Map<String, Object> log = new HashMap<>();
+            log.put("timestamp", FieldValue.serverTimestamp());
+            log.put("type", type);
+            log.put("status", status);
+            log.put("title", title != null ? title : "");
+            log.put("body", body != null ? body : "");
+            
+            Map<String, Object> payloadMap = new HashMap<>();
+            if (payload != null) {
+                for (Map.Entry<String, String> entry : payload.entrySet()) {
+                    payloadMap.put(entry.getKey(), entry.getValue());
+                }
+            }
+            log.put("payload", payloadMap);
+            log.put("action", action != null ? action : "");
+            log.put("errorMessage", errorMessage != null ? errorMessage : "");
+
+            // Device details
+            Map<String, Object> device = new HashMap<>();
+            device.put("manufacturer", android.os.Build.MANUFACTURER);
+            device.put("model", android.os.Build.MODEL);
+            device.put("osVersion", android.os.Build.VERSION.RELEASE);
+            device.put("sdkVersion", android.os.Build.VERSION.SDK_INT);
+            device.put("brand", android.os.Build.BRAND);
+            device.put("hardware", android.os.Build.HARDWARE);
+            log.put("device", device);
+
+            db.collection("push_diagnostics")
+                    .add(log)
+                    .addOnSuccessListener(ref -> Log.d(TAG, "Diagnostic log created: " + ref.getId()))
+                    .addOnFailureListener(e -> Log.e(TAG, "Failed to write diagnostic log: " + e.getMessage()));
+        } catch (Exception e) {
+            Log.e(TAG, "Exception writing diagnostic log: " + e.getMessage());
+        }
+    }
 
     @Override
     public void onCreate() {
@@ -51,59 +93,72 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
     @Override
     public void onMessageReceived(@NonNull RemoteMessage remoteMessage) {
-        super.onMessageReceived(remoteMessage);
-        Log.d(TAG, "From: " + remoteMessage.getFrom());
+        try {
+            super.onMessageReceived(remoteMessage);
+            Log.d(TAG, "From: " + remoteMessage.getFrom());
 
-        // Extract payload from either message notification or data
-        Map<String, String> data = remoteMessage.getData();
-        String title = null;
-        String body = null;
-        String type = "general";
-        String chatId = null;
-        String requestId = null;
-        String senderId = null;
-        String senderName = null;
-        String largeIconUrl = null;
+            // Extract payload from either message notification or data
+            Map<String, String> data = remoteMessage.getData();
+            String title = null;
+            String body = null;
+            String type = "general";
+            String chatId = null;
+            String requestId = null;
+            String senderId = null;
+            String senderName = null;
+            String largeIconUrl = null;
 
-        if (data != null && !data.isEmpty()) {
-            Log.d(TAG, "Message data payload: " + data.toString());
-            title = data.get("title");
-            body = data.get("body");
-            type = data.get("type"); // "chat" or "blood_request"
-            chatId = data.get("chatId");
-            requestId = data.get("requestId");
-            senderId = data.get("senderId");
-            senderName = data.get("senderName");
-            largeIconUrl = data.get("largeIcon");
-        }
-
-        // Fallback to notification block if data is empty
-        if (title == null && remoteMessage.getNotification() != null) {
-            title = remoteMessage.getNotification().getTitle();
-            body = remoteMessage.getNotification().getBody();
-        }
-
-        if (title == null) {
-            title = "BloodLink Bangladesh";
-        }
-        if (body == null) {
-            body = "You have a new update.";
-        }
-
-        // Check if chat is muted
-        if ("chat".equals(type) && chatId != null) {
-            SharedPreferences prefs = getSharedPreferences("BloodLinkPrefs", MODE_PRIVATE);
-            Set<String> mutedChats = prefs.getStringSet("muted_chats", new HashSet<>());
-            if (mutedChats.contains(chatId)) {
-                Log.d(TAG, "Notification silenced: Chat " + chatId + " is muted.");
-                return;
+            if (data != null && !data.isEmpty()) {
+                Log.d(TAG, "Message data payload: " + data.toString());
+                title = data.get("title");
+                body = data.get("body");
+                type = data.get("type"); // "chat" or "blood_request"
+                chatId = data.get("chatId");
+                requestId = data.get("requestId");
+                senderId = data.get("senderId");
+                senderName = data.get("senderName");
+                largeIconUrl = data.get("largeIcon");
             }
-        }
 
-        sendNotification(title, body, type, chatId, requestId, senderId, senderName, largeIconUrl);
+            // Fallback to notification block if data is empty
+            if (title == null && remoteMessage.getNotification() != null) {
+                title = remoteMessage.getNotification().getTitle();
+                body = remoteMessage.getNotification().getBody();
+            }
+
+            if (title == null) {
+                title = "BloodLink Bangladesh";
+            }
+            if (body == null) {
+                body = "You have a new update.";
+            }
+
+            // Log successful arrival
+            logDiagnostic("RECEIVE", "SUCCESS", title, body, data, null, null);
+
+            // Check if chat is muted
+            if ("chat".equals(type) && chatId != null) {
+                SharedPreferences prefs = getSharedPreferences("BloodLinkPrefs", MODE_PRIVATE);
+                Set<String> mutedChats = prefs.getStringSet("muted_chats", new HashSet<>());
+                if (mutedChats.contains(chatId)) {
+                    Log.d(TAG, "Notification silenced: Chat " + chatId + " is muted.");
+                    logDiagnostic("RECEIVE", "INFO", title, body, data, "SILENCED_MUTED", "Notification was received but silenced because this chat is muted.");
+                    return;
+                }
+            }
+
+            sendNotification(title, body, type, chatId, requestId, senderId, senderName, largeIconUrl, data);
+        } catch (Exception e) {
+            Log.e(TAG, "Error processing incoming message: ", e);
+            Map<String, String> errPayload = new HashMap<>();
+            if (remoteMessage.getData() != null) {
+                errPayload.putAll(remoteMessage.getData());
+            }
+            logDiagnostic("RECEIVE_FAILED", "FAILURE", "Failed to Process Notification", e.getMessage(), errPayload, null, e.toString());
+        }
     }
 
-    private void sendNotification(String title, String body, String type, String chatId, String requestId, String senderId, String senderName, String largeIconUrl) {
+    private void sendNotification(String title, String body, String type, String chatId, String requestId, String senderId, String senderName, String largeIconUrl, Map<String, String> data) {
         int notificationId = (chatId != null ? chatId.hashCode() : (requestId != null ? requestId.hashCode() : (int) System.currentTimeMillis()));
 
         // Intent to open MainActivity on tapping
@@ -277,6 +332,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             notificationManager.notify(groupKey.hashCode(), summaryBuilder.build());
         } catch (SecurityException e) {
             Log.e(TAG, "Notification permission missing when publishing", e);
+            logDiagnostic("NOTIFICATION_ERROR", "FAILURE", title, body, data, null, "Permission missing: " + e.getMessage());
         }
     }
 

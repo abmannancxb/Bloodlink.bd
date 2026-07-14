@@ -58,6 +58,7 @@ import { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';
 import AIBloodAssistant from './components/AIBloodAssistant';
 import { DonorCardModal } from './components/DonorCardModal';
 import AndroidBuildTab from './components/AndroidBuildTab';
+import { PushDiagnosticsTab } from './components/PushDiagnosticsTab';
 
 import { 
   OperationType,
@@ -1977,13 +1978,7 @@ export default function App() {
             
             playNotificationSound();
             
-            // Toast
-            addToast(
-              `New Chat from ${senderName}`,
-              c.lastMessage || "You have a new message.",
-              'info',
-              `chat:${c.id}`
-            );
+            // No longer calling addToast here to avoid overlapping with the custom inAppHeadsUp heads-up notification banner
 
             // In-app heads-up notification (WhatsApp style)
             const isMuted = mutedChats.includes(c.id);
@@ -2915,12 +2910,7 @@ export default function App() {
             });
           }
 
-          addToast(
-            `Match Found: ${latestMatch.bloodGroup}`,
-            `${latestMatch.requesterName} is looking for blood in ${latestMatch.district}.`,
-            'info',
-            latestMatch.id
-          );
+          // No longer calling addToast here to avoid overlapping with the custom inAppHeadsUp heads-up notification banner
 
           // In-app heads-up notification (WhatsApp style)
           setInAppHeadsUp({
@@ -10417,7 +10407,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
   events: AppEvent[],
   customBanners: AdminCustomBanner[]
 }) {
-  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant' | 'blogs' | 'events' | 'banners' | 'android-build'>('stats');
+  const [tab, setTab] = useState<'stats' | 'users' | 'requests' | 'feed' | 'reports' | 'organizations' | 'applications' | 'settings' | 'alerts' | 'system' | 'gallery' | 'ai-assistant' | 'blogs' | 'events' | 'banners' | 'android-build' | 'push-logs'>('stats');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [adminHealthTips, setAdminHealthTips] = useState<HealthTip[]>([]);
   const [showCreateBlog, setShowCreateBlog] = useState(false);
@@ -10961,6 +10951,7 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
     { id: 'system', label: 'System', icon: <HardDrive className="w-4 h-4" /> },
     { id: 'gallery', label: 'Server Gallery', icon: <Image className="w-4 h-4" /> },
     { id: 'android-build', label: 'Android Build', icon: <Smartphone className="w-4 h-4 text-sky-500" /> },
+    { id: 'push-logs', label: 'Push Diagnostics', icon: <Activity className="w-4 h-4 text-rose-500" /> },
   ];
 
   return (
@@ -12573,6 +12564,10 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
 
         {tab === 'android-build' && (
           <AndroidBuildTab addToast={addToast} />
+        )}
+
+        {tab === 'push-logs' && (
+          <PushDiagnosticsTab addToast={addToast} />
         )}
 
         {tab === 'blogs' && (
@@ -22055,18 +22050,6 @@ function ToastContainer({ toasts, onRemove, onAction }: { toasts: Toast[], onRem
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-black text-slate-900 tracking-tight leading-none mb-1">{toast.title}</p>
                 <p className="text-xs text-slate-500 font-medium leading-relaxed">{toast.body}</p>
-                
-                {toast.requestId && (
-                  <button 
-                    onClick={() => {
-                      onAction(toast.requestId!);
-                      onRemove(toast.id);
-                    }}
-                    className="mt-3 text-[10px] font-black text-red-600 uppercase tracking-widest hover:underline flex items-center gap-1"
-                  >
-                    View Request <ChevronRight className="w-3 h-3" />
-                  </button>
-                )}
               </div>
               
               <button 
