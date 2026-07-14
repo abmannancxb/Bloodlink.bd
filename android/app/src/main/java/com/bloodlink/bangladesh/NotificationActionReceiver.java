@@ -141,7 +141,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
         // 1. Show dynamic progress/feedback in notification
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
         NotificationCompat.Builder repliedNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Chat with Sender")
                 .setContentText("Sending reply...")
                 .setProgress(0, 0, true);
@@ -177,7 +177,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
 
                     // Update notification to display success
                     NotificationCompat.Builder successNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setSmallIcon(R.drawable.ic_notification)
                             .setContentTitle("Chat Reply")
                             .setContentText("Reply sent successfully!")
                             .setTimeoutAfter(2000); // clear after 2 seconds
@@ -193,7 +193,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
                     logDiagnostic(context, "ACTION_REPLY", "FAILURE", "Reply Action Failed", "Failed to add reply to Firestore: " + e.getMessage(), payload, ACTION_REPLY, e.toString());
                     
                     NotificationCompat.Builder errorNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setSmallIcon(R.drawable.ic_notification)
                             .setContentTitle("Chat Reply")
                             .setContentText("Failed to send reply. Please try again.")
                             .setTimeoutAfter(3000);
@@ -277,7 +277,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
 
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
         NotificationCompat.Builder progressNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("Blood Request")
                 .setContentText("Accepting request...")
                 .setProgress(0, 0, true);
@@ -303,7 +303,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
                     logDiagnostic(context, "ACTION_ACCEPT_REQUEST", "SUCCESS", "Request Accepted Succeeded", "Blood request is marked as Fulfilled in Firestore.", payload, ACTION_ACCEPT_REQUEST, null);
                     
                     NotificationCompat.Builder successNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setSmallIcon(R.drawable.ic_notification)
                             .setContentTitle("Blood Request")
                             .setContentText("You accepted this blood request! Marked as Fulfilled.")
                             .setTimeoutAfter(3000);
@@ -319,7 +319,7 @@ public class NotificationActionReceiver extends BroadcastReceiver {
                     logDiagnostic(context, "ACTION_ACCEPT_REQUEST", "FAILURE", "Accept Request Failed", "Firestore update failed: " + e.getMessage(), payload, ACTION_ACCEPT_REQUEST, e.toString());
                     
                     NotificationCompat.Builder errorNotification = new NotificationCompat.Builder(context, "bloodlink_high_importance_channel")
-                            .setSmallIcon(R.mipmap.ic_launcher)
+                            .setSmallIcon(R.drawable.ic_notification)
                             .setContentTitle("Blood Request")
                             .setContentText("Failed to accept blood request. Try in-app.")
                             .setTimeoutAfter(3000);

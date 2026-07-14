@@ -177,7 +177,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         // Build notification
         NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setAutoCancel(true)
@@ -320,7 +320,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
             // Show group summary
             NotificationCompat.Builder summaryBuilder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setSmallIcon(R.drawable.ic_notification)
                     .setContentTitle("chat".equals(type) ? "New Messages" : "Blood Link Alerts")
                     .setContentText("chat".equals(type) ? "You have unread chats" : "New requests matching your profile")
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
