@@ -2491,6 +2491,26 @@ export default function App() {
           
           if (permStatus.receive === 'granted') {
             // Register with APNS/FCM
+            
+            // Add listeners for registration
+            await PushNotifications.addListener('registration', async (token) => {
+              console.log('Push registration success, token: ' + token.value);
+              // Send token to our server
+              if (user) {
+                try {
+                  await updateDoc(doc(db, 'users', user.uid), { fcmToken: token.value });
+                  setProfile(prev => prev ? { ...prev, fcmToken: token.value } : null);
+                  console.log("Token updated in Firestore");
+                } catch (e) {
+                  console.error("Failed to update token in Firestore:", e);
+                }
+              }
+            });
+
+            await PushNotifications.addListener('registrationError', (err) => {
+              console.error('Push registration error: ', err.error);
+            });
+
             await PushNotifications.register();
           } else {
             console.warn("Notification permissions denied or prompt failed.");
