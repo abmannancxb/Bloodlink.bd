@@ -2493,14 +2493,25 @@ export default function App() {
             // Register with APNS/FCM
             await PushNotifications.register();
           } else {
+            console.warn("Notification permissions denied or prompt failed.");
             addToast("Notifications Disabled", "Notification permissions are required for emergency blood match alerts.", "warning");
-            await askConfirm(
+            
+            // Ask user to open settings if denied
+            const confirm = await askConfirm(
               "Enable Alerts",
-              "BloodLink Bangladesh relies on instant notifications to alert you when an emergency blood request matches your blood type in your district. Please enable notifications in your system settings.",
-              "OK",
+              "Notification permissions are currently denied or missing. Would you like to open settings to enable them?",
+              "Open Settings",
               "info",
-              "Dismiss"
+              "Cancel"
             );
+            
+            if (confirm) {
+               try {
+                 await BloodLinkNative.openAppSettings();
+               } catch (e) {
+                 console.error("Failed to open app settings:", e);
+               }
+            }
           }
         } catch (e) {
           console.error("Error setting up native push:", e);
