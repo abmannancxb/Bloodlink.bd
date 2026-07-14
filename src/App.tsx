@@ -4736,6 +4736,40 @@ export default function App() {
                       />
                     </div>
 
+                    {/* Beautiful "Need Blood?" Request Promo Card - matching the design 100% */}
+                    <div className="bg-[#FFF5F5] border border-[#FEE2E2] rounded-[24px] sm:rounded-[28px] p-5 flex flex-col sm:flex-row items-center justify-between gap-4.5 mb-5 shadow-[0_8px_30px_rgba(225,29,72,0.02)]">
+                      <div className="flex items-center gap-4 text-left w-full sm:w-auto">
+                        {/* Circular Blood Drop Logo */}
+                        <div className="w-14 h-14 sm:w-[68px] sm:h-[68px] rounded-full bg-white border-2 border-[#E11D48]/70 flex items-center justify-center shrink-0 shadow-[0_6px_20px_rgba(225,29,72,0.12)] relative">
+                          <svg viewBox="0 0 40 40" className="w-8 h-8 sm:w-10 sm:h-10 text-[#E11D48] fill-[#E11D48]" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20,5 C20,5 31,18 31,26 C31,32 26,36.5 20,36.5 C14,36.5 9,32 9,26 C9,18 20,5 20,5 Z" />
+                            {/* Accent gloss shine */}
+                            <path d="M14,20 C12.5,22.5 12.5,25.5 14,27.5 C13,26 12.5,23.5 13,21 C13.5,19 14,18 14,20 Z" fill="#FFFFFF" className="opacity-45" />
+                          </svg>
+                        </div>
+                        
+                        {/* Title and details */}
+                        <div className="flex flex-col justify-center">
+                          <h3 className="text-lg sm:text-[21px] font-black text-slate-900 tracking-tight leading-none">Need Blood?</h3>
+                          <p className="text-[12px] sm:text-[14px] text-slate-500 font-bold mt-1.5 leading-relaxed">
+                            Make a request and get help<br className="hidden sm:block" /> from our donors quickly.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Pill button */}
+                      <button 
+                        onClick={() => {
+                          if (user) setView('request-form');
+                          else handleLogin();
+                        }}
+                        className="w-full sm:w-auto bg-[#E11D48] hover:bg-[#C1123F] text-white font-black text-[12px] sm:text-[13px] tracking-wider uppercase py-3.5 px-6 sm:px-8 rounded-2xl flex items-center justify-center gap-1.5 shadow-[0_10px_25px_rgba(225,29,72,0.22)] hover:shadow-[0_12px_30px_rgba(225,29,72,0.32)] transition-all duration-300 transform hover:scale-[1.02] active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <span>MAKE A REQUEST</span>
+                        <ChevronRight className="w-4.5 h-4.5 text-white stroke-[3.5] ml-0.5" />
+                      </button>
+                    </div>
+
                     {/* 2. Standalone Premium Analytics Metrics Strip */}
                     {settings?.homeShowMetrics !== false && (
                       <div className="bg-white border border-slate-100 border-x-0 sm:border-x -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full rounded-none sm:rounded-[28px] p-3.5 sm:p-5 shadow-[0_8px_30px_rgba(0,0,0,0.02)] mb-5 select-none">
@@ -15938,28 +15972,197 @@ function PremiumHeroBannerCard({
   // Show up to 5 most recently created active banners in a slideshow
   const sliderBanners = activeBanners.slice(0, 5);
 
+  const displayBanners = sliderBanners.length > 0 ? sliderBanners : [{
+    id: 'default-promo-banner',
+    title: 'DONATE BLOOD',
+    subtitle: 'Save Lives',
+    buttonText: 'Join Us',
+    buttonLink: 'request-form',
+    isActive: true,
+    isDefault: true
+  }];
+
   const [currentSlide, setCurrentSlide] = useState(0);
 
   // Automatically cycle through slides every 5 seconds
   useEffect(() => {
-    if (sliderBanners.length <= 1) return;
+    if (displayBanners.length <= 1) return;
     const interval = setInterval(() => {
-      setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
+      setCurrentSlide(prev => (prev + 1) % displayBanners.length);
     }, 5000);
     return () => clearInterval(interval);
-  }, [sliderBanners.length]);
-
-  if (sliderBanners.length === 0) {
-    return null;
-  }
+  }, [displayBanners.length]);
 
   return (
     <div className="group relative rounded-[24px] sm:rounded-[32px] overflow-hidden shadow-[0_24px_60px_rgba(225,29,72,0.12)] border border-slate-200/50 w-full aspect-[3/1] animate-in fade-in duration-500 bg-black">
       {/* Slides */}
       <div className="w-full h-full relative">
-        {sliderBanners.map((banner, index) => {
+        {displayBanners.map((banner, index) => {
           const isSelected = index === currentSlide;
           
+          if (banner.isDefault) {
+            return (
+              <div
+                key={banner.id}
+                onClick={() => {
+                  if (user) setView('request-form');
+                  else handleLogin();
+                }}
+                className={`absolute inset-0 w-full h-full transition-all duration-700 ease-in-out cursor-pointer bg-white overflow-hidden ${
+                  isSelected ? 'opacity-100 translate-x-0 z-10' : 'opacity-0 translate-x-4 pointer-events-none'
+                }`}
+              >
+                {/* Clean white-to-red custom split background matching the photo */}
+                <div className="absolute inset-0 flex">
+                  {/* Left part (white) */}
+                  <div className="w-[62%] h-full bg-white relative pr-4 sm:pr-8 py-3 sm:py-5 pl-4 sm:pl-8 flex flex-col justify-between">
+                    {/* Tiny watermark curves */}
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#E11D48_1px,transparent_1px)] [background-size:16px_16px]" />
+                    
+                    {/* 1. Header Logo */}
+                    <div className="flex items-center gap-2 select-none">
+                      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#E11D48] flex items-center justify-center text-white font-bold text-[10px]">
+                        <Droplet className="w-3 h-3 fill-white stroke-white" />
+                      </div>
+                      <div className="text-left leading-none">
+                        <span className="text-[9px] sm:text-[11px] font-black text-slate-900 tracking-tight block">BLOOD LINK</span>
+                        <span className="text-[6px] sm:text-[7.5px] font-extrabold text-slate-400 block tracking-wider uppercase">Save a life, Be a hero</span>
+                      </div>
+                    </div>
+
+                    {/* 2. Main Title & Handwritten Subheading */}
+                    <div className="my-auto text-left relative z-10">
+                      <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-950 tracking-tighter leading-none select-none">
+                        DONATE <span className="text-[#E11D48]">BLOOD</span>
+                      </h1>
+                      <div className="flex items-center -mt-1 sm:-mt-2 select-none">
+                        <span className="font-serif italic font-extrabold text-[#E11D48] text-lg sm:text-2xl md:text-3xl lg:text-4xl tracking-wide ml-2 sm:ml-4 select-none pr-1">
+                          Save Lives
+                        </span>
+                        {/* Custom beautiful small outline heart */}
+                        <svg className="w-3 h-3 sm:w-4.5 sm:h-4.5 text-[#E11D48] inline fill-none stroke-[2.5]" viewBox="0 0 24 24">
+                          <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                        </svg>
+                      </div>
+                      
+                      <p className="text-[8px] sm:text-[11px] text-slate-500 font-semibold leading-relaxed mt-2 sm:mt-3 max-w-[240px] sm:max-w-xs md:max-w-md">
+                        Your one donation can bring a smile,<br className="hidden sm:block" />
+                        hope and a <span className="text-[#E11D48] font-black">new life</span> to someone in need.
+                      </p>
+                    </div>
+
+                    {/* 3. Bottom badging row */}
+                    <div className="hidden sm:flex items-center gap-3 md:gap-4 select-none">
+                      <div className="flex items-center gap-1">
+                        <div className="w-3.5 h-3.5 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#E11D48]" />
+                        </div>
+                        <span className="text-[7.5px] font-black text-slate-700 tracking-tight">Safe Process</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3.5 h-3.5 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#E11D48]" />
+                        </div>
+                        <span className="text-[7.5px] font-black text-slate-700 tracking-tight">Save Lives</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-3.5 h-3.5 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#E11D48]" />
+                        </div>
+                        <span className="text-[7.5px] font-black text-slate-700 tracking-tight">Every Drop Counts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right part (curved red backdrop) */}
+                  <div className="w-[38%] h-full bg-[#A8112D] bg-gradient-to-br from-[#E11D48] via-[#B91C1C] to-[#881337] relative flex flex-col justify-between py-3.5 sm:py-5 px-3 sm:px-6 text-white overflow-hidden">
+                    {/* Waveform graphic overlay in red section */}
+                    <div className="absolute inset-0 opacity-[0.06] pointer-events-none flex items-center justify-center">
+                      <svg viewBox="0 0 100 100" className="w-full h-full text-white" stroke="currentColor" strokeWidth="2" fill="none">
+                        <path d="M0,50 L20,50 L25,40 L30,60 L35,30 L40,70 L45,45 L50,50 L100,50" />
+                      </svg>
+                    </div>
+
+                    {/* Bullet Info Rows - Right Column */}
+                    <div className="space-y-1 sm:space-y-3 z-10 my-auto text-left pr-1 select-none">
+                      {/* Bullet 1 */}
+                      <div className="flex items-start gap-1.5 sm:gap-2.5">
+                        <div className="w-4.5 h-4.5 sm:w-6.5 sm:h-6.5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                          <Droplet className="w-2 sm:w-3.5 h-2 sm:h-3.5 text-white fill-white" />
+                        </div>
+                        <div className="leading-tight">
+                          <span className="text-[7.5px] sm:text-[10px] font-black tracking-wide block uppercase">DONATE BLOOD</span>
+                          <span className="text-[5.5px] sm:text-[7.5px] text-rose-100 font-medium block leading-none">It only takes a few minutes, but impact lasts forever.</span>
+                        </div>
+                      </div>
+
+                      {/* Bullet 2 */}
+                      <div className="flex items-start gap-1.5 sm:gap-2.5">
+                        <div className="w-4.5 h-4.5 sm:w-6.5 sm:h-6.5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                          <Users className="w-2 sm:w-3.5 h-2 sm:h-3.5 text-white" />
+                        </div>
+                        <div className="leading-tight">
+                          <span className="text-[7.5px] sm:text-[10px] font-black tracking-wide block uppercase">HELP OTHERS</span>
+                          <span className="text-[5.5px] sm:text-[7.5px] text-rose-100 font-medium block leading-none">Patients & accident victims need your blood.</span>
+                        </div>
+                      </div>
+
+                      {/* Bullet 3 */}
+                      <div className="flex items-start gap-1.5 sm:gap-2.5">
+                        <div className="w-4.5 h-4.5 sm:w-6.5 sm:h-6.5 rounded-full bg-white/10 border border-white/20 flex items-center justify-center shrink-0 mt-0.5 shadow-sm">
+                          <Heart className="w-2 sm:w-3.5 h-2 sm:h-3.5 text-white fill-white" />
+                        </div>
+                        <div className="leading-tight">
+                          <span className="text-[7.5px] sm:text-[10px] font-black tracking-wide block uppercase">SAFE & SIMPLE</span>
+                          <span className="text-[5.5px] sm:text-[7.5px] text-rose-100 font-medium block leading-none">Modern techniques make it safe and comfortable.</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Join Us Badge (Capsule Button) */}
+                    <div className="z-10 select-none">
+                      <div className="inline-flex items-center gap-1 bg-white hover:bg-rose-50 text-[#E11D48] text-[6.5px] sm:text-[8.5px] font-extrabold uppercase py-1 px-2.5 sm:px-4 rounded-full shadow-md transition-all duration-300 w-full justify-center">
+                        <span>JOIN US. BE A LIFE SAVER.</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Overlaid central 3D heart-blood-droplet combo block (the focal point in the image) */}
+                <div className="absolute top-1/2 left-[62%] -translate-x-[45%] -translate-y-1/2 w-[22%] sm:w-[24%] max-w-[120px] aspect-square flex items-center justify-center z-20 pointer-events-none select-none">
+                  {/* Outer glowing white heart ring */}
+                  <div className="absolute inset-0 opacity-15">
+                    <svg className="w-full h-full text-white fill-none stroke-[2]" viewBox="0 0 24 24">
+                      <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                    </svg>
+                  </div>
+
+                  {/* Glass reflection 3D Drop */}
+                  <div className="relative w-[75%] h-[90%] flex items-center justify-center drop-shadow-[0_12px_24px_rgba(153,27,27,0.4)]">
+                    <svg viewBox="0 0 30 40" className="w-full h-full">
+                      {/* Drop base 3D Gradient */}
+                      <defs>
+                        <radialGradient id="3dDrop" cx="35%" cy="30%" r="65%">
+                          <stop offset="0%" stopColor="#FF4D6D" />
+                          <stop offset="50%" stopColor="#E11D48" />
+                          <stop offset="85%" stopColor="#9F1239" />
+                          <stop offset="100%" stopColor="#4C0519" />
+                        </radialGradient>
+                      </defs>
+                      <path d="M15,2 C15,2 29,18 29,27 C29,34 23,39 15,39 C7,39 1,34 1,27 C1,18 15,2 15,2 Z" fill="url(#3dDrop)" />
+                      
+                      {/* ECG Pulse heartbeat wave inside the droplet */}
+                      <path d="M5,27 L11,27 L13,22 L15,32 L17,24 L19,29 L25,27" stroke="#FFFFFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" className="opacity-90 shadow-sm" />
+                      
+                      {/* Glossy reflection bubble */}
+                      <path d="M6,18 C4,22 4,26 6,29 C5,27 4,23 5,19 C6,16 8,14 6,18 Z" fill="#FFFFFF" className="opacity-40" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
           if (banner.imageUrl) {
             // Full-image mode (shows the uploaded banner photo as-is, with no text/buttons overlaid)
             return (
@@ -16045,9 +16248,9 @@ function PremiumHeroBannerCard({
       </div>
 
       {/* Navigation Dots */}
-      {sliderBanners.length > 1 && (
+      {displayBanners.length > 1 && (
         <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2 z-20">
-          {sliderBanners.map((_, idx) => (
+          {displayBanners.map((_, idx) => (
             <button
               key={idx}
               onClick={(e) => {
@@ -16062,12 +16265,12 @@ function PremiumHeroBannerCard({
       )}
 
       {/* Hover Navigation Arrows (using rotated ChevronRight for ChevronLeft) */}
-      {sliderBanners.length > 1 && (
+      {displayBanners.length > 1 && (
         <>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setCurrentSlide(prev => (prev - 1 + sliderBanners.length) % sliderBanners.length);
+              setCurrentSlide(prev => (prev - 1 + displayBanners.length) % displayBanners.length);
             }}
             className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
           >
@@ -16076,7 +16279,7 @@ function PremiumHeroBannerCard({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setCurrentSlide(prev => (prev + 1) % sliderBanners.length);
+              setCurrentSlide(prev => (prev + 1) % displayBanners.length);
             }}
             className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-20 cursor-pointer"
           >
