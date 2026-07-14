@@ -823,6 +823,7 @@ Response JSON Schema:
           notification: {
             sound: "default",
             priority: "max" as const,
+            notificationPriority: "PRIORITY_MAX" as const,
             channelId: "bloodlink_high_importance_channel"
           }
         },
@@ -921,6 +922,7 @@ Response JSON Schema:
           notification: {
             sound: "default",
             priority: "max" as const,
+            notificationPriority: "PRIORITY_MAX" as const,
             channelId: "bloodlink_high_importance_channel"
           }
         },

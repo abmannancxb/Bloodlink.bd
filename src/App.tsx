@@ -612,6 +612,9 @@ export default function App() {
   const activeChatRef = useRef<Chat | null>(null);
   const profileScrollRef = useRef<HTMLDivElement | null>(null);
   const profileTouchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const hasSetupNativePushRef = useRef(false);
+  const hasShownWarningThisSession = useRef(false);
+  const lastSetupUidRef = useRef<string | null>(null);
   const [matchingDonorsRequest, setMatchingDonorsRequest] = useState<BloodRequest | null>(null);
   const [matchScope, setMatchScope] = useState<'area' | 'all'>('area');
   const [matchGroupFilter, setMatchGroupFilter] = useState<'exact' | 'compatible'>('exact');
@@ -2477,55 +2480,110 @@ export default function App() {
   // Native Capacitor Android Push Notifications Setup (Capacitor only)
   useEffect(() => {
     if (user && profile && Capacitor.isNativePlatform()) {
+      if (hasSetupNativePushRef.current && lastSetupUidRef.current === user.uid) {
+        return;
+      }
+      hasSetupNativePushRef.current = true;
+      lastSetupUidRef.current = user.uid;
+
       const setupNativePush = async () => {
         try {
+          // Remove any stale listeners first to avoid memory leaks or duplicate firings
+          await PushNotifications.removeAllListeners();
+
+          // Register event listeners BEFORE we call register()
+          await PushNotifications.addListener('registration', async (token) => {
+            console.log('Native Push Registration success, token:', token.value);
+            const currentToken = token.value;
+
+            // Explicitly print FCM token to logs
+            console.log("==================================================");
+            console.log("             BLOODLINK FCM TOKEN                  ");
+            console.log(currentToken);
+            console.log("==================================================");
+
+            // Trigger a local test notification to confirm the device is registered
+            try {
+              await BloodLinkNative.showTestNotification({
+                title: "BloodLink Alerts Active 🩸",
+                body: "Device successfully registered! You will receive high-priority notifications for emergency blood matches."
+              });
+              console.log("Test notification triggered successfully via BloodLinkNative.");
+            } catch (notiErr) {
+              console.error("Failed to trigger local test notification:", notiErr);
+            }
+
+            if (currentToken && profile.fcmToken !== currentToken) {
+              try {
+                await updateDoc(doc(db, 'users', user.uid), { fcmToken: currentToken });
+                setProfile(prev => prev ? { ...prev, fcmToken: currentToken } : null);
+                console.log('Native FCM Token saved to Firestore.');
+              } catch (fsErr) {
+                console.error('Error saving native FCM token to Firestore:', fsErr);
+              }
+            }
+          });
+
+          await PushNotifications.addListener('registrationError', (error) => {
+            console.error('Native Push registration error:', error);
+          });
+
+          await PushNotifications.addListener('pushNotificationReceived', (notification) => {
+            console.log('Native Push received in foreground:', notification);
+            playNotificationSound();
+            addToast(notification.title || "Match Found!", notification.body || "A new request needs attention.", "success");
+          });
+
+          await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+            console.log('Native Push action performed:', action);
+            const data = action.notification.data;
+            if (data && (data.chatId || data.requestId)) {
+              handleNotificationNavigation(data);
+            }
+          });
+
+          // Check permissions status
           let permStatus = await PushNotifications.checkPermissions();
+          
+          // Request permissions if in prompt state
           if (permStatus.receive === 'prompt') {
+            try {
+              // Call custom native wrapper for post-notifications to ensure Android 13+ OS dialog triggers
+              const nativeRes = await BloodLinkNative.requestNotificationPermission();
+              console.log("Native notification permission request result:", nativeRes);
+            } catch (err) {
+              console.warn("BloodLinkNative permission request failed, using fallback:", err);
+            }
             permStatus = await PushNotifications.requestPermissions();
           }
-          
-          if (permStatus.receive === 'granted') {
-            // Register with APNS/FCM
-            
-            // Add listeners for registration
-            await PushNotifications.addListener('registration', async (token) => {
-              console.log('Push registration success, token: ' + token.value);
-              // Send token to our server
-              if (user) {
+
+          // Always register the device with FCM to receive a token.
+          // This allows background targeting even if permission is currently disabled or later toggled.
+          await PushNotifications.register();
+
+          // If permissions are not granted, warn the user exactly once per session/launch to prevent toast fatigue and duplicate stacking
+          if (permStatus.receive !== 'granted') {
+            console.warn("Notification permissions denied or prompt failed.");
+            if (!hasShownWarningThisSession.current) {
+              hasShownWarningThisSession.current = true;
+              addToast("Notifications Disabled", "Notification permissions are required for emergency blood match alerts.", "warning");
+
+              // Ask user to open settings to configure alerts
+              const confirm = await askConfirm(
+                "Enable Alerts",
+                "Notification permissions are currently denied or missing. Would you like to open settings to enable them?",
+                "Open Settings",
+                "info",
+                "Cancel"
+              );
+
+              if (confirm) {
                 try {
-                  await updateDoc(doc(db, 'users', user.uid), { fcmToken: token.value });
-                  setProfile(prev => prev ? { ...prev, fcmToken: token.value } : null);
-                  console.log("Token updated in Firestore");
+                  await BloodLinkNative.openAppSettings();
                 } catch (e) {
-                  console.error("Failed to update token in Firestore:", e);
+                  console.error("Failed to open app settings:", e);
                 }
               }
-            });
-
-            await PushNotifications.addListener('registrationError', (err) => {
-              console.error('Push registration error: ', err.error);
-            });
-
-            await PushNotifications.register();
-          } else {
-            console.warn("Notification permissions denied or prompt failed.");
-            addToast("Notifications Disabled", "Notification permissions are required for emergency blood match alerts.", "warning");
-            
-            // Ask user to open settings if denied
-            const confirm = await askConfirm(
-              "Enable Alerts",
-              "Notification permissions are currently denied or missing. Would you like to open settings to enable them?",
-              "Open Settings",
-              "info",
-              "Cancel"
-            );
-            
-            if (confirm) {
-               try {
-                 await BloodLinkNative.openAppSettings();
-               } catch (e) {
-                 console.error("Failed to open app settings:", e);
-               }
             }
           }
         } catch (e) {
@@ -2533,69 +2591,7 @@ export default function App() {
         }
       };
 
-      const setupListeners = async () => {
-        await PushNotifications.addListener('registration', async (token) => {
-          console.log('Native Push Registration success, token:', token.value);
-          const currentToken = token.value;
-
-          // Explicitly print FCM token to logs
-          console.log("==================================================");
-          console.log("             BLOODLINK FCM TOKEN                  ");
-          console.log(currentToken);
-          console.log("==================================================");
-
-          // Show a local test notification after the app starts
-          try {
-            await BloodLinkNative.showTestNotification({
-              title: "BloodLink Alerts Active 🩸",
-              body: "Device successfully registered! You will receive high-priority notifications for emergency blood matches."
-            });
-            console.log("Test notification triggered successfully via BloodLinkNative.");
-          } catch (notiErr) {
-            console.error("Failed to trigger local test notification:", notiErr);
-          }
-
-          if (currentToken && profile.fcmToken !== currentToken) {
-            try {
-              await updateDoc(doc(db, 'users', user.uid), { fcmToken: currentToken });
-              setProfile(prev => {
-                if (prev) {
-                  return { ...prev, fcmToken: currentToken };
-                }
-                return null;
-              });
-              console.log('Native FCM Token saved to Firestore.');
-            } catch (fsErr) {
-              console.error('Error saving native FCM token to Firestore:', fsErr);
-            }
-          }
-        });
-
-        await PushNotifications.addListener('registrationError', (error) => {
-          console.error('Native Push registration error:', error);
-        });
-
-        await PushNotifications.addListener('pushNotificationReceived', (notification) => {
-          console.log('Native Push received in foreground:', notification);
-          playNotificationSound();
-          addToast(notification.title || "Match Found!", notification.body || "A new request needs attention.", "success");
-        });
-
-        await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
-          console.log('Native Push action performed:', action);
-          const data = action.notification.data;
-          if (data && (data.chatId || data.requestId)) {
-            handleNotificationNavigation(data);
-          }
-        });
-      };
-
       setupNativePush();
-      setupListeners();
-
-      return () => {
-        PushNotifications.removeAllListeners();
-      };
     }
   }, [user, profile, askConfirm, handleNotificationNavigation]);
 
