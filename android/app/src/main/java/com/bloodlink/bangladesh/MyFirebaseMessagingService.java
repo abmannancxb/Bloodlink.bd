@@ -128,7 +128,9 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
                 .setAutoCancel(true)
                 .setShowWhen(true)
                 .setWhen(System.currentTimeMillis())
-                .setPriority(NotificationCompat.PRIORITY_HIGH) // Heads-up display trigger
+                .setPriority(NotificationCompat.PRIORITY_MAX) // Heads-up display maximum priority
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE) // Message category (like WhatsApp)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // Visible on lock screen
                 .setContentIntent(openPendingIntent)
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setColor(Color.RED);
@@ -304,6 +306,8 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
             channel.setLightColor(Color.RED);
             channel.enableVibration(true);
             channel.setVibrationPattern(new long[]{100, 200, 300, 400, 500});
+            channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+            channel.setShowBadge(true);
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
