@@ -17,26 +17,18 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
         registerPlugin(BloodLinkNativePlugin.class);
         createNotificationChannel();
-        registerHeadlessTaskRegistration();
+        try {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().setAutoInitEnabled(true);
+            android.util.Log.d("MainActivity", "Firebase Cloud Messaging auto-initialization successfully enabled.");
+        } catch (Exception e) {
+            android.util.Log.e("MainActivity", "Error enabling FCM auto-initialization: " + e.getMessage());
+        }
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-    }
-
-    private void registerHeadlessTaskRegistration() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { // Android 10 or upper
-            android.util.Log.d("MainActivity", "Registering dedicated Headless task initialization on Android 10+");
-            try {
-                Intent headlessIntent = new Intent(this, MyFirebaseMessagingService.class);
-                headlessIntent.setAction("com.bloodlink.bangladesh.INITIALIZE_HEADLESS");
-                startService(headlessIntent);
-            } catch (Exception e) {
-                android.util.Log.e("MainActivity", "Failed to start headless service: " + e.getMessage());
-            }
-        }
     }
 
     private void createNotificationChannel() {

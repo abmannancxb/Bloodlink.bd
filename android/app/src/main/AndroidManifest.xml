@@ -40,7 +40,6 @@
             android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
-                <action android:name="com.bloodlink.bangladesh.INITIALIZE_HEADLESS" />
             </intent-filter>
         </service>
 

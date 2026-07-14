@@ -19,7 +19,6 @@ import androidx.core.app.RemoteInput;
 
 import com.google.firebase.messaging.FirebaseMessagingService;
 import com.google.firebase.messaging.RemoteMessage;
-import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FieldValue;
 
@@ -79,21 +78,6 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-    }
-
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && "com.bloodlink.bangladesh.INITIALIZE_HEADLESS".equals(intent.getAction())) {
-            Log.d(TAG, "FCM background service initialized via headless task registration on Android 10+.");
-            try {
-                com.google.firebase.messaging.FirebaseMessaging.getInstance().setAutoInitEnabled(true);
-                Log.d(TAG, "Firebase Cloud Messaging auto-initialization successfully enabled.");
-            } catch (Exception e) {
-                Log.e(TAG, "Error initializing FCM in headless task: " + e.getMessage());
-            }
-            return START_STICKY;
-        }
-        return super.onStartCommand(intent, flags, startId);
     }
 
     @Override
