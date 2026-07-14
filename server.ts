@@ -789,6 +789,180 @@ Response JSON Schema:
     }
   });
 
+  // Direct Push Notification Route (primarily for chat messages)
+  app.post("/api/send-push", async (req, res) => {
+    try {
+      const { token, tokens, title, body, type, chatId, requestId, senderId, senderName, largeIcon } = req.body;
+      const targetTokens = tokens || (token ? [token] : []);
+
+      if (targetTokens.length === 0) {
+        return res.status(200).json({ success: true, message: "No target tokens provided" });
+      }
+
+      const payloadData: Record<string, string> = {
+        title: title || "BloodLink Bangladesh",
+        body: body || "You have a new update",
+        type: type || "general",
+      };
+
+      if (chatId) payloadData.chatId = String(chatId);
+      if (requestId) payloadData.requestId = String(requestId);
+      if (senderId) payloadData.senderId = String(senderId);
+      if (senderName) payloadData.senderName = String(senderName);
+      if (largeIcon) payloadData.largeIcon = String(largeIcon);
+
+      const messages = targetTokens.map((t: string) => ({
+        token: t,
+        data: payloadData,
+        notification: {
+          title: title || "BloodLink Bangladesh",
+          body: body || "You have a new update",
+        },
+        android: {
+          priority: "high" as const,
+          notification: {
+            sound: "default",
+            priority: "max" as const,
+            channelId: "bloodlink_high_importance_channel"
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: title || "BloodLink Bangladesh",
+                body: body || "You have a new update",
+              },
+              sound: "default",
+              badge: 1
+            }
+          }
+        }
+      }));
+
+      console.log(`Sending FCM notifications to ${targetTokens.length} devices...`);
+
+      const sendPromises = messages.map((msg: any) =>
+        admin.messaging().send(msg)
+          .then(() => ({ success: true }))
+          .catch((err: any) => {
+            console.warn(`Failed to send FCM to token ${msg.token}:`, err.message);
+            return { success: false, error: err.message };
+          })
+      );
+
+      const results = await Promise.all(sendPromises);
+      const successfulCount = results.filter((r: any) => r.success).length;
+
+      res.json({
+        success: true,
+        successfulCount,
+        failedCount: results.length - successfulCount
+      });
+    } catch (error: any) {
+      console.error("Error in /api/send-push:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // Blood Request Broadcaster Route (find matching donors & notify them)
+  app.post("/api/send-push/blood-request", async (req, res) => {
+    try {
+      const { bloodGroup, district, hospital, requestId, requesterName } = req.body;
+
+      if (!bloodGroup || !district) {
+        return res.status(400).json({ success: false, error: "bloodGroup and district are required" });
+      }
+
+      console.log(`Broadcasting blood request: ${bloodGroup} needed in ${district}`);
+
+      // Query all users to match in-memory, avoiding complicated firestore where combinations
+      const usersSnapshot = await adminDb.collection("users").get();
+      const tokens: string[] = [];
+
+      if (!usersSnapshot.empty) {
+        usersSnapshot.forEach(docSnap => {
+          const userData = docSnap.data();
+          if (userData && userData.fcmToken) {
+            const userBloodGroup = userData.bloodGroup;
+            const userDistrict = userData.district;
+
+            const isBloodGroupMatch = userBloodGroup === bloodGroup;
+            const isDistrictMatch = String(userDistrict).trim().toLowerCase() === String(district).trim().toLowerCase();
+
+            // Broaden match criteria: if blood group matches, send notification as emergency
+            if (isBloodGroupMatch) {
+              tokens.push(userData.fcmToken);
+            }
+          }
+        });
+      }
+
+      if (tokens.length === 0) {
+        return res.json({ success: true, message: "No matching donors with FCM tokens found" });
+      }
+
+      const payloadData: Record<string, string> = {
+        title: `Urgent ${bloodGroup} Required!`,
+        body: `Needed at ${hospital || "Hospital"}, ${district}. Posted by ${requesterName || "Sponsor"}.`,
+        type: "blood_request",
+        requestId: String(requestId),
+      };
+
+      const messages = tokens.map((t: string) => ({
+        token: t,
+        data: payloadData,
+        notification: {
+          title: `Urgent ${bloodGroup} Required!`,
+          body: `Needed at ${hospital || "Hospital"}, ${district}.`,
+        },
+        android: {
+          priority: "high" as const,
+          notification: {
+            sound: "default",
+            priority: "max" as const,
+            channelId: "bloodlink_high_importance_channel"
+          }
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: {
+                title: `Urgent ${bloodGroup} Required!`,
+                body: `Needed at ${hospital || "Hospital"}, ${district}.`,
+              },
+              sound: "default",
+              badge: 1
+            }
+          }
+        }
+      }));
+
+      console.log(`Broadcasting emergency notification to ${tokens.length} donors...`);
+
+      const sendPromises = messages.map((msg: any) =>
+        admin.messaging().send(msg)
+          .then(() => ({ success: true }))
+          .catch((err: any) => {
+            console.warn(`Failed to broadcast FCM to ${msg.token}:`, err.message);
+            return { success: false };
+          })
+      );
+
+      const results = await Promise.all(sendPromises);
+      const successfulCount = results.filter((r: any) => r.success).length;
+
+      res.json({
+        success: true,
+        successfulCount,
+        totalTargets: tokens.length
+      });
+    } catch (error: any) {
+      console.error("Error in /api/send-push/blood-request:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // OpenAI Text-to-Speech Voice Model API Route
   app.get("/api/openai/speech", async (req, res) => {
     try {

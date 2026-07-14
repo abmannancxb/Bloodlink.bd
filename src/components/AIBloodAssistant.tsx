@@ -903,7 +903,7 @@ export default function AIBloodAssistant({
                 const match = (updatedSlots.medicalReason || '').match(/(\d+)\s*(ব্যাগ|unit|units|ব্যাগ রক্ত)/i);
                 const unitsNeeded = match ? parseInt(match[1]) : 1;
 
-                await addDoc(collection(db, 'requests'), {
+                const docRef = await addDoc(collection(db, 'requests'), {
                   bloodGroup: updatedSlots.bloodGroup || 'O+',
                   district: updatedSlots.district || "Cox's Bazar",
                   thana: updatedSlots.thana || 'Sadar',
@@ -918,6 +918,21 @@ export default function AIBloodAssistant({
                   requesterPhoto: currentUser.photoURL || '',
                   createdAt: serverTimestamp()
                 });
+
+                // Broadcast blood request via Android Push Notifications (FCM)
+                fetch('/api/send-push/blood-request', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    bloodGroup: updatedSlots.bloodGroup || 'O+',
+                    district: updatedSlots.district || "Cox's Bazar",
+                    hospital: updatedSlots.hospital || 'সদর হাসপাতাল',
+                    requestId: docRef.id,
+                    requesterName: currentUser.displayName || currentUserProfile?.displayName || 'অজ্ঞাতনামা রক্তবন্ধু'
+                  })
+                }).then(res => res.json())
+                  .then(data => console.log('AI Blood Assistant request FCM broadcast result:', data))
+                  .catch(err => console.error('AI Assistant failed to broadcast blood request FCM:', err));
 
                 setMessages(prev => [...prev, {
                   id: Math.random().toString(),

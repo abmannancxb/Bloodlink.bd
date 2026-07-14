@@ -3927,6 +3927,28 @@ export default function App() {
         lastMessageAt: serverTimestamp(),
         [`unreadCount.${otherUserId}`]: increment(1)
       });
+
+      // Send Android Push Notification
+      const otherUser = allUsers.find(u => u.uid === otherUserId);
+      if (otherUser && otherUser.fcmToken) {
+        fetch('/api/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: otherUser.fcmToken,
+            title: `New Message from ${user.displayName || 'Donor'}`,
+            body: replyText.trim(),
+            type: 'chat',
+            chatId,
+            senderId: user.uid,
+            senderName: user.displayName || 'Donor',
+            largeIcon: user.photoURL || ''
+          })
+        }).then(res => res.json())
+          .then(data => console.log('In-app heads up push notification response:', data))
+          .catch(err => console.error('Failed to send FCM in-app heads up push:', err));
+      }
+
       addToast("Reply Sent", "Your reply has been sent successfully.", "success");
       setInAppHeadsUp(null);
     } catch (e) {
@@ -16440,7 +16462,7 @@ function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings, addToa
     }
 
     try {
-      await addDoc(collection(db, 'requests'), {
+      const docRef = await addDoc(collection(db, 'requests'), {
         ...formData,
         lat: finalLat,
         lng: finalLng,
@@ -16451,6 +16473,22 @@ function RequestForm({ onCancel, onSuccess, user, notifyAdmins, settings, addToa
         createdAt: serverTimestamp()
       });
       notifyAdmins("New Blood Request", `${user.displayName} needs ${formData.bloodGroup} at ${formData.hospital} (${formData.district})`, 'requests');
+      
+      // Broadcast blood request via Android Push Notifications (FCM)
+      fetch('/api/send-push/blood-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bloodGroup: formData.bloodGroup,
+          district: formData.district,
+          hospital: formData.hospital,
+          requestId: docRef.id,
+          requesterName: user.displayName || 'Anonymous Sponsor'
+        })
+      }).then(res => res.json())
+        .then(data => console.log('Blood request FCM broadcast result:', data))
+        .catch(err => console.error('Failed to broadcast blood request FCM:', err));
+
       addToast("Appeal Published", "Your emergency blood appeal is now live and broadcasted to regional volunteers!", "success");
       onSuccess();
     } catch (error) {
@@ -19238,6 +19276,26 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
         lastMessageAt: serverTimestamp(),
         [`unreadCount.${otherUserId}`]: increment(1)
       });
+
+      // Notify recipient via Android/iOS Push Notification (FCM)
+      if (otherUser && otherUser.fcmToken) {
+        fetch('/api/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: otherUser.fcmToken,
+            title: `New Message from ${currentUser.displayName || 'Donor'}`,
+            body: messageText,
+            type: 'chat',
+            chatId: chat.id,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName || 'Donor',
+            largeIcon: currentUser.photoURL || ''
+          })
+        }).then(res => res.json())
+          .then(data => console.log('Push notification response:', data))
+          .catch(err => console.error('Failed to send FCM push notification:', err));
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `chats/${chat.id}`);
     } finally {
