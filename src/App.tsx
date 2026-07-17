@@ -178,6 +178,7 @@ import {
   Trash,
   Menu,
   X,
+  Folder,
   Smile,
   Navigation,
   Camera,
@@ -1207,6 +1208,52 @@ export default function App() {
 
   const getCurrentTabIndex = () => {
     return TABS_ORDER.findIndex(tab => tab.view === view && tab.showRequestsOverlay === showRequestsOverlay);
+  };
+
+  const getPageTitle = () => {
+    if (view === 'requests') {
+      return showRequestsOverlay ? 'Urgent Blood Requests' : 'Home';
+    }
+    switch (view) {
+      case 'find': return 'Find Blood Donor';
+      case 'feed': return 'Donor Community Feed';
+      case 'profile': return 'My Donor Profile';
+      case 'public-profile': return 'Donor Profile View';
+      case 'edit-profile': return 'Update My Profile';
+      case 'notifications': return 'My Notifications';
+      case 'admin': return 'BloodLink Administrator';
+      case 'post-opinion': return 'Create Community Post';
+      case 'request-form': return 'Create Blood Request';
+      case 'admin-login': return 'Administrator Access';
+      case 'chats': return 'Messages';
+      case 'chat-room': return 'Chat Message';
+      case 'organizations': return 'Blood Organizations';
+      case 'org-dashboard': return 'Organization Panel';
+      case 'org-apply': return 'Apply to Register Org';
+      case 'about': return 'About BloodLink';
+      case 'contact': return 'Get in Touch';
+      case 'privacy': return 'Privacy Policy';
+      case 'terms': return 'Terms & Conditions';
+      case 'faq': return 'FAQ & Guidelines';
+      case 'emergency': return 'Emergency Blood Board';
+      case 'hospitals': return 'Hospitals & Medical Centers';
+      default: return 'BloodLink';
+    }
+  };
+
+  const handleBack = () => {
+    if (view === 'requests' && showRequestsOverlay) {
+      setShowRequestsOverlay(false);
+    } else if (view === 'chat-room') {
+      setView('chats');
+    } else if (view === 'edit-profile') {
+      setView('profile');
+    } else if (view === 'org-dashboard') {
+      setView('organizations');
+    } else {
+      setView('requests');
+      setShowRequestsOverlay(false);
+    }
   };
 
   const shouldIgnoreSwipe = (element: HTMLElement | null) => {
@@ -4473,53 +4520,89 @@ export default function App() {
         )}
 
         <header className="fixed top-0 left-0 right-0 h-16 safe-header bg-white/95 backdrop-blur-md border-b border-slate-100 z-[100] px-4 py-2 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => { setView('requests'); resetFilters(); }}>
-            <svg className="w-8 h-8 drop-shadow-sm shrink-0 animate-in fade-in duration-300" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M50 5C50 5 90 40 90 65C90 84.33 72.09 100 50 100C27.91 100 10 84.33 10 65C10 40 50 5 50 5Z" fill="#ff1744"/>
-              <rect x="44" y="42" width="12" height="36" rx="6" fill="white" />
-              <rect x="32" y="54" width="36" height="12" rx="6" fill="white" />
-            </svg>
-            <div className="flex flex-col">
-              <h1 className="text-xl font-black tracking-tight leading-none text-slate-900">
-                <span className="text-[#ff1744] font-extrabold">Blood</span>Link
-              </h1>
-              <span className="text-[7.5px] font-black uppercase tracking-[0.22em] text-[#ff1744] mt-1 leading-none select-none">BANGLADESH</span>
-            </div>
-          </div>
+          {view === 'requests' && !showRequestsOverlay ? (
+            <>
+              <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => { setView('requests'); resetFilters(); }}>
+                <svg className="w-8 h-8 drop-shadow-sm shrink-0 animate-in fade-in duration-300" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M50 5C50 5 90 40 90 65C90 84.33 72.09 100 50 100C27.91 100 10 84.33 10 65C10 40 50 5 50 5Z" fill="#ff1744"/>
+                  <rect x="44" y="42" width="12" height="36" rx="6" fill="white" />
+                  <rect x="32" y="54" width="36" height="12" rx="6" fill="white" />
+                </svg>
+                <div className="flex flex-col">
+                  <h1 className="text-xl font-black tracking-tight leading-none text-slate-900">
+                    <span className="text-[#ff1744] font-extrabold">Blood</span>Link
+                  </h1>
+                  <span className="text-[7.5px] font-black uppercase tracking-[0.22em] text-[#ff1744] mt-1 leading-none select-none">BANGLADESH</span>
+                </div>
+              </div>
 
-          {isOffline && (
-            <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-150/70 animate-pulse">
-              <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-              <span className="text-[9px] font-black text-amber-705 uppercase tracking-widest">Connection Issues</span>
-            </div>
-          )}
-          
-          
-
-        <div className="flex items-center gap-1.5 shadow-none">
-          {profile?.role === 'admin' && (
-            <button 
-              onClick={() => setView('admin')}
-              className={`relative p-2 rounded-xl transition-all duration-300 ${view === 'admin' ? 'bg-[#ff1744]/15 text-[#ff1744] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-[#ff1744]'}`}
-            >
-              <AlertCircle className="w-5.2 h-5.2" />
-              {(reports.some(r => r.status === 'pending') || orgApplications.some(a => a.status === 'pending')) && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-650 rounded-full border-2 border-white animate-pulse" />
+              {isOffline && (
+                <div className="flex items-center gap-1.5 bg-amber-50 px-3 py-1.5 rounded-full border border-amber-150/70 animate-pulse">
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                  <span className="text-[9px] font-black text-amber-705 uppercase tracking-widest">Connection Issues</span>
+                </div>
               )}
-            </button>
-          )}
 
-          <button 
-            onClick={() => setView('notifications')}
-            className={`relative p-2 rounded-xl transition-all duration-300 group ${view === 'notifications' ? 'bg-[#ff1744]/10 text-red-600' : 'text-slate-500 hover:bg-slate-50 hover:text-red-500'}`}
-          >
-            <Bell className={`w-5.2 h-5.2 transition-transform duration-300 ${view === 'notifications' ? 'scale-110' : 'group-hover:scale-110'}`} />
-            <span className="absolute -top-1 -right-1 min-w-[17px] h-4.2 px-1 bg-red-650 text-white text-[8px] font-black rounded-full flex items-center justify-center border border-white shadow-xs">
-              3
-            </span>
-          </button>
-        </div>
-      </header>
+              <div className="flex items-center gap-1.5 shadow-none">
+                {profile?.role === 'admin' && (
+                  <button 
+                    onClick={() => setView('admin')}
+                    className={`relative p-2 rounded-xl transition-all duration-300 ${view === 'admin' ? 'bg-[#ff1744]/15 text-[#ff1744] shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-[#ff1744]'}`}
+                  >
+                    <AlertCircle className="w-5.2 h-5.2" />
+                    {(reports.some(r => r.status === 'pending') || orgApplications.some(a => a.status === 'pending')) && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-650 rounded-full border-2 border-white animate-pulse" />
+                    )}
+                  </button>
+                )}
+
+                <button 
+                  onClick={() => setView('notifications')}
+                  className={`relative p-2 rounded-xl transition-all duration-300 group ${view === 'notifications' ? 'bg-[#ff1744]/10 text-red-600' : 'text-slate-500 hover:bg-slate-50 hover:text-red-500'}`}
+                >
+                  <Bell className={`w-5.2 h-5.2 transition-transform duration-300 ${view === 'notifications' ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <span className="absolute -top-1 -right-1 min-w-[17px] h-4.2 px-1 bg-red-650 text-white text-[8px] font-black rounded-full flex items-center justify-center border border-white shadow-xs">
+                    3
+                  </span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={handleBack}
+                  className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-slate-100/80 active:scale-95 transition-all flex items-center justify-center"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+                </button>
+                <h1 className="text-base font-black text-slate-850 tracking-tight truncate">
+                  {getPageTitle()}
+                </h1>
+              </div>
+
+              {isOffline && (
+                <div className="flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100 animate-pulse">
+                  <div className="w-1.2 h-1.2 bg-amber-500 rounded-full" />
+                  <span className="text-[8px] font-black text-amber-700 uppercase tracking-widest">Offline</span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 -mr-2 shadow-none">
+                <button 
+                  onClick={() => setView('notifications')}
+                  className={`relative p-2 rounded-xl transition-all duration-300 group ${view === 'notifications' ? 'bg-[#ff1744]/10 text-red-600' : 'text-slate-500 hover:bg-slate-50 hover:text-red-500'}`}
+                >
+                  <Bell className={`w-5 h-5 transition-transform duration-300 ${view === 'notifications' ? 'scale-110' : 'group-hover:scale-110'}`} />
+                  <span className="absolute -top-1 -right-1 min-w-[17px] h-4.2 px-1 bg-red-650 text-white text-[8px] font-black rounded-full flex items-center justify-center border border-white shadow-xs">
+                    3
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+        </header>
 
 
       {/* Main Content */}
@@ -6731,7 +6814,7 @@ export default function App() {
 
                               <button 
                                 onClick={() => {
-                                  const link = `https://ais-dev-j6s4wawvjtj4jg2qohdrm4-732358520046.europe-west2.run.app/story/${post.id}`;
+                                  const link = `https://bloodlink.bd/story/${post.id}`;
                                   navigator.clipboard.writeText(link).then(() => {
                                     addToast("Link Copied", "Share link has been copied successfully.", "success");
                                   });
@@ -6965,43 +7048,28 @@ export default function App() {
         )}
 
         {view === 'profile' && user && (
-          <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
-            <div className="max-w-4xl mx-auto pb-4">
-              <PublicProfileView 
-                uid={user.uid} 
-                onBack={() => setView('requests')} 
-                onMessage={(uid) => openChat(uid)}
-                currentUser={user}
-                currentProfile={profile}
-                onDeleteRequest={handleDeleteRequest}
-                onDonationDone={handleDonationDone}
-                addToast={addToast}
-                allUsers={allUsers}
-                askConfirm={askConfirm}
-                notifyAdmins={notifyAdmins}
-                onViewProfile={(uid) => onViewProfile(uid)}
+          <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-24 pb-28 p-4">
+            <div className="max-w-md mx-auto pb-4">
+              <OwnUserProfileView 
+                user={user}
+                profile={profile}
+                onBack={() => setView('requests')}
                 onEditProfile={() => setView('edit-profile')}
+                onLogout={handleLogout}
+                addToast={addToast}
+                setShowSettingsModal={setShowSettingsModal}
+                setProfile={setProfile}
+                setAllUsers={setAllUsers}
+                setView={setView}
               />
 
-              <div className="mt-12 pt-12 border-t border-slate-100 flex flex-col items-center gap-6">
-                {profile?.role === 'admin' && (
-                  <button
-                    onClick={() => setView('admin')}
-                    className="w-full max-w-sm py-4 bg-rose-600 hover:bg-rose-700 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-rose-500/25 cursor-pointer border border-rose-700"
-                  >
-                    <ShieldAlert className="w-4 h-4 text-white" />
-                    Enter Admin Control Panel
-                  </button>
-                )}
-
-                <div className="flex flex-col items-center gap-1">
-              <div className="flex flex-col items-end">
-                <div className="flex items-center gap-1">
-                  <span className="text-[11px] font-black text-red-600 uppercase tracking-tighter">Blood</span>
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">Link</span>
-                </div>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">Systems</p>
-              </div>
+              <div className="mt-8 flex flex-col items-center gap-6">
+                <div className="flex flex-col items-center gap-1 select-none">
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-black text-red-600 uppercase tracking-tighter">Blood</span>
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-tighter">Link</span>
+                  </div>
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">Systems</p>
                   <p className="text-[10px] font-bold text-slate-400 font-mono">Build ID: {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'Local_Dev'}</p>
                 </div>
                 <button 
@@ -7024,7 +7092,7 @@ export default function App() {
                       addToast("Check Failed", "Could not reach update server. Check your connection.", "error");
                     }
                   }}
-                  className="flex items-center gap-2 px-6 py-3 bg-slate-50 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95 border border-slate-100 shadow-sm"
+                  className="flex items-center gap-2 px-6 py-3 bg-white text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all active:scale-95 border border-slate-100 shadow-3xs"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   Force Version Check
@@ -9550,12 +9618,7 @@ export default function App() {
         onRequestClose={() => setIsAiAssistantOpen(false)}
       />
 
-      <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-20 px-2 flex justify-around items-center z-[100] bg-transparent">
-        {/* Premium solid composite background with rounded top-left and top-right corners */}
-        <div className="absolute inset-x-0 bottom-0 h-[72px] flex z-0 pointer-events-none select-none" style={{ filter: 'drop-shadow(0 -10px 25px rgba(15, 23, 42, 0.05)) drop-shadow(0 6px 18px rgba(15, 23, 42, 0.05))' }}>
-          <div className="flex-1 bg-white/95 backdrop-blur-md rounded-t-[32px] border-t border-x border-slate-200/50" />
-        </div>
-
+      <nav className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-1.5rem)] max-w-md h-[68px] px-2 flex justify-around items-center z-[100] bg-white/95 backdrop-blur-md border border-slate-150 shadow-[0_8px_30px_rgba(15,23,42,0.08)] rounded-[24px]">
         <NavButton 
           active={view === 'requests' && !showRequestsOverlay} 
           icon={<Home />} 
@@ -9607,11 +9670,24 @@ export default function App() {
         />
 
         <NavButton 
-          active={showHamburgerMenu} 
-          icon={<Menu />} 
-          label="Menu" 
+          active={view === 'profile'} 
+          icon={
+            profile?.photoURL ? (
+              <div className={`w-6 h-6 rounded-full overflow-hidden border ${view === 'profile' ? 'border-[#ff1744] shadow-3xs' : 'border-slate-300'}`}>
+                <img src={profile.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              </div>
+            ) : (
+              <div className={`w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px] font-black border ${view === 'profile' ? 'border-[#ff1744] shadow-3xs' : 'border-slate-300'}`}>
+                {profile?.displayName ? profile.displayName.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )
+          } 
+          label="Profile" 
           onClick={() => { 
-            setShowHamburgerMenu(!showHamburgerMenu); 
+            setView('profile'); 
+            setShowRequestsOverlay(false); 
+            handleSetActiveChat(null); 
+            setShowHamburgerMenu(false);
           }} 
         />
       </nav>
@@ -18432,86 +18508,209 @@ function NotificationsView({ requests, globalAlerts, profile, addToast, onDonati
 }
 
 function NavButton({ active, icon, label, onClick, badge }: { active: boolean, icon: React.ReactNode, label: string, onClick: () => void, badge?: number }) {
-  // Get tailored colors for active states exactly matching Dribbble spec
-  let activeBg = 'bg-rose-500/10';
-  let activeText = 'text-red-600';
-  let barColor = 'bg-[#FF1744] shadow-[0_2px_8px_rgba(255,23,68,0.4)]';
-  let iconColor = 'text-[#FF1744]';
-
-  if (label === 'Home') {
-    activeBg = 'bg-rose-500/10';
-    activeText = 'text-red-500 font-extrabold';
-    barColor = 'bg-[#FF1744] shadow-[0_2px_8px_rgba(255,23,68,0.4)]';
-    iconColor = 'text-[#FF1744]';
-  } else if (label === 'Requests') {
-    activeBg = 'bg-indigo-500/10';
-    activeText = 'text-indigo-600 font-extrabold';
-    barColor = 'bg-[#FF4D6D] shadow-[0_2px_8px_rgba(255,77,109,0.4)]';
-    iconColor = 'text-[#FF4D6D]';
-  } else if (label === 'Find Donor') {
-    activeBg = 'bg-blue-500/10';
-    activeText = 'text-blue-600 font-extrabold';
-    barColor = 'bg-blue-600 shadow-[0_2px_8px_rgba(37,99,235,0.4)]';
-    iconColor = 'text-blue-600';
-  } else if (label === 'Community') {
-    activeBg = 'bg-purple-500/10';
-    activeText = 'text-purple-600 font-extrabold';
-    barColor = 'bg-[#8b5cf6] shadow-[0_2px_8px_rgba(139,92,246,0.4)]';
-    iconColor = 'text-purple-600';
-  } else if (label === 'Menu') {
-    activeBg = 'bg-slate-500/10';
-    activeText = 'text-slate-600 font-extrabold';
-    barColor = 'bg-slate-700 shadow-[0_2px_8px_rgba(51,65,85,0.4)]';
-    iconColor = 'text-slate-800';
-  }
+  const activeBg = 'bg-rose-50';
+  const activeText = 'text-[#ff1744] font-extrabold';
+  const iconColor = 'text-[#ff1744]';
+  const inactiveText = 'text-slate-500 font-medium';
 
   return (
     <button 
       onClick={onClick}
-      className="relative flex flex-col items-center justify-center gap-1.5 outline-none select-none transition-all duration-300 py-1.5 px-2 group flex-1 z-10"
+      className="relative flex flex-col items-center justify-center gap-1.5 outline-none select-none transition-all duration-300 py-1 px-1 group flex-1 z-10"
       style={{ touchAction: 'manipulation' }}
     >
       <div className="relative">
         <motion.div
-          animate={active ? { scale: [0.95, 1.10, 1], y: -1 } : { scale: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-          className={`w-11 h-11 rounded-2xl transition-all duration-300 flex items-center justify-center border ${
+          animate={active ? { scale: [0.95, 1.05, 1] } : { scale: 1 }}
+          transition={{ duration: 0.25 }}
+          className={`w-14 h-8 rounded-full transition-all duration-300 flex items-center justify-center ${
             active 
-              ? `${activeBg} border-red-500/5 shadow-inner` 
-              : 'border-transparent text-slate-400 group-hover:bg-slate-50/70 group-hover:text-slate-600'
+              ? `${activeBg} text-[#ff1744]` 
+              : 'text-slate-400 group-hover:bg-slate-50/70 group-hover:text-slate-600'
           }`}
         >
-          {React.cloneElement(icon as React.ReactElement, { 
-            className: `w-5.5 h-5.5 stroke-[2.2] transition-colors ${active ? iconColor : 'text-slate-500 group-hover:text-slate-700'}` 
-          })}
+          {React.isValidElement(icon) && typeof icon.type !== 'string' ? (
+            React.cloneElement(icon as React.ReactElement, { 
+              className: `w-5.5 h-5.5 stroke-[2.2] transition-colors ${active ? iconColor : 'text-slate-500 group-hover:text-slate-700'}` 
+            })
+          ) : (
+            icon
+          )}
         </motion.div>
         
         {badge !== undefined && badge > 0 && (
-          <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 bg-gradient-to-r from-red-500 to-rose-600 text-[8px] font-black text-white rounded-full flex items-center justify-center border border-white shadow-md ring-2 ring-red-100 animate-pulse">
+          <span className="absolute -top-1.5 -right-2 min-w-[18px] h-4.5 px-1 bg-[#ff1744] text-[9px] font-black text-white rounded-full flex items-center justify-center border border-white shadow-md">
             {badge}
           </span>
         )}
       </div>
 
-      <span className={`text-[9px] font-black uppercase tracking-wider transition-all duration-300 ${
-        active ? `${activeText} scale-100` : 'text-slate-400 font-bold scale-95 group-hover:text-slate-600'
+      <span className={`text-[10px] font-bold tracking-tight transition-all duration-200 ${
+        active ? activeText : inactiveText
       }`}>
         {label}
       </span>
-
-      {active && (
-        <motion.div 
-          layoutId="activeBottomTabDot"
-          className={`absolute bottom-0 w-6 h-1 rounded-full ${barColor}`}
-          transition={{ type: "spring", stiffness: 350, damping: 25 }}
-        />
-      )}
     </button>
+  );
+}
+
+const isOnline = (user?: UserProfile) => {
+  if (!user || !user.lastSeen) return false;
+  const lastSeen = user.lastSeen.toMillis();
+  return Date.now() - lastSeen < 180000; // 3 minutes
+};
+
+interface ChatListItemProps {
+  key?: any;
+  chat: Chat;
+  currentUser: FirebaseUser;
+  otherUser?: UserProfile;
+  unread: number;
+  onChatSelect: (c: Chat) => void;
+  onDeleteChat: (chatId: string) => Promise<void>;
+  deletingChatId: string | null;
+  setDeletingChatId: (id: string | null) => void;
+}
+
+function ChatListItem({
+  chat,
+  currentUser,
+  otherUser,
+  unread,
+  onChatSelect,
+  onDeleteChat,
+  deletingChatId,
+  setDeletingChatId
+}: ChatListItemProps) {
+  const otherUserId = chat.participants.find(p => p !== currentUser.uid);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startPress = () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setDeletingChatId(chat.id);
+      if (navigator.vibrate) {
+        try {
+          navigator.vibrate(50);
+        } catch (e) {}
+      }
+    }, 600);
+  };
+
+  const cancelPress = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const isDeleting = deletingChatId === chat.id;
+
+  return (
+    <div
+      onMouseDown={startPress}
+      onMouseUp={cancelPress}
+      onMouseLeave={cancelPress}
+      onTouchStart={startPress}
+      onTouchEnd={cancelPress}
+      onTouchMove={cancelPress}
+      onClick={() => {
+        if (isDeleting) return;
+        onChatSelect(chat);
+      }}
+      className="flex items-center gap-3.5 px-4 py-3.5 cursor-pointer hover:bg-slate-50/80 active:bg-slate-100/70 transition-colors duration-150 relative select-none"
+    >
+      {/* Avatar with Status indicator */}
+      <div className="relative shrink-0">
+        <img 
+          src={otherUser?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.displayName || 'User')}&background=random&bold=true`} 
+          className="w-[52px] h-[52px] rounded-full object-cover shadow-sm"
+          alt="Avatar"
+          referrerPolicy="no-referrer"
+        />
+        {isOnline(otherUser) && (
+          <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full shadow-xs" />
+        )}
+      </div>
+
+      {/* Right side block containing all details */}
+      <div className="flex-1 min-w-0">
+        {/* Row 1: Name and Time */}
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-slate-900 truncate text-[15px] flex items-center gap-1.5 leading-snug">
+            {otherUser?.displayName || 'System User'}
+            {otherUser?.isVerified && <BadgeCheck className="w-4 h-4 text-sky-500 fill-sky-100 shrink-0" />}
+            {otherUser?.bloodGroup && (
+              <span className="text-[10px] bg-rose-50 text-rose-600 px-1.5 py-0.2 rounded-md font-extrabold border border-rose-100 shadow-3xs">
+                {otherUser.bloodGroup}
+              </span>
+            )}
+          </h3>
+          <span className="text-[11px] font-medium text-slate-400 shrink-0">
+            {chat.lastMessageAt?.toDate ? chat.lastMessageAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
+          </span>
+        </div>
+
+        {/* Row 2: Message preview & Unread badge or checkmarks */}
+        <div className="flex items-center justify-between gap-2">
+          {otherUserId && chat.typing?.[otherUserId] ? (
+            <p className="text-[13px] text-green-500 font-bold animate-pulse truncate flex-1">
+              typing...
+            </p>
+          ) : (
+            <p className="text-[13.5px] text-slate-500 truncate flex-1 leading-snug">
+              {chat.lastMessage || 'Start a conversation now!'}
+            </p>
+          )}
+
+          {unread > 0 ? (
+            <span className="bg-[#ff1744] text-white text-[11px] font-black px-1.5 py-0.5 min-w-[20px] h-5 rounded-full flex items-center justify-center shadow-xs shrink-0">
+              {unread}
+            </span>
+          ) : (
+            chat.lastMessageAt && (
+              <CheckCheck className="w-4 h-4 text-[#ff1744]/80 shrink-0" />
+            )
+          )}
+        </div>
+      </div>
+
+      {/* Delete confirmation overlay */}
+      {isDeleting && (
+        <div className="absolute inset-0 bg-rose-50/95 flex items-center justify-between px-6 z-20 animate-in fade-in slide-in-from-right-5 duration-200">
+          <span className="text-sm font-bold text-rose-600 flex items-center gap-1.5">
+            <Trash className="w-4 h-4" />
+            Delete chat?
+          </span>
+          <div className="flex gap-2">
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setDeletingChatId(null);
+              }}
+              className="px-3.5 py-1.5 bg-slate-150 hover:bg-slate-200 text-slate-700 rounded-full text-xs font-bold transition-all"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteChat(chat.id);
+              }}
+              className="px-3.5 py-1.5 bg-[#ff1744] hover:bg-rose-700 text-white rounded-full text-xs font-bold transition-all shadow-sm"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
 function ChatList({ chats, currentUser, users, onChatSelect }: { chats: Chat[], currentUser: FirebaseUser, users: UserProfile[], onChatSelect: (c: Chat) => void }) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [deletingChatId, setDeletingChatId] = useState<string | null>(null);
 
   const filteredChats = useMemo(() => {
     return chats.filter(chat => {
@@ -18522,88 +18721,54 @@ function ChatList({ chats, currentUser, users, onChatSelect }: { chats: Chat[], 
     });
   }, [chats, searchTerm, users, currentUser.uid]);
 
-  return (
-    <div className="space-y-4 pb-8">
-      <div className="flex items-center justify-between px-2">
-        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Messages</h2>
-        <div className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-xs font-black uppercase">
-          {chats.reduce((acc, c) => acc + (c.unreadCount ? c.unreadCount[currentUser.uid] || 0 : 0), 0)} New
-        </div>
-      </div>
+  const handleDeleteChat = async (chatId: string) => {
+    try {
+      await deleteDoc(doc(db, 'chats', chatId));
+      setDeletingChatId(null);
+    } catch (error) {
+      console.error("Delete conversation error:", error);
+      handleFirestoreError(error, OperationType.DELETE, `chats/${chatId}`);
+    }
+  };
 
-      <div className="relative px-2">
-        <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+  return (
+    <div className="bg-white rounded-t-[32px] min-h-full pb-24 text-left font-sans pt-4">
+      {/* Fully rounded grey search bar */}
+      <div className="relative px-4 mb-4">
+        <Search className="absolute left-8 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 pointer-events-none" />
         <input 
           type="text"
-          placeholder="Search conversations..."
+          placeholder="Search Chats"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full bg-white border border-slate-200 rounded-2xl pl-12 pr-4 py-3 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all shadow-sm"
+          className="w-full bg-[#f1f5f9]/90 border-0 rounded-full pl-12 pr-4 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:bg-white focus:ring-1 focus:ring-slate-200 outline-none transition-all font-sans"
         />
       </div>
 
       {filteredChats.length === 0 ? (
-        <div className="bg-white rounded-3xl p-16 text-center border border-slate-100 italic text-slate-400 shadow-sm mx-2">
+        <div className="bg-white rounded-3xl p-16 text-center italic text-slate-400 mx-4">
           <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-10" />
           <p>{searchTerm ? 'No results for your search.' : 'No conversations yet. Chat with donors to coordinate blood donation!'}</p>
         </div>
       ) : (
-        <div className="space-y-3 px-2">
+        <div className="divide-y divide-slate-100/70">
           {filteredChats.map(chat => {
             const otherUserId = chat.participants.find(p => p !== currentUser.uid);
             const otherUser = users.find(u => u.uid === otherUserId);
             const unread = chat.unreadCount ? chat.unreadCount[currentUser.uid] || 0 : 0;
 
             return (
-              <motion.div
-                layout
+              <ChatListItem
                 key={chat.id}
-                onClick={() => onChatSelect(chat)}
-                whileHover={{ backgroundColor: 'rgba(248, 250, 252, 0.8)' }}
-                className={`bg-white rounded-2xl p-3 flex items-center gap-3 cursor-pointer transition-all relative border-b border-slate-50 last:border-0`}
-              >
-                <div className="relative shrink-0">
-                  <img 
-                    src={otherUser?.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(otherUser?.displayName || 'User')}&background=random&bold=true`} 
-                    className={`w-14 h-14 rounded-full object-cover border-2 transition-all ${unread > 0 ? 'border-red-500 scale-105' : 'border-transparent'}`}
-                    alt="Avatar"
-                    referrerPolicy="no-referrer"
-                  />
-                  {isOnline(otherUser) && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-sm" />
-                  )}
-                  {unread > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-md">
-                      {unread}
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <h3 className={`font-bold text-slate-900 truncate text-[15px] flex items-center gap-1 ${unread > 0 ? 'text-red-700' : ''}`}>
-                      {otherUser?.displayName || 'System User'}
-                      {otherUser?.isVerified && <BadgeCheck className="w-4 h-4 text-white fill-blue-500" />}
-                    </h3>
-                    <span className={`text-[10px] font-bold ${unread > 0 ? 'text-red-500' : 'text-slate-400'}`}>
-                      {chat.lastMessageAt?.toDate ? chat.lastMessageAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '...'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    {otherUserId && chat.typing?.[otherUserId] ? (
-                      <p className="text-[13px] text-red-500 font-bold animate-pulse truncate flex-1">
-                        typing...
-                      </p>
-                    ) : (
-                      <p className={`text-[13px] truncate flex-1 ${unread > 0 ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
-                        {chat.lastMessage || 'Start a conversation now!'}
-                      </p>
-                    )}
-                    {unread === 0 && chat.lastMessageAt && (
-                      <CheckCheck className="w-3 h-3 text-slate-300" />
-                    )}
-                  </div>
-                </div>
-              </motion.div>
+                chat={chat}
+                currentUser={currentUser}
+                otherUser={otherUser}
+                unread={unread}
+                onChatSelect={onChatSelect}
+                onDeleteChat={handleDeleteChat}
+                deletingChatId={deletingChatId}
+                setDeletingChatId={setDeletingChatId}
+              />
             );
           })}
         </div>
@@ -18611,12 +18776,6 @@ function ChatList({ chats, currentUser, users, onChatSelect }: { chats: Chat[], 
     </div>
   );
 }
-
-const isOnline = (user?: UserProfile) => {
-  if (!user || !user.lastSeen) return false;
-  const lastSeen = user.lastSeen.toMillis();
-  return Date.now() - lastSeen < 180000; // 3 minutes
-};
 
 function CallOverlay({ 
   call, 
@@ -20953,6 +21112,375 @@ function UserProfileHistory({ donations, requests, currentUser, currentProfile, 
   );
 }
 
+interface OwnUserProfileViewProps {
+  user: FirebaseUser;
+  profile: UserProfile | null;
+  onBack: () => void;
+  onEditProfile: () => void;
+  onLogout: () => void;
+  addToast: (title: string, body: string, type?: any) => void;
+  setShowSettingsModal: (show: boolean) => void;
+  setProfile: React.Dispatch<React.SetStateAction<UserProfile | null>>;
+  setAllUsers: React.Dispatch<React.SetStateAction<UserProfile[]>>;
+  setView: (view: string) => void;
+}
+
+function OwnUserProfileView({
+  user,
+  profile,
+  onBack,
+  onEditProfile,
+  onLogout,
+  addToast,
+  setShowSettingsModal,
+  setProfile,
+  setAllUsers,
+  setView,
+}: OwnUserProfileViewProps) {
+  const directFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [showOptions, setShowOptions] = React.useState(false);
+
+  if (!profile) return null;
+
+  const handleDirectPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      addToast("Uploading...", "Processing and uploading profile photo", "info");
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const img = new Image();
+        img.src = base64;
+        img.onload = async () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 400;
+          canvas.height = 400;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, 400, 400);
+            const resized = canvas.toDataURL('image/jpeg', 0.85);
+            await updateDoc(doc(db, 'users', user.uid), { photoURL: resized });
+            setProfile(prev => prev ? { ...prev, photoURL: resized } : null);
+            setAllUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, photoURL: resized } : u));
+            addToast("Success", "Profile photo updated successfully!", "success");
+          }
+        };
+      };
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to update profile photo", "error");
+    }
+  };
+
+  return (
+    <div className="w-full max-w-md mx-auto bg-[#F4F4F7] min-h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-12 flex flex-col">
+      {/* Hidden File Input for Direct Upload */}
+      <input 
+        type="file" 
+        ref={directFileInputRef} 
+        className="hidden" 
+        accept="image/*" 
+        onChange={handleDirectPhotoChange} 
+      />
+
+      {/* Navigation Top Bar */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-2 relative z-10">
+        <button 
+          onClick={onBack}
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+        >
+          <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
+        </button>
+        
+        <div className="relative">
+          <button 
+            onClick={() => setShowOptions(!showOptions)}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+          >
+            <MoreVertical className="w-5 h-5 stroke-[2.2]" />
+          </button>
+
+          {/* Options Dropdown Menu */}
+          {showOptions && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100/80 py-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+              <button
+                onClick={() => {
+                  setShowOptions(false);
+                  onEditProfile();
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+              >
+                <Pencil className="w-4 h-4 text-slate-400" />
+                Edit Profile
+              </button>
+              <button
+                onClick={() => {
+                  setShowOptions(false);
+                  onLogout();
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50/50 border-t border-slate-50 flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4 text-rose-400" />
+                Log Out
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Profile Header Area */}
+      <div className="flex flex-col items-center px-6 pt-4 pb-2">
+        {/* Centered Large Avatar with Edit overlay */}
+        <div className="relative select-none">
+          <div 
+            onClick={() => directFileInputRef.current?.click()}
+            className="w-28 h-28 rounded-full overflow-hidden shadow-md border-2 border-white cursor-pointer group relative"
+          >
+            {profile.photoURL ? (
+              <img 
+                src={profile.photoURL} 
+                alt={profile.displayName}
+                className="w-full h-full object-cover group-hover:brightness-90 transition-all"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-tr from-orange-400 to-rose-500 flex items-center justify-center text-white text-4xl font-bold group-hover:brightness-95 transition-all">
+                {profile.displayName ? profile.displayName.charAt(0).toUpperCase() : 'U'}
+              </div>
+            )}
+          </div>
+          
+          {/* Telegram-style Blue Camera Badge Overlay */}
+          <button 
+            onClick={() => directFileInputRef.current?.click()}
+            className="absolute bottom-1 right-1 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full flex items-center justify-center border-2 border-[#F4F4F7] shadow-md transition-transform active:scale-95"
+          >
+            <Camera className="w-4.5 h-4.5 stroke-[2.2]" />
+          </button>
+        </div>
+
+        {/* Name and Blood Group together */}
+        <h2 className="text-xl font-extrabold text-slate-900 mt-4 text-center tracking-tight flex items-center justify-center gap-1.5 leading-tight">
+          {profile.displayName}
+          {profile.bloodGroup && (
+            <span className="text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-1.5 py-0.2 text-xs font-black shadow-3xs">
+              {profile.bloodGroup}
+            </span>
+          )}
+        </h2>
+
+        {/* Subtitle space - Phone & @username */}
+        <p className="text-[13px] text-slate-400 font-bold mt-1 text-center tracking-wide flex items-center gap-1.5">
+          <span>{profile.phone || 'No phone number'}</span>
+          {profile.username && (
+            <>
+              <span className="text-slate-300">•</span>
+              <span className="text-blue-500">@{profile.username}</span>
+            </>
+          )}
+        </p>
+      </div>
+
+      {/* Main Settings Card */}
+      <div className="px-6 mt-6">
+        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-3xs space-y-4">
+          
+          {/* 1. Account */}
+          <div 
+            onClick={onEditProfile}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
+              <UserIcon className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-blue-500 transition-colors">Account</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">
+                {profile.phone || 'No Phone'} • @{profile.username || 'username'} • {profile.gender || 'Not specified'}
+              </p>
+            </div>
+          </div>
+
+          {/* 2. Chat Settings */}
+          <div 
+            onClick={() => setShowSettingsModal(true)}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-orange-500 transition-colors">Chat Settings</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Wallpaper, Night Mode, Animations</p>
+            </div>
+          </div>
+
+          {/* 3. Privacy & Security */}
+          <div 
+            onClick={() => addToast("Info", `Your last donation was on: ${profile.lastDonationDate ? formatDisplayDate(profile.lastDonationDate) : 'None registered'}`, "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
+              <Shield className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-emerald-500 transition-colors">Privacy & Security</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">
+                Last Donation: {profile.lastDonationDate ? formatDisplayDate(profile.lastDonationDate) : 'No donation history'}
+              </p>
+            </div>
+          </div>
+
+          {/* 4. Notifications */}
+          <div 
+            onClick={() => addToast("Notifications", "Notification settings are managed by your device.", "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-rose-500 transition-colors">Notifications</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Sounds, Calls, Badges</p>
+            </div>
+          </div>
+
+          {/* 5. Data and Storage */}
+          <div 
+            onClick={() => addToast("Data & Storage", "Automatic media download is optimized for BloodLink speed.", "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
+              <HardDrive className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-blue-500 transition-colors">Data and Storage</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Media download settings</p>
+            </div>
+          </div>
+
+          {/* 6. Chat Folders */}
+          <div 
+            onClick={() => addToast("Chat Folders", "Organize chats for blood requests, donors and group circles.", "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-sky-500 text-white flex items-center justify-center shrink-0">
+              <Folder className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-sky-500 transition-colors">Chat Folders</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Sort chats into folders</p>
+            </div>
+          </div>
+
+          {/* 7. Devices */}
+          <div 
+            onClick={() => addToast("Devices", "Your session is securely synchronized on this device.", "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-cyan-500 text-white flex items-center justify-center shrink-0">
+              <Smartphone className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-cyan-500 transition-colors">Devices</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Manage connected devices</p>
+            </div>
+          </div>
+
+          {/* 8. Power Saving */}
+          <div 
+            onClick={() => addToast("Power Saving", "Power saving mode is active to reduce background battery drain.", "info")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
+              <Zap className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-amber-500 transition-colors">Power Saving</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Reduce power usage on low charge</p>
+            </div>
+          </div>
+
+          {/* 9. Language */}
+          <div 
+            onClick={() => setShowSettingsModal(true)}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-purple-500 text-white flex items-center justify-center shrink-0">
+              <Globe className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex items-center justify-between flex-1 pb-1">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-800 group-hover:text-purple-500 transition-colors">Language</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">English</p>
+              </div>
+              <span className="text-xs font-bold text-slate-400 pr-1">English</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Premium & Achievements Card */}
+      <div className="px-6 mt-4">
+        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-3xs space-y-4">
+          
+          {/* BloodLink Premium */}
+          <div 
+            onClick={() => addToast("BloodLink Premium", "Thank you for supporting blood donation! Premium badge is active.", "success")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-purple-600 transition-colors">BloodLink Premium</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Access custom badging and analytics</p>
+            </div>
+          </div>
+
+          {/* BloodLink Stars & Achievements */}
+          <div 
+            onClick={() => addToast("Achievements", `You have earned donor level status with ${profile.donationCount || 0} donations!`, "success")}
+            className="flex items-start gap-4 cursor-pointer group"
+          >
+            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0">
+              <Trophy className="w-5 h-5 stroke-[2.2]" />
+            </div>
+            <div className="flex-1 pb-1">
+              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-amber-500 transition-colors">BloodLink Stars</h4>
+              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">{profile.donationCount || 0} Saved Lives • Track milestones</p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Admin Panel Option */}
+      {profile.role === 'admin' && (
+        <div className="px-6 mt-4">
+          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-3xs">
+            <div 
+              onClick={() => setView('admin')}
+              className="flex items-start gap-4 cursor-pointer group"
+            >
+              <div className="w-9 h-9 rounded-full bg-red-600 text-white flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5 stroke-[2.2]" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-semibold text-slate-800 group-hover:text-red-650 transition-colors">Admin Dashboard</h4>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">System control panel & audit logs</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile, onDeleteRequest, onDonationDone, addToast, allUsers, askConfirm, notifyAdmins, onViewProfile, onEditProfile }: { uid: string, onBack: () => void, onMessage: (uid: string) => void, currentUser: FirebaseUser | null, currentProfile: UserProfile | null, onDeleteRequest: (id: string) => void, onDonationDone: (req: BloodRequest) => void, addToast: (title: string, body: string, type: 'success' | 'error' | 'info') => void, allUsers: UserProfile[], askConfirm: any, notifyAdmins: any, onViewProfile: (uid: string) => void, onEditProfile?: () => void }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -20965,6 +21493,8 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
   const [showAllRequests, setShowAllRequests] = useState(false);
   const [copiedPhone, setCopiedPhone] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   useEffect(() => {
     let unsubscribeProfile: () => void;
@@ -21148,568 +21678,182 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="w-full max-w-[430px] md:max-w-xl lg:max-w-2xl mx-auto bg-[#F6F8FC] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8"
+      className="w-full max-w-[430px] md:max-w-md mx-auto bg-[#F4F4F7] min-h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-12 flex flex-col"
     >
-          {/* 1. Red Curvaceous Header */}
-      <div className="bg-gradient-to-b from-[#E53935] via-[#FF1744] to-[#E31B23] text-white rounded-b-[2.5rem] relative overflow-hidden pb-10 shadow-lg">
-        {/* Elegant light blobs and modern ambient effects */}
-        <div className="absolute -left-10 -bottom-10 w-44 h-44 bg-white/10 rounded-full blur-2xl animate-pulse" />
-        <div className="absolute -right-10 -top-10 w-44 h-44 bg-rose-400/20 rounded-full blur-2xl animate-pulse duration-5000" />
-
-        {/* Premium Clean Action Navigation Bar */}
-        <div className="flex items-center justify-center px-5 pt-8 pb-3 relative z-10">
-          <span className="text-xs font-black uppercase tracking-[0.25em] text-white/95 drop-shadow-sm select-none">
-            Donor Profile
-          </span>
-        </div>
-
-        {/* Main Header Block: Avatar, Name & ID Card */}
-        <div className="px-5 pt-3 relative">
-          {/* Left / Info Side */}
-          <div className="flex gap-3.5 items-start pr-18">
-            {/* Avatar Circle Container with Online dot */}
-            <div className="relative shrink-0 select-none">
-              <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/95 p-0.5 shadow-md bg-white/10">
-                <img 
-                  src={profile.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.displayName)}&size=150&background=F1F5F9&color=0F172A&bold=true`} 
-                  alt={profile.displayName}
-                  className="w-full h-full object-cover rounded-full"
-                />
-              </div>
-              <span className="absolute bottom-0 right-0 flex h-4 w-4">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white shadow-sm"></span>
-              </span>
-            </div>
-
-            {/* Core Text Info Block */}
-            <div className="space-y-1.5 pt-1 flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h1 className="text-sm font-extrabold text-white tracking-tight leading-none drop-shadow-sm truncate max-w-full">
-                  {profile.displayName}
-                </h1>
-                {profile.isVerified && (
-                  <span className="bg-white text-rose-600 rounded-full p-[1px] shadow-sm shrink-0">
-                    <Check className="w-2.5 h-2.5 stroke-[4]" />
-                  </span>
-                )}
-              </div>
-
-              {/* Badges Flow Row */}
-              <div className="flex flex-wrap items-center gap-1">
-                {/* Blood Group Badge */}
-                <div className="bg-white/95 text-rose-600 font-extrabold text-[8.5px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-                  <span className="w-1.5 h-1.5 bg-rose-500 rounded-full inline-block animate-pulse shrink-0"></span>
-                  <span>{profile.bloodGroup || 'O+'} Positive</span>
-                </div>
-                {/* Verified Tag */}
-                <div className="bg-white/95 text-emerald-600 font-extrabold text-[8.5px] px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
-                  <ShieldCheck className="w-2.5 h-2.5 text-emerald-500 stroke-[2.5]" />
-                  <span>Verified Donor</span>
-                </div>
-              </div>
-
-              {/* Timestamp and Availability info */}
-              <div className="space-y-0.5 pt-0.5">
-                <p className="text-[9px] text-white/90 font-medium flex items-center gap-1">
-                  <Calendar className="w-2.7 h-2.7 text-white/80" />
-                  <span>Last Donation: {formatDisplayDate(profile.lastDonationDate) || '20 Apr 2024'}</span>
-                </p>
-                <p className="text-[9px] text-white/95 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
-                  <span>Online • Available for donation</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Custom QR Code/Donor ID Card positioned higher up in right corner */}
-          <div className="absolute top-[-1.5rem] right-4 z-40 bg-white text-slate-800 rounded-xl p-1.5 shadow-xl flex flex-col items-center justify-center shrink-0 border border-slate-100 select-none animate-in fade-in duration-300 w-18.5 hover:scale-[1.03] transition-all">
-            <QrCode className="w-8 h-8 text-slate-900 stroke-[1.8]" />
-            <span className="text-[6px] text-slate-400 font-black tracking-wider mt-1 uppercase text-center leading-none">Donor ID</span>
-            <span className="text-[7.5px] text-slate-900 font-extrabold tracking-tighter mt-0.5 uppercase leading-none">
-              {getDonorId(profile, allUsers)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Four Big Stats Cards Grid (Overlapped) */}
-      <div className="-mt-6 mx-4 bg-white rounded-2xl p-2.5 shadow-md border border-slate-100 grid grid-cols-4 divide-x divide-slate-100 relative z-30">
-        <div className="flex flex-col items-center justify-center text-center px-1">
-          <div className="w-6 h-6 bg-red-50 rounded-full flex items-center justify-center mb-1">
-            <span className="text-red-500 text-xs">💧</span>
-          </div>
-          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">
-            {profile.donationCount || 25}
-          </span>
-          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Total Donations</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center text-center px-1">
-          <div className="w-6 h-6 bg-red-50 rounded-full flex items-center justify-center mb-1">
-            <span className="text-red-500 text-xs">❤️</span>
-          </div>
-          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">
-            {profile.donationCount ? profile.donationCount * 3 : 75}
-          </span>
-          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Lives Saved</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center text-center px-1">
-          <div className="w-6 h-6 bg-amber-50 rounded-full flex items-center justify-center mb-1">
-            <span className="text-amber-500 text-xs">⭐</span>
-          </div>
-          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">4.9</span>
-          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Rating</span>
-        </div>
-
-        <div className="flex flex-col items-center justify-center text-center px-1">
-          <div className="w-6 h-6 bg-rose-50 rounded-full flex items-center justify-center mb-1">
-            <Activity className="w-3.5 h-3.5 text-rose-500" />
-          </div>
-          <span className="text-xs font-black text-slate-850 tracking-tight leading-none">98%</span>
-          <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-wider mt-0.5">Response Rate</span>
-        </div>
-      </div>
-
-      {/* 3. Divided Detailed Info Area + Dynamic BMI Calculator and Tips */}
-      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3.5 shadow-sm border border-slate-100 flex flex-col gap-3">
-        <div className="flex gap-4">
-          {/* Left column info items list */}
-          <div className="flex-1 grid grid-cols-2 gap-x-2 gap-y-2.5 text-left">
-            <div className="space-y-0.5">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Age</span>
-              <span className="text-[10px] font-bold text-slate-800">{profile.age || '28 Years'}</span>
-            </div>
-            
-            <div className="space-y-0.5">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Gender</span>
-              <span className="text-[10px] font-bold text-slate-800 capitalize">{profile.gender || 'Male'}</span>
-            </div>
-
-            <div className="space-y-0.5 col-span-2">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Location</span>
-              <span className="text-[10.5px] font-bold text-slate-800 tracking-tight flex items-center gap-0.5">
-                <MapPin className="w-2.5 h-2.5 text-rose-500 shrink-0" />
-                <span>{profile.thana || 'Cox\'s Bazar Sadar'}, {profile.district || 'Cox\'s Bazar'}, BD</span>
-              </span>
-            </div>
-
-            <div className="space-y-0.5 col-span-2">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Email</span>
-              <span className="text-[10px] font-mono text-slate-600 truncate block max-w-[150px]">{profile.email || 'rashadahmed@gmail.com'}</span>
-            </div>
-
-            <div className="space-y-0.5 col-span-2">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Phone</span>
-              <span className="text-[10px] font-extrabold text-slate-800">{profile.phone || '+880 1812-345678'}</span>
-            </div>
-
-            <div className="space-y-0.5">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Blood Group</span>
-              <span className="text-[10px] font-extrabold text-rose-600">{profile.bloodGroup || 'O+'} (Positive)</span>
-            </div>
-
-            <div className="space-y-0.5">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Weight</span>
-              <span className="text-[10px] font-bold text-slate-800">
-                {profile.weight ? `${profile.weight} KG` : '68 KG'}
-              </span>
-            </div>
-
-            <div className="space-y-0.5 col-span-2">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Height</span>
-              <span className="text-[10px] font-bold text-slate-800">
-                {profile.heightFeet ? `${profile.heightFeet} Ft ${profile.heightInches || 0} In` : '5 Ft 9 In'}
-              </span>
-            </div>
-
-            <div className="space-y-0.5 col-span-2">
-              <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-wider block">Eligibility</span>
-              <span className="text-[9.5px] font-extrabold text-emerald-600 flex items-center gap-0.5">
-                <span className="w-1 h-1 rounded-full bg-emerald-500 shrink-0 animate-ping"></span>
-                <span>{isEligibleNow ? 'Eligible to Donate' : 'Resting State Period'}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Right Dynamic BMI Circular Container */}
-          {(() => {
-            const weightKg = profile.weight || 68;
-            const feet = profile.heightFeet || 5;
-            const inches = profile.heightInches || 9;
-            const totalInches = (feet * 12) + inches;
-            const heightMeters = totalInches * 0.0254;
-            const bmi = Number((weightKg / (heightMeters * heightMeters)).toFixed(1));
-
-            let classification = "Normal Weight";
-            let colorClass = "stroke-emerald-500";
-            let textClass = "text-emerald-600";
-            
-            if (bmi < 18.5) {
-              classification = "Underweight";
-              colorClass = "stroke-amber-500";
-              textClass = "text-amber-600";
-            } else if (bmi >= 25 && bmi < 30) {
-              classification = "Overweight";
-              colorClass = "stroke-amber-500";
-              textClass = "text-amber-600";
-            } else if (bmi >= 30) {
-              classification = "Obese";
-              colorClass = "stroke-rose-500";
-              textClass = "text-rose-600";
-            }
-
-            // Map BMI (range 15-35) into percentage offset for 0 to 100 dash array
-            const percentage = Math.max(10, Math.min(100, ((bmi - 12) / 28) * 100));
-
-            return (
-              <div className="w-[105px] bg-[#F8FAFC] rounded-xl p-2.5 border border-slate-100 flex flex-col items-center justify-center shrink-0">
-                <span className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest mb-1.5 text-center leading-none">BMI Score</span>
-                
-                <div className="relative w-16 h-16 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="16" fill="none" stroke="#E2E8F0" strokeWidth="2.5" />
-                    <circle cx="18" cy="18" r="16" fill="none" className={colorClass} strokeWidth="2.5" strokeDasharray="100" strokeDashoffset={100 - percentage} strokeLinecap="round" />
-                  </svg>
-                  <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">
-                    <span className="text-sm font-black text-slate-900">{bmi}</span>
-                    <span className="text-[6.5px] text-slate-400 font-bold uppercase">Metric</span>
-                  </div>
-                </div>
-
-                <span className={`text-[8px] font-black uppercase tracking-widest mt-2 text-center leading-none ${textClass}`}>{classification}</span>
-              </div>
-            );
-          })()}
-        </div>
-
-        {/* Clinically Driven BMI Tips */}
-        {(() => {
-          const weightKg = profile.weight || 68;
-          const feet = profile.heightFeet || 5;
-          const inches = profile.heightInches || 9;
-          const totalInches = (feet * 12) + inches;
-          const heightMeters = totalInches * 0.0254;
-          const bmi = Number((weightKg / (heightMeters * heightMeters)).toFixed(1));
-
-          let tip = "Healthy dynamic! Maintain hydrated nutrition and optimal mineral counts between donation sessions.";
-          if (bmi < 18.5) {
-            tip = "Prioritize nutrient-dense calories and organic proteins to reach ideal donor mass limits safely.";
-          } else if (bmi >= 25 && bmi < 30) {
-            tip = "Consider balanced fiber counts and active cardio exercises to support optimal blood pressure.";
-          } else if (bmi >= 30) {
-            tip = "Choose high-quality whole foods, limit sodium intake, and monitor metabolic stats regularly.";
-          }
-
-          return (
-            <div className="mt-1 pt-2.5 border-t border-slate-100">
-              <span className="text-[7.5px] text-slate-400 font-black uppercase tracking-widest block leading-none">Clinician Medical Advice & BMI Tips</span>
-              <p className="text-[10px] text-slate-600 font-semibold leading-normal mt-1 flex items-start gap-1">
-                <span className="text-rose-500 text-[11px] shrink-0 leading-none">💡</span>
-                <span>{tip}</span>
-              </p>
-            </div>
-          );
-        })()}
-      </div>
-
-      {/* 4. Two-Column Row (Recent Donations & Achievements) */}
-      <div className="mt-3 mx-4 grid grid-cols-2 gap-3.5">
-        
-        {/* Left Column: Recent Donations */}
-        <div className="bg-white rounded-2xl p-2.5 shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Recent Donations</span>
-              <button 
-                onClick={() => setHistoryTab('donations')} 
-                className="text-[7.5px] text-rose-500 font-black uppercase tracking-widest hover:underline cursor-pointer"
-              >
-                See All
-              </button>
-            </div>
-
-            <div className="space-y-1.5">
-              {[
-                { hospital: "Cox's Bazar Sadar Hospital", date: "20 Apr 2024", group: "O+" },
-                { hospital: "Chattogram Medical Hospital", date: "12 Dec 2023", group: "O+" },
-                { hospital: "Cox's Bazar District Hospital", date: "18 Aug 2023", group: "O+" }
-              ].map((row, idx) => (
-                <div key={idx} className="flex items-center gap-1.5 bg-slate-50/50 p-1.5 rounded-lg border border-slate-100">
-                  <div className="w-5 h-5 bg-rose-50 rounded-full flex items-center justify-center shrink-0">
-                    <span className="text-red-500 text-[9px] font-bold">💧</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[7px] font-extrabold text-slate-800 leading-tight truncate">
-                      {row.hospital}
-                    </p>
-                    <p className="text-[6px] text-slate-400 font-bold leading-none mt-0.5">
-                      {row.date} • Whole Blood
-                    </p>
-                  </div>
-                  <span className="text-[7px] font-black text-rose-600 bg-rose-50 border border-rose-100 rounded px-1 shrink-0 select-none">
-                    {row.group}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Achievements */}
-        <div className="bg-white rounded-2xl p-2.5 shadow-sm border border-slate-100 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Achievements</span>
-              <button className="text-[7.5px] text-rose-500 font-black uppercase tracking-widest hover:underline cursor-pointer">
-                View All
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-1.5">
-              {[
-                { name: "Bronze Donor", emoji: "🟤", bg: "bg-orange-500/10 text-orange-700 border-orange-200" },
-                { name: "Silver Donor", emoji: "⚪", bg: "bg-slate-100 text-slate-700 border-slate-200" },
-                { name: "Gold Donor", emoji: "🟡", bg: "bg-yellow-500/10 text-yellow-700 border-yellow-250" },
-                { name: "Hero Donor", emoji: "🔴", bg: "bg-red-500/10 text-red-700 border-red-200" }
-              ].map((ach, idx) => (
-                <div key={idx} className={`border rounded-lg p-1.5 flex flex-col items-center justify-center text-center ${ach.bg}`}>
-                  <span className="text-sm leading-none">{ach.emoji}</span>
-                  <span className="text-[6.5px] font-black tracking-tight leading-tight mt-1 truncate max-w-full">
-                    {ach.name}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 5. Mobile Toggle Row Option */}
-      <div className="mt-3.5 mx-4 bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex items-center justify-between gap-3 relative overflow-hidden">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 bg-pink-100 rounded-xl flex items-center justify-center text-rose-500 shrink-0">
-            <ShieldCheck className="w-4.5 h-4.5 stroke-[2.3]" />
-          </div>
-          <div>
-            <p className="text-[10px] font-black text-slate-800 leading-tight">
-              Available for Emergency Donations
-            </p>
-            <p className="text-[8px] text-slate-400 font-medium leading-tight">
-              You will be notified for emergency requests
-            </p>
-          </div>
-        </div>
-        
-        {/* Sleek Switch Toggle Button */}
+      {/* Navigation Top Bar */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-2 relative z-10">
         <button 
-          onClick={async () => {
-            const currentIsAvailable = profile.isAvailable !== false;
-            try {
-              await updateDoc(doc(db, 'users', profile.uid), { isAvailable: !currentIsAvailable });
-              addToast("Status Updated", `Emergency status set to ${!currentIsAvailable ? 'Available' : 'Unavailable'}`, "success");
-            } catch (err) {
-              addToast("Error", "Could not synchronize change to cloud", "error");
+          onClick={onBack}
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+        >
+          <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
+        </button>
+        
+        <div className="relative">
+          <button 
+            onClick={() => setShowOptionsMenu(!showOptionsMenu)}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+          >
+            <MoreVertical className="w-5 h-5 stroke-[2.2]" />
+          </button>
+
+          {/* Options Dropdown Menu */}
+          {showOptionsMenu && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-100/80 py-2 z-50 animate-in fade-in slide-in-from-top-3 duration-200">
+              {currentUser?.uid === profile.uid ? (
+                <button
+                  onClick={() => {
+                    setShowOptionsMenu(false);
+                    onEditProfile?.();
+                  }}
+                  className="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  <Pencil className="w-4 h-4 text-slate-400" />
+                  Edit Profile
+                </button>
+              ) : null}
+              <button
+                onClick={() => {
+                  setShowOptionsMenu(false);
+                  handleShareProfile();
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+              >
+                <Share2 className="w-4 h-4 text-slate-400" />
+                Share Profile
+              </button>
+              <button
+                onClick={() => setShowOptionsMenu(false)}
+                className="w-full px-4 py-2.5 text-left text-sm font-semibold text-rose-500 hover:bg-rose-50/50 border-t border-slate-50 flex items-center gap-2"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Profile Header Area */}
+      <div className="flex flex-col items-center px-6 pt-4 pb-2">
+        {/* Centered Large Avatar */}
+        <div className="relative select-none">
+          {profile.photoURL ? (
+            <img 
+              src={profile.photoURL} 
+              alt={profile.displayName}
+              className="w-28 h-28 rounded-full object-cover shadow-md border-2 border-white"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="w-28 h-28 rounded-full bg-gradient-to-tr from-sky-400 to-blue-500 shadow-md flex items-center justify-center text-white text-4xl font-bold border-2 border-white">
+              {profile.displayName ? profile.displayName.charAt(0) : 'U'}
+            </div>
+          )}
+          {/* Subtle online indicator */}
+          <span className="absolute bottom-1 right-1 w-4.5 h-4.5 bg-green-500 border-2 border-white rounded-full shadow-sm" />
+        </div>
+
+        {/* Name and Blood Group together */}
+        <h2 className="text-xl font-extrabold text-slate-900 mt-4 text-center tracking-tight flex items-center justify-center gap-1.5 leading-tight">
+          {profile.displayName}
+          {profile.bloodGroup && (
+            <span className="text-rose-600 bg-rose-50 border border-rose-100 rounded-md px-1.5 py-0.2 text-xs font-black shadow-3xs">
+              {profile.bloodGroup}
+            </span>
+          )}
+        </h2>
+
+        {/* Subtitle space - last donation formatted */}
+        <p className="text-[13px] text-slate-400 font-bold mt-1 text-center tracking-wide lowercase">
+          last donation {formatDisplayDate(profile.lastDonationDate) || 'recently'}
+        </p>
+      </div>
+
+      {/* Row of Action Buttons (Telegram style, customized with Red bloodlink accent) */}
+      <div className="flex justify-center gap-3.5 px-6 my-6">
+        {/* Message Button */}
+        <button 
+          onClick={() => onMessage(profile.uid)}
+          className="flex-1 flex flex-col items-center justify-center bg-white hover:bg-slate-50 border border-slate-100/60 rounded-2xl py-3 shadow-3xs active:scale-95 transition-all cursor-pointer"
+        >
+          <MessageSquare className="w-5.5 h-5.5 text-[#ff1744] mb-1.5 stroke-[2]" />
+          <span className="text-[11px] font-black text-slate-700 tracking-tight">Message</span>
+        </button>
+
+        {/* Mute Button */}
+        <button 
+          onClick={() => {
+            const nextMuted = !isMuted;
+            setIsMuted(nextMuted);
+            addToast("Notifications", nextMuted ? "Notifications muted." : "Notifications unmuted.", "info");
+          }}
+          className="flex-1 flex flex-col items-center justify-center bg-white hover:bg-slate-50 border border-slate-100/60 rounded-2xl py-3 shadow-3xs active:scale-95 transition-all cursor-pointer"
+        >
+          {isMuted ? (
+            <BellOff className="w-5.5 h-5.5 text-slate-400 mb-1.5 stroke-[2]" />
+          ) : (
+            <Bell className="w-5.5 h-5.5 text-[#ff1744] mb-1.5 stroke-[2]" />
+          )}
+          <span className="text-[11px] font-black text-slate-700 tracking-tight">{isMuted ? 'Muted' : 'Mute'}</span>
+        </button>
+
+        {/* Call Button */}
+        <a 
+          href={profile.phone ? `tel:${profile.phone}` : '#'}
+          onClick={(e) => {
+            if (!profile.phone) {
+              e.preventDefault();
+              addToast("Call Error", "Phone number not available.", "error");
+            } else {
+              addToast("Voice Call", "Calling volunteer...", "info");
             }
           }}
-          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out cursor-pointer relative shrink-0 ${profile.isAvailable !== false ? 'bg-[#FF1744]' : 'bg-slate-200'}`}
+          className="flex-1 flex flex-col items-center justify-center bg-white hover:bg-slate-50 border border-slate-100/60 rounded-2xl py-3 shadow-3xs active:scale-95 transition-all text-center"
         >
-          <div className={`w-4.5 h-4.5 rounded-full bg-white shadow-md transform transition-transform duration-200 ease-in-out ${profile.isAvailable !== false ? 'translate-x-4.5' : 'translate-x-0'}`} />
+          <Phone className="w-5.5 h-5.5 text-[#ff1744] mb-1.5 stroke-[2]" />
+          <span className="text-[11px] font-black text-slate-700 tracking-tight">Call</span>
+        </a>
+
+        {/* Video Button */}
+        <button 
+          onClick={() => {
+            addToast("Video Call", "Setting up real-time secure video connection...", "info");
+          }}
+          className="flex-1 flex flex-col items-center justify-center bg-white hover:bg-slate-50 border border-slate-100/60 rounded-2xl py-3 shadow-3xs active:scale-95 transition-all cursor-pointer"
+        >
+          <Video className="w-5.5 h-5.5 text-[#ff1744] mb-1.5 stroke-[2]" />
+          <span className="text-[11px] font-black text-slate-700 tracking-tight">Video</span>
         </button>
       </div>
 
-      {/* 6. Triple Stats Panel */}
-      <div className="mt-3.5 mx-4 md:mx-0 grid grid-cols-3 gap-2">
-        {/* Match Score Card */}
-        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
-          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">AI Match Score</p>
-          <div className="flex items-end justify-between mt-1">
-            <div>
-              <p className="text-sm font-black text-slate-900 leading-none">95%</p>
-              <p className="text-[7px] text-emerald-500 font-extrabold uppercase mt-1 leading-none">Great Match</p>
+      {/* Main Info Box: Mobile phone layout card */}
+      <div className="px-6 flex-1">
+        <div 
+          onClick={handleCopyPhone}
+          className="bg-white rounded-[20px] p-5 border border-slate-100/80 shadow-3xs flex items-center justify-between cursor-pointer hover:bg-slate-50 active:bg-slate-100/50 transition-all"
+        >
+          <div className="text-left">
+            <div className="text-base font-extrabold text-slate-900 tracking-tight">
+              {profile.phone || '+880 1957695212'}
             </div>
-            {/* SVG circle */}
-            <div className="w-6 h-6 shrink-0 relative">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="#E2E8F0" strokeWidth="2.2" />
-                <circle cx="12" cy="12" r="10" fill="none" stroke="#10B981" strokeWidth="2.2" strokeDasharray="62" strokeDashoffset={62 - (62 * 0.95)} />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[7px]">🤖</span>
+            <div className="text-[12px] text-slate-400 font-bold mt-0.5 uppercase tracking-wide">
+              Mobile
             </div>
           </div>
-        </div>
-
-        {/* Streak Card */}
-        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
-          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Donation Streak</p>
-          <div className="flex items-end gap-1.5 mt-1">
-            <span className="text-lg leading-none shrink-0" title="Active Streak">🔥</span>
-            <div>
-              <p className="text-sm font-black text-slate-900 leading-none">12</p>
-              <p className="text-[6px] text-slate-400 font-medium uppercase mt-0.5 leading-tight">Donations • Keep it up!</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Community Points Card */}
-        <div className="bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-[64px] relative overflow-hidden">
-          <p className="text-[6.5px] font-black text-slate-400 uppercase tracking-widest leading-none">Community Points</p>
-          <div className="flex items-end justify-between mt-1">
-            <div>
-              <p className="text-sm font-black text-slate-900 leading-none">2,450</p>
-              <p className="text-[6px] text-slate-400 font-medium uppercase mt-0.5 leading-tight">Top 12% Donor</p>
-            </div>
-            <div className="w-5.5 h-5.5 rounded-full bg-pink-150 flex items-center justify-center text-xs text-rose-500 shadow-sm border border-rose-200">
-              ★
-            </div>
-          </div>
+          <span className="text-[10px] bg-slate-50 border border-slate-150 text-slate-500 font-extrabold px-2 py-1 rounded-md shadow-3xs shrink-0">
+            {copiedPhone ? 'Copied!' : 'Copy'}
+          </span>
         </div>
       </div>
 
-      {/* 7. Redesigned Unified Donor Action & Connection Hub - Fully integrated, non-overlapping & modular */}
-      <div className="mt-4 mx-4 bg-white rounded-3xl p-4.5 shadow-sm border border-slate-100 flex flex-col gap-3.5 text-left">
-        <div className="flex items-center justify-between">
-          <span className="text-[8.5px] text-slate-400 font-extrabold uppercase tracking-widest">
-            {currentUser?.uid === profile.uid ? "Profile Actions" : "Donor Connection Hub"}
-          </span>
-          <span className="flex items-center gap-1 bg-emerald-50 border border-emerald-100/60 rounded-full px-2 py-0.5 select-none">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-[7px] text-emerald-600 font-bold uppercase tracking-wider">Verified Channel</span>
-          </span>
-        </div>
-
-        {currentUser?.uid === profile.uid ? (
-          // Viewing Own Profile
-          <div className="flex flex-col gap-2.5">
-            <button 
-              onClick={() => {
-                onEditProfile?.();
-                addToast("Edit Profile", "Redirecting to your mutable profile registry details form.", "info");
-              }}
-              className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-3.5 px-4 flex items-center justify-center gap-2.5 transition-all shadow-md shadow-red-500/15 cursor-pointer font-black text-[11px] uppercase tracking-wider"
-            >
-              <Pencil className="w-4 h-4 stroke-[2.2]" />
-              <span>Edit Profile Registry</span>
-            </button>
-
-            <button 
-              onClick={handleShareProfile}
-              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl py-3 px-4 flex items-center justify-center gap-2 transition-all border border-slate-200/60 cursor-pointer font-bold text-[9px] uppercase tracking-wider"
-            >
-              <Share2 className="w-3.5 h-3.5 stroke-[2] text-slate-500" />
-              <span>Share Your Public Card</span>
-            </button>
-          </div>
-        ) : (
-          // Viewing Another User's Donate Profile
-          <div className="flex flex-col gap-3">
-            {/* Main Call To Action: Request Blood button */}
-            <button 
-              onClick={() => {
-                addToast("Request Dispatched", `Sent formal blood donation requisition alert directly to ${profile.displayName} for Group ${profile.bloodGroup || 'O+'}!`, "success");
-              }}
-              className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-3.5 px-4 flex items-center justify-center gap-2.5 transition-all shadow-md shadow-red-500/15 cursor-pointer font-black text-[11px] uppercase tracking-wider"
-            >
-              <span className="text-base">🩸</span>
-              <span>Request Group {profile.bloodGroup || 'O+'} Donation</span>
-            </button>
-
-            {/* Direct Quick Contact Options Grid */}
-            <div className="grid grid-cols-3 gap-2">
-              {/* Voice Call */}
-              <a 
-                href={profile.phone ? `tel:${profile.phone}` : 'tel:+8801812345678'}
-                onClick={() => addToast("Voice Call", "Initiating phone call to volunteer donor...", "info")}
-                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-650 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
-              >
-                <Phone className="w-4 h-4 fill-red-500/10 stroke-[2.2]" />
-                <span className="text-[8px] font-black uppercase tracking-wider">Voice Call</span>
-              </a>
-
-              {/* WhatsApp direct chat */}
-              <a 
-                href={profile.phone ? `https://wa.me/${profile.phone.replace(/\+/g, '')}` : 'https://wa.me/8801812345678'}
-                target="_blank"
-                rel="noreferrer"
-                onClick={() => addToast("WhatsApp Direct", "Opening WhatsApp connection stream...", "info")}
-                className="bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center"
-              >
-                <span className="text-base leading-none">💬</span>
-                <span className="text-[8px] font-black uppercase tracking-wider">WhatsApp</span>
-              </a>
-
-              {/* In-App Message */}
-              <button 
-                onClick={() => onMessage(profile.uid)}
-                className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 rounded-2xl py-2.5 px-1.5 flex flex-col items-center justify-center gap-1 transition-all active:scale-95 shadow-sm text-center cursor-pointer"
-              >
-                <MessageSquare className="w-4 h-4 fill-blue-500/10 stroke-[2.2]" />
-                <span className="text-[8px] font-black uppercase tracking-wider">Live Chat</span>
-              </button>
-            </div>
-
-            {/* Secondary Option: Share Profile Card */}
-            <button 
-              onClick={handleShareProfile}
-              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 rounded-xl py-2.5 px-4 flex items-center justify-center gap-2 transition-all border border-slate-200/60 cursor-pointer font-bold text-[9px] uppercase tracking-wider"
-            >
-              <Share2 className="w-3.5 h-3.5 stroke-[2]" />
-              <span>Share Profile Card</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 8. Nearby Hospitals */}
-      <div className="mt-4 mx-4 text-left">
-        <div className="flex items-center justify-between mb-1.5 px-1">
-          <span className="text-[8.5px] text-slate-800 font-black uppercase tracking-wider">Nearby Hospitals</span>
-          <button className="text-[7.5px] text-slate-400 font-extrabold uppercase tracking-widest flex items-center gap-0.5 hover:text-slate-600 transition-colors">
-            <Compass className="w-2.5 h-2.5" />
-            <span>View Map</span>
-          </button>
-        </div>
-
-        {/* Single Row card */}
-        <div className="bg-white rounded-xl p-2.5 shadow-sm border border-slate-100 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0 select-none">
-              <span className="text-base text-blue-500">🏥</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-black text-slate-800">Cox's Bazar Sadar Hospital</span>
-                <span className="bg-emerald-50 text-[7px] text-emerald-600 font-extrabold border border-emerald-100 rounded-full px-1 py-[1px]">Open</span>
-              </div>
-              <div className="flex items-center gap-2 text-[8px] text-slate-400 font-semibold mt-0.5">
-                <span>1.2 km away</span>
-                <span>•</span>
-                <span className="text-emerald-600 font-bold flex items-center gap-0.5">🚗 5 min ride</span>
-              </div>
-            </div>
-          </div>
-
-          <a 
-            href="tel:+88034164205" // Real typical Sadar hospital contact number 
-            className="w-7 h-7 bg-rose-50 hover:bg-rose-100 rounded-full flex items-center justify-center text-rose-500 transition-colors shrink-0"
-            title="Hospital Direct Phone Call"
-          >
-            <Phone className="w-3 h-3 fill-rose-500/20 stroke-[2.5]" />
-          </a>
-        </div>
-      </div> {/* Close Section 8 wrapper */}
-
-    <DonorCardModal
-      isOpen={showCardModal}
-      onClose={() => setShowCardModal(false)}
-      profile={profile}
-      addToast={addToast}
-      allUsers={allUsers}
-    />
-  </motion.div>
+      <DonorCardModal
+        isOpen={showCardModal}
+        onClose={() => setShowCardModal(false)}
+        profile={profile}
+        addToast={addToast}
+        allUsers={allUsers}
+      />
+    </motion.div>
   );
 }
 
