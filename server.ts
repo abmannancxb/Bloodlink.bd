@@ -866,6 +866,40 @@ Response JSON Schema:
     }
   });
 
+  // FCM Topic Subscription Route
+  app.post("/api/fcm/subscribe", async (req, res) => {
+    try {
+      const { token, topic } = req.body;
+      if (!token || !topic) {
+        return res.status(400).json({ success: false, error: "token and topic are required" });
+      }
+      console.log(`Subscribing token to topic ${topic}...`);
+      const response = await admin.messaging().subscribeToTopic(token, topic);
+      console.log(`Subscribed successfully:`, response);
+      res.json({ success: true, response });
+    } catch (error: any) {
+      console.error("Error in /api/fcm/subscribe:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // FCM Topic Unsubscription Route
+  app.post("/api/fcm/unsubscribe", async (req, res) => {
+    try {
+      const { token, topic } = req.body;
+      if (!token || !topic) {
+        return res.status(400).json({ success: false, error: "token and topic are required" });
+      }
+      console.log(`Unsubscribing token from topic ${topic}...`);
+      const response = await admin.messaging().unsubscribeFromTopic(token, topic);
+      console.log(`Unsubscribed successfully:`, response);
+      res.json({ success: true, response });
+    } catch (error: any) {
+      console.error("Error in /api/fcm/unsubscribe:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
   // Blood Request Broadcaster Route (find matching donors & notify them)
   app.post("/api/send-push/blood-request", async (req, res) => {
     try {

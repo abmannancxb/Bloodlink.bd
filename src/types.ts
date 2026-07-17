@@ -54,6 +54,7 @@ export interface UserProfile {
   heightFeet?: number;
   heightInches?: number;
   lastProfileSaveDate?: string;
+  subscribedEmergencyAlerts?: boolean;
 }
 
 export function getDonorId(profile: UserProfile, allUsers: UserProfile[] = []) {

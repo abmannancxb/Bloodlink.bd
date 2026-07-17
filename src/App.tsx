@@ -1102,6 +1102,7 @@ export default function App() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsLanguage, setSettingsLanguage] = useState<'bn' | 'en'>('en');
   const [enableSoundAlerts, setEnableSoundAlerts] = useState(true);
+  const [submittingAlertSubscription, setSubmittingAlertSubscription] = useState(false);
 
   // Health Calculator States
   const [calcWeight, setCalcWeight] = useState<number>(68);
@@ -1348,6 +1349,106 @@ export default function App() {
       });
     });
   }, []);
+
+  const handleSubscribeToggle = async () => {
+    if (!user || !profile) {
+      addToast("Authentication Required", "Please sign in or create an account to subscribe to emergency blood alerts.", "warning");
+      return;
+    }
+
+    if (submittingAlertSubscription) return;
+    setSubmittingAlertSubscription(true);
+
+    const isSubscribed = !!profile.subscribedEmergencyAlerts;
+
+    try {
+      if (!isSubscribed) {
+        // We are subscribing!
+        if (!('Notification' in window)) {
+          addToast("Unsupported Browser", "This browser does not support push notifications.", "error");
+          setSubmittingAlertSubscription(false);
+          return;
+        }
+
+        const permission = await window.Notification.requestPermission();
+        if (permission !== 'granted') {
+          addToast("Permission Denied", "Notification permission was denied. Please allow notifications in your browser settings.", "error");
+          setSubmittingAlertSubscription(false);
+          return;
+        }
+
+        if (!messaging) {
+          addToast("FCM Not Supported", "Firebase Cloud Messaging is not available in this environment.", "error");
+          setSubmittingAlertSubscription(false);
+          return;
+        }
+
+        // Register service worker explicitly for FCM
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        
+        const token = await getToken(messaging, { 
+          serviceWorkerRegistration: registration,
+        });
+
+        if (!token) {
+          addToast("Token Generation Failed", "Could not retrieve web push token. Please try again.", "error");
+          setSubmittingAlertSubscription(false);
+          return;
+        }
+
+        // Call backend subscribe endpoint
+        const res = await fetch("/api/fcm/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, topic: "emergency-blood-alerts" })
+        });
+
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Subscription request failed");
+        }
+
+        // Update Firestore
+        await updateDoc(doc(db, 'users', user.uid), { 
+          fcmToken: token,
+          subscribedEmergencyAlerts: true 
+        });
+
+        setProfile(prev => prev ? { ...prev, fcmToken: token, subscribedEmergencyAlerts: true } : null);
+        addToast("Subscription Successful", "You will now receive global emergency blood alerts!", "success");
+
+      } else {
+        // We are unsubscribing!
+        const token = profile.fcmToken;
+        if (token) {
+          // Call backend unsubscribe endpoint
+          const res = await fetch("/api/fcm/unsubscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, topic: "emergency-blood-alerts" })
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            console.warn("Topic unsubscription on backend failed:", data.error);
+          }
+        }
+
+        // Update Firestore
+        await updateDoc(doc(db, 'users', user.uid), { 
+          subscribedEmergencyAlerts: false 
+        });
+
+        setProfile(prev => prev ? { ...prev, subscribedEmergencyAlerts: false } : null);
+        addToast("Unsubscribed", "You have unsubscribed from global emergency blood alerts.", "info");
+      }
+    } catch (err: any) {
+      console.error("Failed to handle subscription toggle:", err);
+      addToast("Subscription Error", err.message || "Failed to update subscription.", "error");
+    } finally {
+      setSubmittingAlertSubscription(false);
+    }
+  };
 
   const [activeCall, setActiveCall] = useState<VoiceCall | null>(null);
   const [incomingCall, setIncomingCall] = useState<VoiceCall | null>(null);
@@ -8929,6 +9030,39 @@ export default function App() {
                       className={`w-12 h-6.5 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${enableSoundAlerts ? 'bg-red-600' : 'bg-slate-300'}`}
                     >
                       <div className={`w-5.5 h-5.5 rounded-full bg-white shadow-sm transform transition-transform ${enableSoundAlerts ? 'translate-x-5.5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Setting: Subscribe for emergency updates */}
+                <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="flex items-center justify-between">
+                    <div className="mr-4">
+                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        Subscribe for Updates
+                      </h4>
+                      <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5">
+                        Get global emergency blood alerts via Push Notifications
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSubscribeToggle}
+                      disabled={submittingAlertSubscription}
+                      className={`w-12 h-6.5 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer flex items-center shrink-0 ${
+                        submittingAlertSubscription ? 'opacity-60 cursor-not-allowed' : ''
+                      } ${profile?.subscribedEmergencyAlerts ? 'bg-red-600' : 'bg-slate-300'}`}
+                    >
+                      <div
+                        className={`w-5.5 h-5.5 rounded-full bg-white shadow-sm transform transition-transform flex items-center justify-center ${
+                          profile?.subscribedEmergencyAlerts ? 'translate-x-5.5' : 'translate-x-0'
+                        }`}
+                      >
+                        {submittingAlertSubscription && (
+                          <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                        )}
+                      </div>
                     </button>
                   </div>
                 </div>
