@@ -3403,15 +3403,30 @@ export default function App() {
       setAuthScreen('login-email');
     } catch (err: any) {
       setIsCompletingRegistration(false);
-      console.error("Registration error:", err);
-      if (err.code === 'auth/email-already-in-use') {
-        setRegError('This email or phn already used by different user.');
+      const isExpectedError = 
+        err.code === 'auth/email-already-in-use' || 
+        err.code === 'auth/invalid-email' || 
+        err.code === 'auth/weak-password' ||
+        String(err.message || '').includes('email-already-in-use');
+
+      if (isExpectedError) {
+        console.warn("Expected registration check:", err.message || err);
+      } else {
+        console.error("Registration error:", err);
+      }
+
+      if (err.code === 'auth/email-already-in-use' || String(err.message || '').includes('email-already-in-use')) {
+        setRegError('This email or phone number is already registered.');
+        addToast("Account Already Exists", "This email or phone is already linked to an account. Please sign in instead.", "warning");
       } else if (err.code === 'auth/invalid-email') {
         setRegError('Please enter a valid email address.');
+        addToast("Invalid Email", "Please enter a valid email address.", "error");
       } else if (err.code === 'auth/weak-password') {
-        setRegError('Password must be at least 6 characters (digits) long.');
+        setRegError('Password must be at least 6 characters long.');
+        addToast("Weak Password", "Please choose a stronger password/PIN.", "error");
       } else {
         setRegError(err.message || 'Registration failed. Please try again.');
+        addToast("Registration Failed", err.message || 'Please try again.', "error");
       }
     } finally {
       setRegLoading(false);
@@ -9662,10 +9677,14 @@ export default function App() {
           icon={<MessageSquare className={view === 'chats' ? "animate-pulse" : ""} />} 
           label="Chats" 
           onClick={() => { 
-            setView('chats'); 
-            setShowRequestsOverlay(false); 
-            handleSetActiveChat(null); 
-            setShowHamburgerMenu(false);
+            if (user) {
+              setView('chats'); 
+              setShowRequestsOverlay(false); 
+              handleSetActiveChat(null); 
+              setShowHamburgerMenu(false);
+            } else {
+              handleLogin();
+            }
           }} 
         />
 
@@ -9684,10 +9703,14 @@ export default function App() {
           } 
           label="Profile" 
           onClick={() => { 
-            setView('profile'); 
-            setShowRequestsOverlay(false); 
-            handleSetActiveChat(null); 
-            setShowHamburgerMenu(false);
+            if (user) {
+              setView('profile'); 
+              setShowRequestsOverlay(false); 
+              handleSetActiveChat(null); 
+              setShowHamburgerMenu(false);
+            } else {
+              handleLogin();
+            }
           }} 
         />
       </nav>
@@ -17691,7 +17714,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
           const reader = new FileReader();
           reader.readAsDataURL(file);
           reader.onload = (event) => {
-            const img = new Image();
+            const img = new window.Image();
             img.src = event.target?.result as string;
             img.onload = () => {
               const canvas = document.createElement('canvas');
@@ -20787,7 +20810,7 @@ function PostForm({ onCancel, onSuccess, user, profile, notifyAdmins }: { onCanc
           const reader = new FileReader();
           reader.readAsDataURL(file);
           reader.onload = (event) => {
-            const img = new Image();
+            const img = new window.Image();
             img.src = event.target?.result as string;
             img.onload = () => {
               const canvas = document.createElement('canvas');
@@ -21140,7 +21163,16 @@ function OwnUserProfileView({
   const directFileInputRef = React.useRef<HTMLInputElement>(null);
   const [showOptions, setShowOptions] = React.useState(false);
 
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <div className="w-full max-w-md mx-auto bg-[#F4F4F7] h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 flex flex-col items-center justify-center p-6 text-slate-800">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading Profile...</p>
+        </div>
+      </div>
+    );
+  }
 
   const handleDirectPhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -21151,7 +21183,7 @@ function OwnUserProfileView({
       reader.readAsDataURL(file);
       reader.onload = async () => {
         const base64 = reader.result as string;
-        const img = new Image();
+        const img = new window.Image();
         img.src = base64;
         img.onload = async () => {
           const canvas = document.createElement('canvas');
