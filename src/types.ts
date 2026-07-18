@@ -56,6 +56,8 @@ export interface UserProfile {
   lastProfileSaveDate?: string;
   subscribedEmergencyAlerts?: boolean;
   statusBubble?: string;
+  createdAt?: any;
+  dateOfBirth?: string;
 }
 
 export function getDonorId(profile: UserProfile, allUsers: UserProfile[] = []) {
@@ -148,7 +150,7 @@ export interface BloodRequest {
   lat?: number;
   lng?: number;
   unitsNeeded: number;
-  urgency: 'Urgent' | 'Normal';
+  urgency: 'Urgent' | 'Critical' | 'Normal';
   medicalReason: string;
   contactPhone: string;
   contactCount?: number;

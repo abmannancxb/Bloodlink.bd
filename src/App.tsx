@@ -2239,9 +2239,11 @@ export default function App() {
   const [requestFilterThana, setRequestFilterThana] = useState<string>('');
   const [filterBloodGroup, setFilterBloodGroup] = useState<string>('');
   const [hideFulfilled, setHideFulfilled] = useState(true);
-  const [activeRequestSubTab, setActiveRequestSubTab] = useState<'all' | 'urgent' | 'nearby' | 'my'>('all');
+  const [activeRequestSubTab, setActiveRequestSubTab] = useState<'all' | 'urgent' | 'critical' | 'recent' | 'nearby' | 'my'>('all');
   const [showFilterDrawer, setShowFilterDrawer] = useState<boolean>(false);
   const [requestSortBy, setRequestSortBy] = useState<'newest' | 'oldest' | 'units'>('newest');
+  const [requestSearchQuery, setRequestSearchQuery] = useState<string>('');
+  const [requestsPage, setRequestsPage] = useState<number>(1);
   const [donorSearchQuery, setDonorSearchQuery] = useState<string>('');
   const [quickFilterAvailable, setQuickFilterAvailable] = useState<boolean>(false);
   const [quickFilterVerified, setQuickFilterVerified] = useState<boolean>(false);
@@ -2265,35 +2267,53 @@ export default function App() {
       if (filterBloodGroup && r.bloodGroup !== filterBloodGroup) return false;
       if (hideFulfilled && r.status !== 'Pending') return false;
 
+      // Handle search query
+      if (requestSearchQuery) {
+        const q = requestSearchQuery.toLowerCase().trim();
+        const groupMatch = r.bloodGroup?.toLowerCase().includes(q);
+        const nameMatch = r.requesterName?.toLowerCase().includes(q);
+        const hospMatch = r.hospital?.toLowerCase().includes(q);
+        const distMatch = r.district?.toLowerCase().includes(q);
+        const thanaMatch = r.thana?.toLowerCase().includes(q);
+        const reasonMatch = r.medicalReason?.toLowerCase().includes(q);
+        const urgencyMatch = r.urgency?.toLowerCase().includes(q);
+        if (!groupMatch && !nameMatch && !hospMatch && !distMatch && !thanaMatch && !reasonMatch && !urgencyMatch) {
+          return false;
+        }
+      }
+
+      // District/Thana filters (if manually set, filter on any sub-tab)
+      if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
+      if (requestFilterThana && r.thana !== requestFilterThana) return false;
+
       // Sub-tab specific filtering:
       if (activeRequestSubTab === 'all') {
-        // "All Requests show all requests from all district. Anyone can see."
-        // We only filter by district/thana if the user manually selected them
-        if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
-        if (requestFilterThana && r.thana !== requestFilterThana) return false;
+        // Show all pending requests matching global filters
       } else if (activeRequestSubTab === 'urgent') {
-        // "Urgent" tab shows urgent requests from all districts by default
         if (r.urgency !== 'Urgent') return false;
-        if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
-        if (requestFilterThana && r.thana !== requestFilterThana) return false;
+      } else if (activeRequestSubTab === 'critical') {
+        if (r.urgency !== 'Critical') return false;
+      } else if (activeRequestSubTab === 'recent') {
+        // We will sort them by newest below
       } else if (activeRequestSubTab === 'nearby') {
-        // "If click nearby show his own district"
         if (profile?.district) {
           if (r.district !== profile.district) return false;
-          // Filter by thana if explicitly selected
-          if (requestFilterThana && r.thana !== requestFilterThana) return false;
-        } else {
-          // If guest, show manual requestFilterDistrict
-          if (requestFilterDistrict && r.district !== requestFilterDistrict) return false;
-          if (requestFilterThana && r.thana !== requestFilterThana) return false;
         }
       } else if (activeRequestSubTab === 'my') {
         if (r.requesterUid !== user?.uid) return false;
       }
+
       return true;
     });
 
     return [...filtered].sort((a, b) => {
+      // Recent tab always sorts by newest
+      if (activeRequestSubTab === 'recent') {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      }
+
       if (requestSortBy === 'oldest') {
         const timeA = a.createdAt?.seconds || 0;
         const timeB = b.createdAt?.seconds || 0;
@@ -2306,7 +2326,7 @@ export default function App() {
         return timeB - timeA;
       }
     });
-  }, [requests, requestFilterDistrict, requestFilterThana, filterBloodGroup, hideFulfilled, activeRequestSubTab, user?.uid, profile?.district, requestSortBy]);
+  }, [requests, requestFilterDistrict, requestFilterThana, filterBloodGroup, hideFulfilled, activeRequestSubTab, user?.uid, profile?.district, requestSortBy, requestSearchQuery]);
 
   const filteredPosts = useMemo(() => {
     let filtered = posts.filter(post => {
@@ -5599,14 +5619,15 @@ export default function App() {
               ) : (
                 <div className="absolute top-[59px] bottom-0 left-0 right-0 bg-[#FAFAFA] z-30 overflow-y-auto pb-24 scrollbar-none">
                   {/* ReDesigned Header matching the screenshot */}
-                  <div className="bg-white px-5 pt-6 pb-2 border-b border-slate-100">
+                  <div className="bg-white px-5 pt-6 pb-4 border-b border-slate-100 flex flex-col gap-4 select-none">
                     <div className="flex items-start justify-between">
                       <div>
                         <h2 className="text-[28px] font-black tracking-tight text-slate-900 leading-none font-sans">Requests</h2>
-                        <p className="text-[12px] text-slate-400 mt-1.5 font-semibold">Find blood requests or create a new one</p>
+                        <p className="text-[12px] text-slate-400 mt-1.5 font-semibold font-sans">Find blood requests or create a new one</p>
                       </div>
+                      
+                      {/* Top Action Button: Notification Bell */}
                       <div className="flex items-center gap-3">
-                        {/* Notification Bell */}
                         <button 
                           onClick={() => {
                             addToast("Notifications", "You have 3 unchecked donor notifications.", "info");
@@ -5618,33 +5639,66 @@ export default function App() {
                             3
                           </span>
                         </button>
-                        
-                        {/* Filter Toggle Button */}
-                        <button 
-                          onClick={() => setShowFilterDrawer(!showFilterDrawer)}
-                          className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-black transition-all cursor-pointer select-none border border-slate-200/85 ${
-                            showFilterDrawer || requestFilterDistrict || requestFilterThana || filterBloodGroup
-                              ? 'bg-[#ff2247] hover:bg-[#e01e40] text-white border-transparent shadow-xs'
-                              : 'bg-white hover:bg-slate-50 text-slate-700'
-                          }`}
-                        >
-                          <SlidersHorizontal className="w-3.5 h-3.5" />
-                          <span>Filter</span>
-                        </button>
                       </div>
+                    </div>
+
+                    {/* Search & Filter Row */}
+                    <div className="flex items-center gap-3 mt-1">
+                      {/* Search Input Box */}
+                      <div className="relative flex-1">
+                        <Search className="w-4.5 h-4.5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="Search by blood group, location..."
+                          value={requestSearchQuery}
+                          onChange={(e) => {
+                            setRequestSearchQuery(e.target.value);
+                            setRequestsPage(1); // Reset to page 1 on search
+                          }}
+                          className="w-full bg-[#f8f9fa] border border-slate-200/80 py-3 pl-11 pr-4 rounded-full text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ff1744]/25 focus:border-[#ff1744]/70 transition-all font-sans"
+                        />
+                        {requestSearchQuery && (
+                          <button
+                            onClick={() => {
+                              setRequestSearchQuery('');
+                              setRequestsPage(1);
+                            }}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Red Outlined Filter Button */}
+                      <button
+                        onClick={() => setShowFilterDrawer(!showFilterDrawer)}
+                        className={`flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-black transition-all cursor-pointer active:scale-95 border-2 ${
+                          showFilterDrawer || requestFilterDistrict || requestFilterThana || filterBloodGroup
+                            ? 'bg-[#ff1744] text-white border-transparent'
+                            : 'bg-white text-[#ff1744] border-[#ff1744]/80 hover:bg-rose-50/40'
+                        }`}
+                      >
+                        <SlidersHorizontal className="w-4 h-4" />
+                        <span>Filter</span>
+                      </button>
                     </div>
 
                     {/* Collapsible Elegant Filter Drawer */}
                     {showFilterDrawer && (
-                      <div className="mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-150/50 space-y-3.5 animate-in slide-in-from-top-4 duration-200">
+                      <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/50 space-y-3.5 animate-in slide-in-from-top-4 duration-200 text-left">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           {/* Filter: District */}
                           <div className="relative">
                             <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">District</label>
                             <select 
                               value={requestFilterDistrict}
-                              onChange={(e) => { setRequestFilterDistrict(e.target.value); setRequestFilterThana(''); }}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-xs"
+                              onChange={(e) => { 
+                                setRequestFilterDistrict(e.target.value); 
+                                setRequestFilterThana(''); 
+                                setRequestsPage(1);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs"
                             >
                               <option value="">All Districts</option>
                               {Object.keys(BANGLADESH_LOCATIONS).sort().map(d => <option key={d} value={d}>{d}</option>)}
@@ -5659,9 +5713,12 @@ export default function App() {
                             <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">Thana / Area</label>
                             <select 
                               value={requestFilterThana}
-                              onChange={(e) => setRequestFilterThana(e.target.value)}
+                              onChange={(e) => {
+                                setRequestFilterThana(e.target.value);
+                                setRequestsPage(1);
+                              }}
                               disabled={!requestFilterDistrict}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-xs disabled:opacity-50"
+                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs disabled:opacity-50"
                             >
                               <option value="">All Thanas</option>
                               {requestFilterDistrict && BANGLADESH_LOCATIONS[requestFilterDistrict].sort().map(t => <option key={t} value={t}>{t}</option>)}
@@ -5676,8 +5733,11 @@ export default function App() {
                             <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">Blood Group</label>
                             <select 
                               value={filterBloodGroup}
-                              onChange={(e) => setFilterBloodGroup(e.target.value)}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-xs"
+                              onChange={(e) => {
+                                setFilterBloodGroup(e.target.value);
+                                setRequestsPage(1);
+                              }}
+                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs"
                             >
                               <option value="">Any Blood Group</option>
                               {BLOOD_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
@@ -5693,8 +5753,11 @@ export default function App() {
                             <input 
                               type="checkbox" 
                               checked={hideFulfilled} 
-                              onChange={(e) => setHideFulfilled(e.target.checked)}
-                              className="accent-[#ff2247] rounded"
+                              onChange={(e) => {
+                                setHideFulfilled(e.target.checked);
+                                setRequestsPage(1);
+                              }}
+                              className="accent-[#ff1744] rounded"
                             />
                             Hide Fulfilled Requests
                           </label>
@@ -5706,9 +5769,10 @@ export default function App() {
                                 setRequestFilterThana('');
                                 setFilterBloodGroup('');
                                 setHideFulfilled(true);
+                                setRequestsPage(1);
                               }}
                               type="button"
-                              className="text-[#ff2247] text-[10px] font-extrabold uppercase tracking-wider hover:underline cursor-pointer"
+                              className="text-[#ff1744] text-[10px] font-extrabold uppercase tracking-wider hover:underline cursor-pointer"
                             >
                               Reset Filters
                             </button>
@@ -5716,63 +5780,115 @@ export default function App() {
                         </div>
                       </div>
                     )}
+                  </div>
 
-                    {/* Sub-navigation Filters list matching the screenshot */}
-                    <div className="grid grid-cols-4 bg-white p-1.5 rounded-[26px] mt-4 premium-down-shadow">
-                      <button 
-                        onClick={() => setActiveRequestSubTab('all')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
-                          activeRequestSubTab === 'all' 
-                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
-                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
-                        }`}
-                      >
-                        <Layers className={`w-3.5 h-3.5 ${activeRequestSubTab === 'all' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
-                        <span className="text-[10px] sm:text-xs">All Requests</span>
-                      </button>
+                  {/* Sub-navigation Filters list matching the screenshot */}
+                  <div className="px-5 py-4 bg-white border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar select-none">
+                    {/* Tab 1: All Requests */}
+                    <button 
+                      onClick={() => {
+                        setActiveRequestSubTab('all');
+                        setRequestsPage(1);
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'all' 
+                          ? 'bg-[#ff1744] text-white shadow-md shadow-[#ff1744]/15 font-black' 
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
+                      }`}
+                    >
+                      <span>All Requests</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeRequestSubTab === 'all' ? 'bg-white/25 text-white font-black' : 'bg-slate-200/80 text-slate-600 font-bold'}`}>
+                        {requests.filter(r => r.status === 'Pending').length}
+                      </span>
+                    </button>
 
-                      <button 
-                        onClick={() => setActiveRequestSubTab('urgent')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
-                          activeRequestSubTab === 'urgent' 
-                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
-                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
-                        }`}
-                      >
-                        <Activity className={`w-3.5 h-3.5 ${activeRequestSubTab === 'urgent' ? 'text-[#ff1744] animate-pulse' : 'text-slate-400'}`} />
-                        <span className="text-[10px] sm:text-xs">Urgent</span>
-                      </button>
+                    {/* Tab 2: Urgent */}
+                    <button 
+                      onClick={() => {
+                        setActiveRequestSubTab('urgent');
+                        setRequestsPage(1);
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'urgent' 
+                          ? 'bg-orange-500 text-white shadow-md shadow-orange-500/15 font-black' 
+                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
+                      }`}
+                    >
+                      <AlertTriangle className={`w-3.5 h-3.5 ${activeRequestSubTab === 'urgent' ? 'text-white' : 'text-orange-500'}`} />
+                      <span>Urgent</span>
+                    </button>
 
-                      <button 
-                        onClick={() => setActiveRequestSubTab('nearby')}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
-                          activeRequestSubTab === 'nearby' 
-                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
-                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
-                        }`}
-                      >
-                        <MapPin className={`w-3.5 h-3.5 ${activeRequestSubTab === 'nearby' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
-                        <span className="text-[10px] sm:text-xs">Nearby</span>
-                      </button>
+                    {/* Tab 3: Critical */}
+                    <button 
+                      onClick={() => {
+                        setActiveRequestSubTab('critical');
+                        setRequestsPage(1);
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'critical' 
+                          ? 'bg-[#d31f27] text-white shadow-md shadow-[#d31f27]/15 font-black' 
+                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
+                      }`}
+                    >
+                      <Bell className={`w-3.5 h-3.5 ${activeRequestSubTab === 'critical' ? 'text-white' : 'text-[#D31F27]'}`} />
+                      <span>Critical</span>
+                    </button>
 
-                      <button 
-                        onClick={() => {
-                          if (!user) {
-                            handleLogin();
-                          } else {
-                            setActiveRequestSubTab('my');
-                          }
-                        }}
-                        className={`flex flex-col sm:flex-row items-center justify-center gap-1.5 py-3 px-1 rounded-[20px] transition-all cursor-pointer select-none text-center relative ${
-                          activeRequestSubTab === 'my' 
-                            ? 'bg-rose-50/70 text-[#ff1744] font-black border-b-[4px] border-[#ff1744] shadow-[0_5px_15px_-2px_rgba(255,23,68,0.12)]' 
-                            : 'text-slate-500 hover:text-slate-800 font-bold border-b-[4px] border-transparent'
-                        }`}
-                      >
-                        <UserIcon className={`w-3.5 h-3.5 ${activeRequestSubTab === 'my' ? 'text-[#ff1744]' : 'text-slate-400'}`} />
-                        <span className="text-[10px] sm:text-xs">My Requests</span>
-                      </button>
-                    </div>
+                    {/* Tab 4: Recent */}
+                    <button 
+                      onClick={() => {
+                        setActiveRequestSubTab('recent');
+                        setRequestsPage(1);
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'recent' 
+                          ? 'bg-slate-800 text-white shadow-md shadow-slate-800/15 font-black' 
+                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
+                      }`}
+                    >
+                      <Clock className={`w-3.5 h-3.5 ${activeRequestSubTab === 'recent' ? 'text-white' : 'text-slate-500'}`} />
+                      <span>Recent</span>
+                    </button>
+
+                    {/* Tab 5: Nearby */}
+                    <button 
+                      onClick={() => {
+                        if (!user) {
+                          handleLogin();
+                        } else {
+                          setActiveRequestSubTab('nearby');
+                          setRequestsPage(1);
+                        }
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'nearby' 
+                          ? 'bg-teal-600 text-white shadow-md shadow-teal-600/15 font-black' 
+                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
+                      }`}
+                    >
+                      <MapPin className={`w-3.5 h-3.5 ${activeRequestSubTab === 'nearby' ? 'text-white' : 'text-teal-600'}`} />
+                      <span>Nearby</span>
+                    </button>
+
+                    {/* Tab 6: My Requests */}
+                    <button 
+                      onClick={() => {
+                        if (!user) {
+                          handleLogin();
+                        } else {
+                          setActiveRequestSubTab('my');
+                          setRequestsPage(1);
+                        }
+                      }}
+                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
+                        activeRequestSubTab === 'my' 
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/15 font-black' 
+                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
+                      }`}
+                    >
+                      <UserIcon className={`w-3.5 h-3.5 ${activeRequestSubTab === 'my' ? 'text-white' : 'text-blue-500'}`} />
+                      <span>My Requests</span>
+                    </button>
                   </div>
 
                   {/* Top Stats Metric Strip row exactly matching the screenshot metrics */}
@@ -5805,7 +5921,7 @@ export default function App() {
                       {/* Metric 3: Fulfilled */}
                       <div className="text-center border-l border-slate-100">
                         <div className="flex items-center justify-center gap-1">
-                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0 animate-pulse" />
+                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0" />
                           <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
                             {requests.filter(r => r.status === 'Fulfilled').length || 8}
                           </span>
@@ -5830,13 +5946,13 @@ export default function App() {
 
                   {/* Active Requests List Title & Sort Control */}
                   <div className="px-5 pb-2 flex items-center justify-between select-none">
-                    <span className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider leading-none">Active Requests</span>
+                    <span className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider leading-none font-sans">Active Requests</span>
                     <div className="flex items-center gap-1">
-                      <span className="text-[9.5px] text-slate-400 font-bold leading-none">Sort by:</span>
+                      <span className="text-[9.5px] text-slate-400 font-bold leading-none font-sans">Sort by:</span>
                       <select 
                         value={requestSortBy}
                         onChange={(e) => setRequestSortBy(e.target.value as any)}
-                        className="bg-transparent border-0 text-[10px] font-black text-slate-700 py-0.5 px-1 outline-none cursor-pointer focus:ring-0 leading-none"
+                        className="bg-transparent border-0 text-[10px] font-black text-slate-700 py-0.5 px-1 outline-none cursor-pointer focus:ring-0 leading-none font-sans"
                       >
                         <option value="newest">Newest</option>
                         <option value="oldest">Oldest</option>
@@ -5845,20 +5961,59 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Main List content */}
-                  <div className="px-0 sm:px-4 space-y-4">
+                  {/* Main List content with Pagination */}
+                  <div className="px-5 space-y-4 text-left">
                     {(() => {
-                      const filtered = filteredRequests;
+                      const totalRequests = filteredRequests.length;
+                      const itemsPerPage = 5;
+                      const totalPages = Math.max(1, Math.ceil(totalRequests / itemsPerPage));
+                      const activePage = Math.min(requestsPage || 1, totalPages);
+                      const startIndex = (activePage - 1) * itemsPerPage;
+                      const endIndex = Math.min(startIndex + itemsPerPage, totalRequests);
+                      const pageItems = filteredRequests.slice(startIndex, endIndex);
 
-                      if (filtered.length === 0) {
+                      // Helper to render pagination numbers
+                      const renderPageNumbers = () => {
+                        const pages = [];
+                        const range = 1;
+                        for (let i = 1; i <= totalPages; i++) {
+                          if (i === 1 || i === totalPages || (i >= activePage - range && i <= activePage + range)) {
+                            pages.push(i);
+                          } else if (i === activePage - range - 1 || i === activePage + range + 1) {
+                            pages.push('...');
+                          }
+                        }
+                        const uniquePages = pages.filter((item, index) => pages.indexOf(item) === index);
+                        return uniquePages.map((p, idx) => {
+                          if (p === '...') {
+                            return <span key={`ellipsis-${idx}`} className="px-2 text-slate-400 font-bold select-none">...</span>;
+                          }
+                          const isActive = p === activePage;
+                          return (
+                            <button
+                              key={`page-${p}`}
+                              onClick={() => setRequestsPage(Number(p))}
+                              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-all active:scale-90 select-none cursor-pointer ${
+                                isActive 
+                                  ? 'bg-[#ff1744] text-white shadow-md shadow-[#ff1744]/20 font-black' 
+                                  : 'bg-white border border-slate-150 hover:bg-slate-50 text-slate-600'
+                              }`}
+                            >
+                              {p}
+                            </button>
+                          );
+                        });
+                      };
+
+                      if (totalRequests === 0) {
                         return (
-                          <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-3xl p-8 max-w-sm mx-auto my-4 shadow-xs">
+                          <div className="text-center py-16 bg-white border border-dashed border-slate-200 rounded-3xl p-8 max-w-sm mx-auto my-4 shadow-2xs">
                             <div className="w-12 h-12 bg-red-500/5 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#ff2247] border border-red-500/10 shadow-inner">
                               <AlertCircle className="w-5 h-5 text-[#ff2247]" />
                             </div>
-                            <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest leading-none">No requests found</h4>
-                            <p className="text-[10px] text-slate-400 mt-2 font-semibold leading-relaxed max-w-xs mx-auto">
-                              No blood request listings matched your selected district or subgroups.
+                            <h4 className="text-xs font-black text-slate-700 uppercase tracking-widest leading-none font-sans">No requests found</h4>
+                            <p className="text-[10px] text-slate-400 mt-2 font-semibold leading-relaxed max-w-xs mx-auto font-sans">
+                              No blood request listings matched your search criteria or filters.
                             </p>
                           </div>
                         );
@@ -5866,21 +6021,47 @@ export default function App() {
 
                       return (
                         <div className="space-y-4">
-                          {filtered.map(req => (
-                            <RequestCardRedesigned 
-                              key={req.id}
-                              request={req}
-                              user={user}
-                              profile={profile}
-                              allUsers={allUsers}
-                              onMessage={() => user ? openChat(req.requesterUid) : handleLogin()} 
-                              onViewProfile={() => onViewProfile(req.requesterUid)}
-                              onDelete={(profile?.role === 'admin' || user?.uid === req.requesterUid) ? () => handleDeleteRequest(req.id) : undefined}
-                              onDonationDone={handleDonationDone}
-                              onMatchDonors={() => setMatchingDonorsRequest(req)}
-                              addToast={addToast}
-                            />
-                          ))}
+                          <div className="space-y-4">
+                            {pageItems.map(req => (
+                              <RequestCardRedesigned 
+                                key={req.id}
+                                request={req}
+                                user={user}
+                                profile={profile}
+                                allUsers={allUsers}
+                                onMessage={() => user ? openChat(req.requesterUid) : handleLogin()} 
+                                onViewProfile={() => onViewProfile(req.requesterUid)}
+                                onDelete={(profile?.role === 'admin' || user?.uid === req.requesterUid) ? () => handleDeleteRequest(req.id) : undefined}
+                                onDonationDone={handleDonationDone}
+                                onMatchDonors={() => setMatchingDonorsRequest(req)}
+                                addToast={addToast}
+                              />
+                            ))}
+                          </div>
+
+                          {/* Pagination Footer Controls */}
+                          <div className="bg-white px-5 py-4 border border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 select-none rounded-3xl shadow-[0_4px_24px_rgba(15,23,42,0.015)]">
+                            <span className="text-xs font-semibold text-slate-500 font-sans">
+                              Showing <span className="font-bold text-slate-800">{startIndex + 1}</span> - <span className="font-bold text-slate-800">{endIndex}</span> of <span className="font-bold text-slate-800">{totalRequests}</span> requests
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => activePage > 1 && setRequestsPage(activePage - 1)}
+                                disabled={activePage === 1}
+                                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+                              >
+                                <ChevronRight className="w-4 h-4 rotate-180 stroke-[2.5]" />
+                              </button>
+                              {renderPageNumbers()}
+                              <button
+                                onClick={() => activePage < totalPages && setRequestsPage(activePage + 1)}
+                                disabled={activePage === totalPages}
+                                className="w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+                              >
+                                <ChevronRight className="w-4 h-4 stroke-[2.5]" />
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       );
                     })()}
@@ -5888,8 +6069,8 @@ export default function App() {
                     {/* Bottom Red Banner call-to-action exactly matching screenshot */}
                     <div className="bg-gradient-to-r from-[#ff2247] to-rose-500 rounded-3xl p-5 text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mt-6 shadow-sm">
                       <div>
-                        <h4 className="text-sm font-black text-white tracking-tight leading-tight">Can't find a matching request?</h4>
-                        <p className="text-[10.5px] text-white/80 mt-1 font-semibold">Post a new blood request and let donors come to you.</p>
+                        <h4 className="text-sm font-black text-white tracking-tight leading-tight font-sans">Can't find a matching request?</h4>
+                        <p className="text-[10.5px] text-white/80 mt-1 font-semibold font-sans">Post a new blood request and let donors come to you.</p>
                       </div>
                       <button 
                         onClick={() => {
@@ -7169,6 +7350,7 @@ export default function App() {
               <OwnUserProfileView 
                 user={user}
                 profile={profile}
+                allUsers={allUsers}
                 onBack={() => setView('requests')}
                 onEditProfile={() => setView('edit-profile')}
                 onLogout={handleLogout}
@@ -15932,12 +16114,26 @@ function RequestCardRedesigned({
   addToast?: (title: string, body: string, type: any) => void;
 }) {
   const isOwner = user?.uid === request.requesterUid;
-  const requesterProfile = allUsers.find(u => u.uid === request.requesterUid);
   const isUrgent = request.urgency === 'Urgent';
-  const isHigh = (request.urgency as string) === 'High' || (request.urgency as string) === 'High Priority';
+  const isCritical = request.urgency === 'Critical';
+  const isNormal = request.urgency === 'Normal' || !request.urgency;
   const [expanded, setExpanded] = useState(false);
 
-  // Formatting date/time using existing formatLastSeen function or a backup
+  // Date formatting
+  const getFormattedDate = (createdAt: any) => {
+    if (!createdAt) return '20 May 2026';
+    let date: Date;
+    if (createdAt.seconds) {
+      date = new Date(createdAt.seconds * 1000);
+    } else {
+      date = new Date(createdAt);
+    }
+    if (isNaN(date.getTime())) return '20 May 2026';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  };
+
+  // Time ago format
   const postedTime = request.createdAt ? formatLastSeen(request.createdAt) : 'some time ago';
 
   return (
@@ -15946,196 +16142,177 @@ function RequestCardRedesigned({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="bg-white border border-slate-100/90 rounded-3xl p-4 hover:shadow-xl hover:border-slate-200 transition-all relative overflow-hidden w-full text-left"
+      className="bg-white border border-slate-100 rounded-3xl p-5 shadow-[0_4px_20px_rgba(15,23,42,0.02)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.05)] transition-all relative overflow-hidden w-full text-left flex flex-col gap-4"
     >
-      {/* Top Header Row with small status dot */}
-      <div className="flex items-center justify-between mb-3.5">
-        {/* Left: Small round shape (pulsing indicator) */}
-        <div className="flex items-center gap-1.5">
-          <span className="relative flex h-2 w-2">
-            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-              isUrgent ? 'bg-rose-400' : isHigh ? 'bg-amber-500' : 'bg-emerald-400'
-            }`} />
-            <span className={`relative inline-flex rounded-full h-2 w-2 ${
-              isUrgent ? 'bg-rose-500' : isHigh ? 'bg-amber-500' : 'bg-emerald-500'
-            }`} />
-          </span>
-          <span className="text-[9.5px] font-black tracking-widest text-slate-400 uppercase font-mono leading-none">
-            {isUrgent ? 'URGENT' : isHigh ? 'HIGH' : 'NORMAL'}
-          </span>
-        </div>
-
-        <span className="text-[9.5px] font-black tracking-wider text-slate-400 uppercase font-mono leading-none">
-          {postedTime}
-        </span>
-      </div>
-
-      {/* Middle Content - Blood Group and Venue Details */}
-      <div className="flex gap-3 items-center mb-3">
-        {/* Small round shape for Blood Group (Circle Badge) */}
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#E11D48] to-[#9F1239] shadow-[0_3px_10px_rgba(225,29,72,0.12)] flex flex-col items-center justify-center select-none shrink-0 border border-rose-500/10">
-          <span className="text-[17px] font-black text-white tracking-tighter leading-none">{request.bloodGroup}</span>
-          <span className="text-[5.5px] font-black tracking-widest text-white/70 uppercase">GROUP</span>
-        </div>
-
-        {/* Hospital name and location details */}
-        <div className="flex-1 min-w-0 text-left">
-          <h3 className="text-sm font-black text-slate-800 tracking-tight leading-snug truncate sm:whitespace-normal">
-            {request.hospital}
-          </h3>
-          <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 mt-1 leading-none">
-            <MapPin className="w-3.5 h-3.5 text-[#FF3E5E] shrink-0" />
-            <span className="truncate font-semibold">{request.thana || 'Selected Area'}, {request.district || 'Bangladesh'}</span>
+      {/* Top Section of Card */}
+      <div className="flex items-start justify-between">
+        {/* Left: Blood Droplet Container + Text Details */}
+        <div className="flex gap-4 items-center flex-1 min-w-0">
+          {/* Circular outer background with droplet inside */}
+          <div className="w-14 h-14 bg-rose-50/75 rounded-full flex items-center justify-center border border-rose-100/50 shrink-0">
+            <div className="w-9 h-9 rounded-full rounded-tl-none -rotate-45 bg-gradient-to-br from-[#ff2247] to-[#d31f27] flex items-center justify-center shadow-[0_4px_10px_rgba(255,23,68,0.25)]">
+              <span className="rotate-45 text-white text-sm font-black tracking-tighter leading-none">
+                {request.bloodGroup}
+              </span>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Case Details Box */}
-      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 mb-3.5 text-left shadow-2xs">
-        <div className="flex items-center justify-between border-b border-slate-200/50 pb-2 mb-2">
-          <span className="text-[8.5px] font-black tracking-widest text-slate-400 uppercase">
-            PATIENT CASE DETAILS
-          </span>
-          {/* Blood unit included in post here */}
-          <span className="bg-[#E11D48] text-white border border-[#BE123C] font-black text-[9px] uppercase tracking-wider px-2.5 py-0.5 rounded-full font-mono shadow-xs">
-            {request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Bags' : 'Bag' } {request.bloodGroup} Needed
-          </span>
-        </div>
-        <p className="text-xs text-slate-700 font-medium italic leading-relaxed font-sans whitespace-pre-wrap">
-          "{request.medicalReason || 'Describe the patient situation e.g. Surgery schedule requirements...'}"
-        </p>
-      </div>
-
-      {/* Divider and Sponsor / Actions block */}
-      <div className="border-t border-slate-200/60 pt-2.5 flex items-center justify-between gap-2.5">
-        {/* Left: Patient Sponsor */}
-        <div className="flex items-center gap-2 min-w-0 text-left">
-          <img 
-            src={request.requesterPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(request.requesterName)}&background=ffe2e2&color=dc2626&bold=true`} 
-            alt={request.requesterName}
-            className="w-8.5 h-8.5 rounded-full object-cover border border-slate-200"
-            referrerPolicy="no-referrer"
-          />
-          <div className="min-w-0">
-            <span className="block text-[8px] font-black tracking-widest text-slate-400 uppercase leading-none">
-              PATIENT SPONSOR
-            </span>
-            <h4 
-              onClick={onViewProfile}
-              className="text-xs font-bold text-slate-800 mt-0.5 leading-tight hover:underline hover:text-[#FF3E5E] transition-colors cursor-pointer truncate"
-            >
+          {/* Texts details */}
+          <div className="flex-1 min-w-0">
+            <h3 className="text-[16px] font-black text-slate-900 tracking-tight leading-snug truncate hover:underline hover:text-[#ff1744] cursor-pointer" onClick={onViewProfile}>
               {request.requesterName}
-            </h4>
+            </h3>
+            
+            {/* Reason */}
+            <p className="text-xs font-semibold text-slate-500 mt-1 leading-none">
+              Reason: <span className="text-[#ff1744] font-bold">{request.medicalReason || 'Accident'}</span>
+            </p>
+
+            {/* Hospital details */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-2 leading-none font-medium">
+              <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">{request.hospital}</span>
+            </div>
+
+            {/* Location details */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5 leading-none font-medium">
+              <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="truncate">{request.thana}, {request.district}</span>
+            </div>
           </div>
         </div>
 
-        {/* Right: Premium CALL Button beside sponsor */}
-        <a 
-          href={`tel:${request.contactPhone}`}
-          className="bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-5 py-2.5 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all hover:scale-[1.03] active:scale-95 cursor-pointer shadow-md shadow-emerald-100/80 border border-emerald-500/20 shrink-0 font-mono"
-        >
-          <Phone className="w-3.5 h-3.5 text-white stroke-[2.8]" />
-          <span>CALL</span>
-        </a>
+        {/* Right: Status Badge & Posted Time & Navigation Arrow */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
+          <div className="flex items-center gap-1.5">
+            {/* Urgency Badge */}
+            {isCritical ? (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-50 text-[#D31F27] text-[10px] font-black uppercase tracking-wider border border-red-100/50 animate-pulse">
+                <Bell className="w-3 h-3 text-[#D31F27]" />
+                Critical
+              </span>
+            ) : isUrgent ? (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFF3E0] text-[#E65100] text-[10px] font-black uppercase tracking-wider border border-orange-100/50">
+                <AlertTriangle className="w-3 h-3 text-[#E65100]" />
+                Urgent
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-[#2E7D32] text-[10px] font-black uppercase tracking-wider border border-emerald-100/50">
+                <Clock className="w-3 h-3 text-[#2E7D32]" />
+                Normal
+              </span>
+            )}
+
+            {/* Chevron Right */}
+            <ChevronRight className="w-4 h-4 text-slate-350 stroke-[2.5]" />
+          </div>
+
+          {/* Time ago */}
+          <span className="text-[10px] font-semibold text-slate-400">
+            {postedTime}
+          </span>
+        </div>
       </div>
 
-      {/* Down Line Actions: Map, Chat, Whatsapp, Match donor */}
-      <div className="mt-2.5 pt-2.5 border-t border-slate-200/60 flex flex-wrap items-center gap-1.5">
-        {/* Map directions */}
-        {request.lat && request.lng && (
-          <a 
-            href={`https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 min-w-[55px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
-            title="Route Navigation"
-          >
-            <Navigation className="w-3 h-3 stroke-[2] text-[#FF3E5E]" />
-            <span className="hidden xs:inline">Map</span>
-          </a>
-        )}
+      {/* Subtle Divider line */}
+      <div className="h-px bg-slate-100 w-full" />
 
-        {/* Direct Messaging */}
-        {onMessage && (
-          <button 
-            onClick={onMessage}
-            type="button"
-            className="flex-1 min-w-[55px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
-            title="Chat with Sponsor"
-          >
-            <MessageSquare className="w-3 h-3 stroke-[2] text-blue-500" />
-            <span className="hidden xs:inline">Chat</span>
-          </button>
-        )}
+      {/* Bottom Section of Card */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        {/* Three Columns Metadata */}
+        <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold text-slate-600">
+          {/* Col 1: Units */}
+          <div className="flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-[#ff1744] shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+            </svg>
+            <span>{request.unitsNeeded || 1} { (request.unitsNeeded || 1) > 1 ? 'Units' : 'Unit' }</span>
+          </div>
 
-        {/* WhatsApp direct contact */}
-        {request.contactPhone && (() => {
-          const whatsappPhone = request.contactPhone.replace(/\D/g, '');
-          const whatsappFormatted = whatsappPhone.startsWith('0') ? `88${whatsappPhone}` : whatsappPhone;
-          const whatsappUrl = `https://wa.me/${whatsappFormatted}`;
-          return (
-            <a 
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 min-w-[75px] h-8 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
-              title="Contact on WhatsApp"
+          {/* Vertical Divider */}
+          <div className="w-px h-4 bg-slate-200" />
+
+          {/* Col 2: Calendar */}
+          <div className="flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span>{getFormattedDate(request.createdAt)}</span>
+          </div>
+
+          {/* Vertical Divider */}
+          <div className="w-px h-4 bg-slate-200" />
+
+          {/* Col 3: Phone */}
+          <div className="flex items-center gap-1.5">
+            <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="font-mono">{request.contactPhone}</span>
+          </div>
+        </div>
+
+        {/* Action Buttons Row */}
+        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+          {/* Direct Messaging */}
+          {onMessage && (
+            <button 
+              onClick={onMessage}
+              type="button"
+              className="w-10 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-full text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center shrink-0 cursor-pointer"
+              title="Chat with Sponsor"
             >
-              <MessageCircle className="w-3 h-3 stroke-[2] text-emerald-500" />
-              <span className="hidden xs:inline">WhatsApp</span>
-            </a>
-          );
-        })()}
+              <MessageSquare className="w-4 h-4 text-blue-500" />
+            </button>
+          )}
 
-        {/* Match Donor option */}
-        {onMatchDonors && request.status === 'Pending' && (
-          <button 
-            onClick={onMatchDonors}
-            type="button"
-            className="flex-[1.5] min-w-[90px] h-8 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-700 hover:text-slate-950 transition-all active:scale-95 flex items-center justify-center gap-1 text-[9px] font-black uppercase tracking-widest cursor-pointer"
-            title="Match Volunteers"
-          >
-            <Search className="w-3 h-3 text-rose-500 shrink-0" />
-            <span>Match Donor</span>
-          </button>
-        )}
+          {/* Match Donor */}
+          {onMatchDonors && request.status === 'Pending' && (
+            <button 
+              onClick={onMatchDonors}
+              type="button"
+              className="h-10 px-3.5 bg-rose-50 hover:bg-rose-100/80 border border-rose-100 rounded-full text-[#ff1744] hover:text-[#d31f27] transition-all active:scale-95 flex items-center justify-center gap-1 text-[11px] font-black uppercase tracking-wider cursor-pointer shrink-0"
+              title="Match Volunteers"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span>Match</span>
+            </button>
+          )}
 
-        {/* Owner/Admin Settings panel toggle */}
-        {(isOwner || onDelete || onDonationDone) && (
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-              expanded ? 'bg-slate-800 text-white border border-transparent' : 'bg-white hover:bg-slate-50 border border-slate-200 text-slate-500 hover:text-slate-800'
-            }`}
-            title="Toggle Management Options"
+          {/* CALL/Contact button */}
+          <a 
+            href={`tel:${request.contactPhone}`}
+            className="h-10 bg-[#ff1744] hover:bg-[#d31f27] text-white px-5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer shadow-md shadow-rose-100 shrink-0 border border-transparent"
           >
-            <Settings className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`} />
-          </button>
-        )}
+            <Phone className="w-3.5 h-3.5 text-white stroke-[2.8]" />
+            <span>Contact</span>
+          </a>
+
+          {/* Settings button for owner or admin */}
+          {(isOwner || onDelete || onDonationDone) && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                expanded ? 'bg-slate-800 text-white' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-500'
+              }`}
+              title="Management Actions"
+            >
+              <Settings className={`w-4 h-4 ${expanded ? 'animate-spin-slow' : ''}`} />
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Expanded settings (Fulfill / Delete) */}
       {expanded && (
         <motion.div 
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="mt-3 pt-3 border-t border-slate-200 space-y-2 text-left"
+          className="pt-3 border-t border-slate-100 space-y-2 text-left"
         >
-          <div className="flex items-center justify-between">
-            <span className="text-[8px] font-black tracking-widest text-slate-400 uppercase">
-              POST SETTINGS & ASSISTANCE
-            </span>
-            <span className="text-[8px] font-bold text-slate-500 uppercase tracking-wider">
-              📅 Posted {postedTime}
-            </span>
-          </div>
-
-          <div className="flex gap-1.5 flex-wrap sm:flex-nowrap">
+          <div className="flex gap-2">
             {request.status === 'Pending' && (
               <>
                 {isOwner ? (
                   <button 
                     onClick={async (e) => {
                       e.preventDefault();
-                      e.stopPropagation();
                       try {
                         await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
                         if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
@@ -16143,7 +16320,7 @@ function RequestCardRedesigned({
                         handleFirestoreError(err, OperationType.UPDATE, 'requests');
                       }
                     }}
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg py-2 px-3 text-[10px] uppercase tracking-wider text-center cursor-pointer transition-colors"
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl py-2.5 text-[11px] uppercase tracking-wider text-center cursor-pointer transition-colors"
                   >
                     Mark as Fulfilled
                   </button>
@@ -16151,7 +16328,7 @@ function RequestCardRedesigned({
                   onDonationDone && (
                     <button 
                       onClick={() => onDonationDone(request)}
-                      className="flex-1 bg-[#FF3E5E] hover:bg-red-650 text-white font-bold rounded-lg py-2 px-3 text-[10px] uppercase tracking-wider text-center cursor-pointer transition-colors"
+                      className="flex-1 bg-[#ff1744] hover:bg-red-750 text-white font-bold rounded-xl py-2.5 text-[11px] uppercase tracking-wider text-center cursor-pointer transition-colors"
                     >
                       I Donated
                     </button>
@@ -16162,10 +16339,10 @@ function RequestCardRedesigned({
             {onDelete && (isOwner || profile?.role === 'admin') && (
               <button 
                 onClick={onDelete}
-                className="bg-slate-200 hover:bg-slate-300 text-slate-750 rounded-lg p-2 flex items-center justify-center cursor-pointer transition-colors"
+                className="bg-slate-100 hover:bg-slate-200 text-rose-600 rounded-xl px-4 flex items-center justify-center cursor-pointer transition-colors"
                 title="Delete Post"
               >
-                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -21318,6 +21495,7 @@ function getStatusBubbleMessage(p: UserProfile) {
 interface OwnUserProfileViewProps {
   user: FirebaseUser;
   profile: UserProfile | null;
+  allUsers?: UserProfile[];
   onBack: () => void;
   onEditProfile: () => void;
   onLogout: () => void;
@@ -21331,6 +21509,7 @@ interface OwnUserProfileViewProps {
 function OwnUserProfileView({
   user,
   profile,
+  allUsers = [],
   onBack,
   onEditProfile,
   onLogout,
@@ -21342,6 +21521,7 @@ function OwnUserProfileView({
 }: OwnUserProfileViewProps) {
   const directFileInputRef = React.useRef<HTMLInputElement>(null);
   const [showOptions, setShowOptions] = React.useState(false);
+  const [showCardModal, setShowCardModal] = React.useState(false);
 
   if (!profile) {
     return (
@@ -21533,6 +21713,27 @@ function OwnUserProfileView({
             </>
           )}
         </p>
+      </div>
+
+      {/* Donor Card Banner */}
+      <div className="px-6 mt-5 select-none">
+        <div 
+          onClick={() => setShowCardModal(true)}
+          className="bg-gradient-to-r from-[#ff1744] via-[#ff2a55] to-[#d50000] rounded-3xl p-4 text-white shadow-md hover:brightness-95 transition-all cursor-pointer flex items-center justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+              <QrCode className="w-5.5 h-5.5 text-white" />
+            </div>
+            <div className="text-left">
+              <h4 className="text-sm font-black uppercase tracking-wider">My Donor Card</h4>
+              <p className="text-[10px] text-white/80 font-bold leading-tight">Generate, download & share your dynamic ID card</p>
+            </div>
+          </div>
+          <span className="text-[9px] bg-white text-rose-600 font-extrabold px-2.5 py-1 rounded-full uppercase tracking-wider shrink-0 shadow-3xs">
+            View Card
+          </span>
+        </div>
       </div>
 
       {/* Main Settings Card */}
@@ -21729,6 +21930,14 @@ function OwnUserProfileView({
           </div>
         </div>
       )}
+
+      <DonorCardModal
+        isOpen={showCardModal}
+        onClose={() => setShowCardModal(false)}
+        profile={profile}
+        addToast={addToast}
+        allUsers={allUsers}
+      />
     </div>
   );
 }
