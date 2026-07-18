@@ -7220,7 +7220,7 @@ export default function App() {
 
         {view === 'edit-profile' && user && (
           <motion.div key="edit-profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
-            <div className="max-w-4xl mx-auto pb-4">
+            <div className="max-w-md mx-auto pb-4">
               <ProfileForm 
                 user={user} 
                 initialProfile={profile} 
@@ -7332,7 +7332,7 @@ export default function App() {
               profileTouchStartRef.current = null;
             }}
           >
-            <div className="max-w-4xl mx-auto pb-4">
+            <div className="max-w-md mx-auto pb-4">
               <PublicProfileView 
                 uid={selectedUserId} 
                 onBack={() => setView('requests')} 
@@ -17810,7 +17810,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
     weight: initialProfile?.weight || undefined,
     heightFeet: initialProfile?.heightFeet || undefined,
     heightInches: initialProfile?.heightInches || undefined,
-    lastProfileSaveDate: initialProfile?.lastProfileSaveDate || ''
+    lastProfileSaveDate: initialProfile?.lastProfileSaveDate || '',
+    statusBubble: initialProfile?.statusBubble || ''
   });
 
   useEffect(() => {
@@ -17833,7 +17834,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
         weight: initialProfile.weight || prev.weight,
         heightFeet: initialProfile.heightFeet || prev.heightFeet,
         heightInches: initialProfile.heightInches || prev.heightInches,
-        lastProfileSaveDate: initialProfile.lastProfileSaveDate || prev.lastProfileSaveDate
+        lastProfileSaveDate: initialProfile.lastProfileSaveDate || prev.lastProfileSaveDate,
+        statusBubble: initialProfile.statusBubble || prev.statusBubble || ''
       }));
     }
   }, [initialProfile]);
@@ -18228,6 +18230,20 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
                         )}
                       </div>
                     )}
+                  </div>
+
+                  {/* Status Bubble Input */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">Profile Status Speech Bubble</label>
+                    <input 
+                      type="text"
+                      maxLength={40}
+                      placeholder="e.g. How's your morning? or Ready to donate!"
+                      value={formData.statusBubble || ''}
+                      onChange={(e) => setFormData({ ...formData, statusBubble: e.target.value })}
+                      className="w-full bg-transparent border-b border-slate-300 py-1.5 text-xs font-semibold text-slate-800 outline-none focus:border-[#FF1744] transition-all placeholder:text-slate-400"
+                    />
+                    <span className="block text-[9px] text-slate-400 leading-tight">This message will appear in a speech bubble directly floating above your avatar, exactly like a Telegram status! (Max 40 chars)</span>
                   </div>
 
                   {/* Gender Selection */}
@@ -21269,6 +21285,36 @@ function UserProfileHistory({ donations, requests, currentUser, currentProfile, 
   );
 }
 
+function getStatusBubbleMessage(p: UserProfile) {
+  const hour = new Date().getHours();
+  let timeGreeting = "How's your morning?";
+  if (hour >= 12 && hour < 17) {
+    timeGreeting = "How's your afternoon?";
+  } else if (hour >= 17 || hour < 4) {
+    timeGreeting = "How's your evening?";
+  }
+
+  if (p.isAvailable) {
+    const charCodeSum = p.uid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const messages = [
+      timeGreeting,
+      "Ready to donate! 🩸",
+      "Let's save a life today! ❤️",
+      "Voluntary donor active! 🌟",
+      "I am available to help. 🙌"
+    ];
+    return messages[charCodeSum % messages.length];
+  } else {
+    if (p.nextDonationEligibility) {
+      const daysLeft = Math.ceil((new Date(p.nextDonationEligibility).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft > 0) {
+        return `Eligible again in ${daysLeft} days! 🗓️`;
+      }
+    }
+    return "Supporting voluntary donation! ✨";
+  }
+}
+
 interface OwnUserProfileViewProps {
   user: FirebaseUser;
   profile: UserProfile | null;
@@ -21351,11 +21397,38 @@ function OwnUserProfileView({
         onChange={handleDirectPhotoChange} 
       />
 
-      {/* Navigation Top Bar */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-2 relative z-10">
+      {/* Red Blood Cover Banner */}
+      <div className="w-full h-36 bg-gradient-to-r from-[#ff1744] via-[#ff2a55] to-[#d50000] relative overflow-hidden shrink-0 select-none">
+        {/* Decorative blood-theme elements */}
+        <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'radial-gradient(circle, white 10%, transparent 10%)', backgroundSize: '16px 16px' }} />
+        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+        <div className="absolute top-10 left-12 w-16 h-16 bg-white/5 rounded-full blur-lg" />
+        
+        {/* Pulse trace/wave or heart rate curve */}
+        <div className="absolute bottom-5 left-0 right-0 opacity-20">
+          <svg className="w-full h-8" viewBox="0 0 400 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 15 H140 L146 5 L152 25 L158 15 H174 L180 8 L186 22 L192 15 H400" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+
+        {/* Small floating droplets outline icons */}
+        <div className="absolute top-4 right-16 opacity-30 animate-pulse">
+          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+          </svg>
+        </div>
+        <div className="absolute top-12 left-6 opacity-20">
+          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Navigation Top Bar - Overlay on top of red banner */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-2 absolute top-0 left-0 right-0 z-20">
         <button 
           onClick={onBack}
-          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md hover:bg-white border border-white/20 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
         </button>
@@ -21363,7 +21436,7 @@ function OwnUserProfileView({
         <div className="relative">
           <button 
             onClick={() => setShowOptions(!showOptions)}
-            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md hover:bg-white border border-white/20 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
           >
             <MoreVertical className="w-5 h-5 stroke-[2.2]" />
           </button>
@@ -21396,13 +21469,26 @@ function OwnUserProfileView({
         </div>
       </div>
 
-      {/* Profile Header Area */}
-      <div className="flex flex-col items-center px-6 pt-4 pb-2">
+      {/* Profile Header Area - Overlapping Cover with negative margin */}
+      <div className="flex flex-col items-center px-6 -mt-14 relative z-10">
+        
+        {/* Dynamic Status Speech Bubble */}
+        <div className="mb-2 relative animate-bounce [animation-duration:5s] z-20">
+          <div className="bg-white px-4 py-1.5 rounded-2xl shadow-md border border-slate-100/80 text-slate-700 text-xs font-semibold text-center select-none max-w-xs relative flex items-center gap-1.5 whitespace-nowrap">
+            {profile.isAvailable ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            ) : null}
+            <span>{profile.statusBubble || getStatusBubbleMessage(profile)}</span>
+          </div>
+          {/* Bubble tail */}
+          <div className="absolute left-1/2 -bottom-1 w-2.5 h-2.5 bg-white rotate-45 border-r border-b border-slate-100/80 shadow-3xs -translate-x-1/2" />
+        </div>
+
         {/* Centered Large Avatar with Edit overlay */}
         <div className="relative select-none">
           <div 
             onClick={() => directFileInputRef.current?.click()}
-            className="w-28 h-28 rounded-full overflow-hidden shadow-md border-2 border-white cursor-pointer group relative"
+            className="w-28 h-28 rounded-full overflow-hidden shadow-md border-2 border-white cursor-pointer group relative bg-white"
           >
             {profile.photoURL ? (
               <img 
@@ -21846,11 +21932,38 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       exit={{ opacity: 0, y: -15 }}
       className="w-full max-w-[430px] md:max-w-md mx-auto bg-[#F4F4F7] min-h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-12 flex flex-col"
     >
-      {/* Navigation Top Bar */}
-      <div className="flex items-center justify-between px-6 pt-6 pb-2 relative z-10">
+      {/* Red Blood Cover Banner */}
+      <div className="w-full h-36 bg-gradient-to-r from-[#ff1744] via-[#ff2a55] to-[#d50000] relative overflow-hidden shrink-0 select-none">
+        {/* Decorative blood-theme elements */}
+        <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'radial-gradient(circle, white 10%, transparent 10%)', backgroundSize: '16px 16px' }} />
+        <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/10 rounded-full blur-xl" />
+        <div className="absolute top-10 left-12 w-16 h-16 bg-white/5 rounded-full blur-lg" />
+        
+        {/* Pulse trace/wave or heart rate curve */}
+        <div className="absolute bottom-5 left-0 right-0 opacity-20">
+          <svg className="w-full h-8" viewBox="0 0 400 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0 15 H140 L146 5 L152 25 L158 15 H174 L180 8 L186 22 L192 15 H400" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+
+        {/* Small floating droplets outline icons */}
+        <div className="absolute top-4 right-16 opacity-30 animate-pulse">
+          <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+          </svg>
+        </div>
+        <div className="absolute top-12 left-6 opacity-20">
+          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+          </svg>
+        </div>
+      </div>
+
+      {/* Navigation Top Bar - Overlay on top of red banner */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-2 absolute top-0 left-0 right-0 z-20">
         <button 
           onClick={onBack}
-          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+          className="w-10 h-10 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md hover:bg-white border border-white/20 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5 stroke-[2.2]" />
         </button>
@@ -21858,7 +21971,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         <div className="relative">
           <button 
             onClick={() => setShowOptionsMenu(!showOptionsMenu)}
-            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/85 hover:bg-white border border-slate-100 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-white/80 backdrop-blur-md hover:bg-white border border-white/20 text-slate-700 shadow-3xs active:scale-95 transition-all cursor-pointer"
           >
             <MoreVertical className="w-5 h-5 stroke-[2.2]" />
           </button>
@@ -21899,15 +22012,28 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         </div>
       </div>
 
-      {/* Profile Header Area */}
-      <div className="flex flex-col items-center px-6 pt-4 pb-2">
+      {/* Profile Header Area - Overlapping Cover with negative margin */}
+      <div className="flex flex-col items-center px-6 -mt-14 relative z-10">
+        
+        {/* Dynamic Status Speech Bubble */}
+        <div className="mb-2 relative animate-bounce [animation-duration:5s] z-20">
+          <div className="bg-white px-4 py-1.5 rounded-2xl shadow-md border border-slate-100/80 text-slate-700 text-xs font-semibold text-center select-none max-w-xs relative flex items-center gap-1.5 whitespace-nowrap">
+            {profile.isAvailable ? (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            ) : null}
+            <span>{profile.statusBubble || getStatusBubbleMessage(profile)}</span>
+          </div>
+          {/* Bubble tail */}
+          <div className="absolute left-1/2 -bottom-1 w-2.5 h-2.5 bg-white rotate-45 border-r border-b border-slate-100/80 shadow-3xs -translate-x-1/2" />
+        </div>
+
         {/* Centered Large Avatar */}
         <div className="relative select-none">
           {profile.photoURL ? (
             <img 
               src={profile.photoURL} 
               alt={profile.displayName}
-              className="w-28 h-28 rounded-full object-cover shadow-md border-2 border-white"
+              className="w-28 h-28 rounded-full object-cover shadow-md border-2 border-white bg-white"
               referrerPolicy="no-referrer"
             />
           ) : (
