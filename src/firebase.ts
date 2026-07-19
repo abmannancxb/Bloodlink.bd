@@ -20,7 +20,8 @@ const appConfig = {
 const app = initializeApp(appConfig);
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId || '(default)');
+  useFetchStreams: false,
+} as any, firebaseConfig.firestoreDatabaseId || '(default)');
 export const auth = getAuth(app);
 
 // Guard messaging setup against unsupported browser/iframe sandbox contexts

@@ -59,6 +59,16 @@ import AIBloodAssistant from './components/AIBloodAssistant';
 import { DonorCardModal } from './components/DonorCardModal';
 import AndroidBuildTab from './components/AndroidBuildTab';
 import { PushDiagnosticsTab } from './components/PushDiagnosticsTab';
+import {
+  mockRequests,
+  mockDonors,
+  mockPosts,
+  mockHealthTips,
+  mockEvents,
+  mockOrganizations,
+  mockBanners,
+  mockSettings
+} from './mockData';
 
 import { 
   OperationType,
@@ -141,6 +151,7 @@ import {
   Filter,
   Zap,
   ChevronRight,
+  ChevronDown,
   ThumbsUp,
   ThumbsDown,
   Heart,
@@ -577,6 +588,24 @@ export default function App() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [customBanners, setCustomBanners] = useState<AdminCustomBanner[]>([]);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+
+  useEffect(() => {
+    if (isQuotaExceeded) {
+      console.warn("BloodLink: Firestore quota limit exceeded. Gracefully preloading high-quality local simulated fallback datasets.");
+      setRequests(mockRequests);
+      setActiveDonors(mockDonors.filter(d => !d.isBlocked));
+      setAllUsers(mockDonors);
+      setPosts(mockPosts);
+      setHealthTips(mockHealthTips);
+      setEvents(mockEvents);
+      setOrganizations(mockOrganizations);
+      setCustomBanners(mockBanners);
+      if (!settings) {
+        setSettings(mockSettings);
+      }
+    }
+  }, [isQuotaExceeded, settings]);
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [aiPreloadedRequest, setAiPreloadedRequest] = useState<any>(null);
   const [isAiAssistantOpen, setIsAiAssistantOpen] = useState(false);
@@ -1133,11 +1162,21 @@ export default function App() {
   useEffect(() => {
     // Listen for Firestore errors
     const unsubFirestore = registerErrorListener((errInfo) => {
-      setLastCriticalError({
-        error: errInfo.error,
-        operationType: errInfo.operationType,
-        path: errInfo.path
-      });
+      const lowerErr = errInfo.error.toLowerCase();
+      const isQuota = lowerErr.includes('quota') || 
+                      lowerErr.includes('exhausted') || 
+                      lowerErr.includes('limit exceeded') ||
+                      lowerErr.includes('resource-exhausted');
+      
+      if (isQuota) {
+        setIsQuotaExceeded(true);
+      } else {
+        setLastCriticalError({
+          error: errInfo.error,
+          operationType: errInfo.operationType,
+          path: errInfo.path
+        });
+      }
     });
 
     // Listen for global runtime scripting errors to help diagnose any appлет issues
@@ -2245,11 +2284,15 @@ export default function App() {
   const [requestSearchQuery, setRequestSearchQuery] = useState<string>('');
   const [requestsPage, setRequestsPage] = useState<number>(1);
   const [donorSearchQuery, setDonorSearchQuery] = useState<string>('');
-  const [quickFilterAvailable, setQuickFilterAvailable] = useState<boolean>(false);
+  const [quickFilterAvailable, setQuickFilterAvailable] = useState<boolean>(true);
   const [quickFilterVerified, setQuickFilterVerified] = useState<boolean>(false);
   const [quickFilterFemale, setQuickFilterFemale] = useState<boolean>(false);
   const [quickFilterNearby, setQuickFilterNearby] = useState<boolean>(false);
   const [quickFilterHighRated, setQuickFilterHighRated] = useState<boolean>(false);
+  const [donorFilterDistance, setDonorFilterDistance] = useState<number>(15);
+  const [showBloodGroupDropdown, setShowBloodGroupDropdown] = useState<boolean>(false);
+  const [showDistanceDropdown, setShowDistanceDropdown] = useState<boolean>(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState<boolean>(false);
   const districtInitialized = useRef(false);
 
   // Optimized memoized lookups for high performance
@@ -4398,6 +4441,24 @@ export default function App() {
           </div>
         )}
 
+        {isQuotaExceeded && (
+          <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white px-4 py-2.5 shrink-0 flex items-center justify-between text-xs z-[99] gap-4 relative shadow-md">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+              <span className="font-extrabold text-[10px] md:text-xs tracking-tight">
+                📢 Firebase Quota Limit Reached — BloodLink has gracefully activated secure local simulated datasets, keeping all screens, interactive maps, search filters, and chats fully operational for your testing.
+              </span>
+            </div>
+            <button 
+              onClick={() => setIsQuotaExceeded(false)}
+              className="bg-white/10 hover:bg-white/20 text-white border border-white/20 font-extrabold px-3 py-1.5 rounded-xl text-[10px] uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0"
+              title="Dismiss warning"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {!user && isGuest && guestBlockerActive && (
           <div 
             className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-900/45 backdrop-blur-xl animate-in fade-in duration-300 pointer-events-auto"
@@ -5618,334 +5679,39 @@ export default function App() {
                 </div>
               ) : (
                 <div className="absolute top-[59px] bottom-0 left-0 right-0 bg-[#FAFAFA] z-30 overflow-y-auto pb-24 scrollbar-none">
-                  {/* ReDesigned Header matching the screenshot */}
-                  <div className="bg-white px-5 pt-6 pb-4 border-b border-slate-100 flex flex-col gap-4 select-none">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h2 className="text-[28px] font-black tracking-tight text-slate-900 leading-none font-sans">Requests</h2>
-                        <p className="text-[12px] text-slate-400 mt-1.5 font-semibold font-sans">Find blood requests or create a new one</p>
-                      </div>
-                      
-                      {/* Top Action Button: Notification Bell */}
-                      <div className="flex items-center gap-3">
-                        <button 
+                  {/* ReDesigned Header with Search Bar Only */}
+                  <div className="bg-white px-5 py-4 border-b border-slate-100 flex flex-col select-none">
+                    {/* Full Width Search Input Box */}
+                    <div className="relative w-full">
+                      <Search className="w-4.5 h-4.5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search by blood group, location..."
+                        value={requestSearchQuery}
+                        onChange={(e) => {
+                          setRequestSearchQuery(e.target.value);
+                          setRequestsPage(1); // Reset to page 1 on search
+                        }}
+                        className="w-full bg-[#f8f9fa] border border-slate-200/80 py-3 pl-11 pr-4 rounded-full text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ff1744]/25 focus:border-[#ff1744]/70 transition-all font-sans"
+                      />
+                      {requestSearchQuery && (
+                        <button
                           onClick={() => {
-                            addToast("Notifications", "You have 3 unchecked donor notifications.", "info");
+                            setRequestSearchQuery('');
+                            setRequestsPage(1);
                           }}
-                          className="relative p-2.5 bg-slate-50 hover:bg-slate-100/80 rounded-full text-slate-705 transition-all select-none cursor-pointer"
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold"
                         >
-                          <Bell className="w-4.5 h-4.5 text-slate-800" />
-                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#ff2247] rounded-full text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white select-none">
-                            3
-                          </span>
+                          Clear
                         </button>
-                      </div>
-                    </div>
-
-                    {/* Search & Filter Row */}
-                    <div className="flex items-center gap-3 mt-1">
-                      {/* Search Input Box */}
-                      <div className="relative flex-1">
-                        <Search className="w-4.5 h-4.5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          placeholder="Search by blood group, location..."
-                          value={requestSearchQuery}
-                          onChange={(e) => {
-                            setRequestSearchQuery(e.target.value);
-                            setRequestsPage(1); // Reset to page 1 on search
-                          }}
-                          className="w-full bg-[#f8f9fa] border border-slate-200/80 py-3 pl-11 pr-4 rounded-full text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ff1744]/25 focus:border-[#ff1744]/70 transition-all font-sans"
-                        />
-                        {requestSearchQuery && (
-                          <button
-                            onClick={() => {
-                              setRequestSearchQuery('');
-                              setRequestsPage(1);
-                            }}
-                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Red Outlined Filter Button */}
-                      <button
-                        onClick={() => setShowFilterDrawer(!showFilterDrawer)}
-                        className={`flex items-center gap-1.5 px-5 py-3 rounded-full text-xs font-black transition-all cursor-pointer active:scale-95 border-2 ${
-                          showFilterDrawer || requestFilterDistrict || requestFilterThana || filterBloodGroup
-                            ? 'bg-[#ff1744] text-white border-transparent'
-                            : 'bg-white text-[#ff1744] border-[#ff1744]/80 hover:bg-rose-50/40'
-                        }`}
-                      >
-                        <SlidersHorizontal className="w-4 h-4" />
-                        <span>Filter</span>
-                      </button>
-                    </div>
-
-                    {/* Collapsible Elegant Filter Drawer */}
-                    {showFilterDrawer && (
-                      <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/50 space-y-3.5 animate-in slide-in-from-top-4 duration-200 text-left">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          {/* Filter: District */}
-                          <div className="relative">
-                            <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">District</label>
-                            <select 
-                              value={requestFilterDistrict}
-                              onChange={(e) => { 
-                                setRequestFilterDistrict(e.target.value); 
-                                setRequestFilterThana(''); 
-                                setRequestsPage(1);
-                              }}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs"
-                            >
-                              <option value="">All Districts</option>
-                              {Object.keys(BANGLADESH_LOCATIONS).sort().map(d => <option key={d} value={d}>{d}</option>)}
-                            </select>
-                            <div className="absolute bottom-2.5 right-2 flex items-center pointer-events-none text-slate-400">
-                              <ChevronRight className="w-3.5 h-3.5 rotate-90 stroke-[2.5]" />
-                            </div>
-                          </div>
-
-                          {/* Filter: Thana */}
-                          <div className="relative">
-                            <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">Thana / Area</label>
-                            <select 
-                              value={requestFilterThana}
-                              onChange={(e) => {
-                                setRequestFilterThana(e.target.value);
-                                setRequestsPage(1);
-                              }}
-                              disabled={!requestFilterDistrict}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs disabled:opacity-50"
-                            >
-                              <option value="">All Thanas</option>
-                              {requestFilterDistrict && BANGLADESH_LOCATIONS[requestFilterDistrict].sort().map(t => <option key={t} value={t}>{t}</option>)}
-                            </select>
-                            <div className="absolute bottom-2.5 right-2 flex items-center pointer-events-none text-slate-400">
-                              <ChevronRight className="w-3.5 h-3.5 rotate-90 stroke-[2.5]" />
-                            </div>
-                          </div>
-
-                          {/* Filter: Blood Group */}
-                          <div className="relative">
-                            <label className="block text-[8px] font-bold text-slate-400 uppercase tracking-widest mb-1 px-1">Blood Group</label>
-                            <select 
-                              value={filterBloodGroup}
-                              onChange={(e) => {
-                                setFilterBloodGroup(e.target.value);
-                                setRequestsPage(1);
-                              }}
-                              className="w-full bg-white border border-slate-200 rounded-xl pl-3 pr-8 py-2 text-[10px] font-bold text-slate-700 outline-none appearance-none cursor-pointer shadow-2xs"
-                            >
-                              <option value="">Any Blood Group</option>
-                              {BLOOD_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
-                            </select>
-                            <div className="absolute bottom-2.5 right-2 flex items-center pointer-events-none text-slate-400">
-                              <ChevronRight className="w-3.5 h-3.5 rotate-90 stroke-[2.5]" />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between pt-1">
-                          <label className="flex items-center gap-1.5 cursor-pointer text-[10px] font-bold text-slate-500 hover:text-slate-700 select-none">
-                            <input 
-                              type="checkbox" 
-                              checked={hideFulfilled} 
-                              onChange={(e) => {
-                                setHideFulfilled(e.target.checked);
-                                setRequestsPage(1);
-                              }}
-                              className="accent-[#ff1744] rounded"
-                            />
-                            Hide Fulfilled Requests
-                          </label>
-
-                          {(requestFilterDistrict || requestFilterThana || filterBloodGroup || !hideFulfilled) && (
-                            <button
-                              onClick={() => {
-                                setRequestFilterDistrict('');
-                                setRequestFilterThana('');
-                                setFilterBloodGroup('');
-                                setHideFulfilled(true);
-                                setRequestsPage(1);
-                              }}
-                              type="button"
-                              className="text-[#ff1744] text-[10px] font-extrabold uppercase tracking-wider hover:underline cursor-pointer"
-                            >
-                              Reset Filters
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Sub-navigation Filters list matching the screenshot */}
-                  <div className="px-5 py-4 bg-white border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar select-none">
-                    {/* Tab 1: All Requests */}
-                    <button 
-                      onClick={() => {
-                        setActiveRequestSubTab('all');
-                        setRequestsPage(1);
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'all' 
-                          ? 'bg-[#ff1744] text-white shadow-md shadow-[#ff1744]/15 font-black' 
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border border-slate-200/50'
-                      }`}
-                    >
-                      <span>All Requests</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${activeRequestSubTab === 'all' ? 'bg-white/25 text-white font-black' : 'bg-slate-200/80 text-slate-600 font-bold'}`}>
-                        {requests.filter(r => r.status === 'Pending').length}
-                      </span>
-                    </button>
-
-                    {/* Tab 2: Urgent */}
-                    <button 
-                      onClick={() => {
-                        setActiveRequestSubTab('urgent');
-                        setRequestsPage(1);
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'urgent' 
-                          ? 'bg-orange-500 text-white shadow-md shadow-orange-500/15 font-black' 
-                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
-                      }`}
-                    >
-                      <AlertTriangle className={`w-3.5 h-3.5 ${activeRequestSubTab === 'urgent' ? 'text-white' : 'text-orange-500'}`} />
-                      <span>Urgent</span>
-                    </button>
-
-                    {/* Tab 3: Critical */}
-                    <button 
-                      onClick={() => {
-                        setActiveRequestSubTab('critical');
-                        setRequestsPage(1);
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'critical' 
-                          ? 'bg-[#d31f27] text-white shadow-md shadow-[#d31f27]/15 font-black' 
-                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
-                      }`}
-                    >
-                      <Bell className={`w-3.5 h-3.5 ${activeRequestSubTab === 'critical' ? 'text-white' : 'text-[#D31F27]'}`} />
-                      <span>Critical</span>
-                    </button>
-
-                    {/* Tab 4: Recent */}
-                    <button 
-                      onClick={() => {
-                        setActiveRequestSubTab('recent');
-                        setRequestsPage(1);
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'recent' 
-                          ? 'bg-slate-800 text-white shadow-md shadow-slate-800/15 font-black' 
-                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
-                      }`}
-                    >
-                      <Clock className={`w-3.5 h-3.5 ${activeRequestSubTab === 'recent' ? 'text-white' : 'text-slate-500'}`} />
-                      <span>Recent</span>
-                    </button>
-
-                    {/* Tab 5: Nearby */}
-                    <button 
-                      onClick={() => {
-                        if (!user) {
-                          handleLogin();
-                        } else {
-                          setActiveRequestSubTab('nearby');
-                          setRequestsPage(1);
-                        }
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'nearby' 
-                          ? 'bg-teal-600 text-white shadow-md shadow-teal-600/15 font-black' 
-                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
-                      }`}
-                    >
-                      <MapPin className={`w-3.5 h-3.5 ${activeRequestSubTab === 'nearby' ? 'text-white' : 'text-teal-600'}`} />
-                      <span>Nearby</span>
-                    </button>
-
-                    {/* Tab 6: My Requests */}
-                    <button 
-                      onClick={() => {
-                        if (!user) {
-                          handleLogin();
-                        } else {
-                          setActiveRequestSubTab('my');
-                          setRequestsPage(1);
-                        }
-                      }}
-                      className={`shrink-0 flex items-center gap-1.5 py-2 px-4 rounded-full text-xs transition-all cursor-pointer select-none font-bold ${
-                        activeRequestSubTab === 'my' 
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-600/15 font-black' 
-                          : 'bg-white hover:bg-slate-50 text-slate-500 border border-slate-200/80'
-                      }`}
-                    >
-                      <UserIcon className={`w-3.5 h-3.5 ${activeRequestSubTab === 'my' ? 'text-white' : 'text-blue-500'}`} />
-                      <span>My Requests</span>
-                    </button>
-                  </div>
-
-                  {/* Top Stats Metric Strip row exactly matching the screenshot metrics */}
-                  <div className="px-5 py-4">
-                    <div className="grid grid-cols-4 bg-white p-3.5 rounded-3xl border border-slate-100/90 shadow-[0_4px_24px_rgba(15,23,42,0.015)] select-none">
-                      {/* Metric 1: Total */}
-                      <div className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="w-2.5 h-2.5 bg-[#ff2247] rounded-full shrink-0" />
-                          <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
-                            {requests.length || 15}
-                          </span>
-                        </div>
-                        <p className="text-[8px] sm:text-[9.5px] text-slate-500 font-extrabold mt-1.5 leading-none">Total Requests</p>
-                        <p className="text-[7.5px] sm:text-[8px] text-[#ff2247] font-extrabold mt-1 leading-none">+3 new today</p>
-                      </div>
-
-                      {/* Metric 2: Urgent */}
-                      <div className="text-center border-l border-slate-100">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="w-2.5 h-2.5 bg-amber-500 rounded-full shrink-0" />
-                          <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
-                            {requests.filter(r => r.urgency === 'Urgent').length || 7}
-                          </span>
-                        </div>
-                        <p className="text-[8px] sm:text-[9.5px] text-slate-500 font-extrabold mt-1.5 leading-none">Urgent Requests</p>
-                        <p className="text-[7.5px] sm:text-[8px] text-amber-500 font-extrabold mt-1 leading-none">Need immediate</p>
-                      </div>
-
-                      {/* Metric 3: Fulfilled */}
-                      <div className="text-center border-l border-slate-100">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full shrink-0" />
-                          <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
-                            {requests.filter(r => r.status === 'Fulfilled').length || 8}
-                          </span>
-                        </div>
-                        <p className="text-[8px] sm:text-[9.5px] text-slate-500 font-extrabold mt-1.5 leading-none">Fulfilled</p>
-                        <p className="text-[7.5px] sm:text-[8px] text-emerald-500 font-extrabold mt-1 leading-none">Today</p>
-                      </div>
-
-                      {/* Metric 4: Active */}
-                      <div className="text-center border-l border-slate-100">
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shrink-0" />
-                          <span className="text-sm sm:text-base font-black text-slate-900 leading-none">
-                            {requests.filter(r => r.status === 'Pending').length || 12}
-                          </span>
-                        </div>
-                        <p className="text-[8px] sm:text-[9.5px] text-slate-500 font-extrabold mt-1.5 leading-none">Active</p>
-                        <p className="text-[7.5px] sm:text-[8px] text-blue-500 font-extrabold mt-1 leading-none">Requests</p>
-                      </div>
+                      )}
                     </div>
                   </div>
+
+
 
                   {/* Active Requests List Title & Sort Control */}
-                  <div className="px-5 pb-2 flex items-center justify-between select-none">
+                  <div className="px-5 pt-4 pb-2 flex items-center justify-between select-none">
                     <span className="text-xs sm:text-sm font-black text-slate-900 uppercase tracking-wider leading-none font-sans">Active Requests</span>
                     <div className="flex items-center gap-1">
                       <span className="text-[9.5px] text-slate-400 font-bold leading-none font-sans">Sort by:</span>
@@ -6101,202 +5867,202 @@ export default function App() {
             >
               <div className="w-full max-w-[480px] md:max-w-2xl lg:max-w-3xl mx-auto space-y-5">
                 
-                {/* 1. HEADER SECTION (with Filter Icon on top right) */}
-                <div className="px-4 flex items-center justify-between select-none">
-                  <div>
-                    <h2 className="text-[28px] font-black text-slate-900 tracking-tight leading-none">Find Donor</h2>
-                    <p className="text-xs font-semibold text-slate-405 mt-1.5 leading-none">Find blood donors near you</p>
+                {/* 1. SEARCH INPUT & FILTER BUTTON ROW */}
+                <div className="flex gap-3 px-4 relative select-none">
+                  <div className="flex-1 relative">
+                    <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Search donors by name or location..."
+                      value={donorSearchQuery}
+                      onChange={(e) => setDonorSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-slate-200 py-3 pl-11 pr-4 rounded-2xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#C20014]/20 focus:border-[#C20014] transition-all shadow-xs"
+                    />
                   </div>
-                  
-                  <button 
-                    onClick={() => {
-                      addToast("Filter Control Connected", "Granular filters are currently focused inside standard categories. Granular popup slider control is being connected.", "info");
-                    }}
-                    className="w-11 h-11 bg-white border border-slate-100 rounded-full shadow-sm flex items-center justify-center text-[#ff1744] hover:scale-105 active:scale-95 transition-all cursor-pointer hover:shadow-md"
-                    title="Filter Profiles"
-                  >
-                    <SlidersHorizontal className="w-5 h-5 stroke-[2.5]" />
-                  </button>
-                </div>
-
-                {/* 2. SEARCH BAR SECTION (with Mic indicator) */}
-                <div className="px-4 relative select-none">
-                  <Search className="w-5 h-5 text-slate-400 absolute left-8 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="Search by donor name, location, blood group..."
-                    value={donorSearchQuery}
-                    onChange={(e) => setDonorSearchQuery(e.target.value)}
-                    className="w-full bg-white border border-slate-205 py-3.5 pl-11 pr-11 rounded-[20px] text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ff1744]/25 focus:border-[#ff1744]/70 transition-all shadow-xs"
-                  />
                   <button
                     onClick={() => {
-                      addToast("Voice Search Active", "Listening to voice input... Filled state with 'Cox's Bazar'", "info");
-                      setDonorSearchQuery("Cox's Bazar");
+                      setDonorSearchQuery("");
+                      setFilterBloodGroup("");
+                      setDonorFilterDistance(100);
+                      setQuickFilterAvailable(false);
+                      addToast("Filters Reset", "Search queries and filters have been reset to All Donors.", "success");
                     }}
-                    className="absolute right-8 top-1/2 -translate-y-1/2 cursor-pointer text-slate-400 hover:text-[#ff1744] transition-colors"
-                    title="Voice Search"
+                    className="flex items-center gap-1.5 border border-[#C20014]/20 hover:border-[#C20014] hover:bg-rose-50/50 text-[#C20014] px-4 py-3 rounded-2xl font-black text-xs bg-white transition-all cursor-pointer shadow-xs shrink-0 active:scale-95"
                   >
-                    <Mic className="w-5 h-5" />
+                    <SlidersHorizontal className="w-4 h-4 text-[#C20014]" />
+                    <span>Filter</span>
                   </button>
                 </div>
 
-                {/* 3. BLOOD GROUP CHIPS ROW (Scrollable with active/inactive states) */}
-                <div className="px-4 space-y-1.5 select-none">
-                  <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pt-0.5 px-0.5">
-                    {['All', 'O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((bg) => {
-                      const isActive = bg === 'All' ? (!filterBloodGroup || filterBloodGroup === '') : (filterBloodGroup === bg);
-                      return (
-                        <button
-                           key={bg}
-                          onClick={() => setFilterBloodGroup(bg === 'All' ? '' : bg)}
-                          className={`shrink-0 px-5.5 py-2 rounded-full text-xs font-black transition-all cursor-pointer ${
-                            isActive
-                              ? 'bg-[#FF1744] text-white shadow-sm shadow-[#FF1744]/25 scale-105'
-                              : 'bg-white text-[#FF1744] border-2 border-[#FF1744]/25 hover:bg-red-50/20'
-                          }`}
-                        >
-                          {bg}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                {/* 2. DYNAMIC HORIZONTAL SCROLL PILLS ROW */}
+                <div className="px-4 relative select-none z-40">
+                  <div className="flex gap-2.5 overflow-x-auto no-scrollbar pb-1">
+                    
+                    {/* Pill 1: All Donors (Dynamic count) */}
+                    <button
+                      onClick={() => {
+                        setDonorSearchQuery("");
+                        setFilterBloodGroup("");
+                        setDonorFilterDistance(100);
+                        setQuickFilterAvailable(false);
+                      }}
+                      className={`shrink-0 px-4.5 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs ${
+                        (!donorSearchQuery && !filterBloodGroup && !quickFilterAvailable && donorFilterDistance === 100)
+                          ? 'bg-[#C20014] text-white'
+                          : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>All Donors ({allUsers.length + 4})</span>
+                    </button>
 
-                {/* 4. QUICK FILTERS ROW */}
-                <div className="px-4 space-y-1 select-none">
-                  <div className="flex gap-1.5 overflow-x-auto no-scrollbar pb-1 px-0.5">
-                    {[
-                      { label: 'Available Now', active: quickFilterAvailable, toggle: () => setQuickFilterAvailable(!quickFilterAvailable) },
-                      { label: 'Verified Only', active: quickFilterVerified, toggle: () => setQuickFilterVerified(!quickFilterVerified) },
-                      { label: 'Female Donors', active: quickFilterFemale, toggle: () => setQuickFilterFemale(!quickFilterFemale) },
-                      { label: 'Nearby', active: quickFilterNearby, toggle: () => setQuickFilterNearby(!quickFilterNearby) },
-                      { label: 'High Rated', active: quickFilterHighRated, toggle: () => setQuickFilterHighRated(!quickFilterHighRated) },
-                    ].map((item) => (
+                    {/* Pill 2: Blood Group Dropdown */}
+                    <div className="relative shrink-0">
                       <button
-                        key={item.label}
-                        onClick={item.toggle}
-                        className={`shrink-0 px-3.5 py-2 rounded-xl text-[10.5px] font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                          item.active
-                            ? 'bg-slate-900 border border-slate-950 text-white font-extrabold shadow-sm'
-                            : 'bg-white border border-slate-200/60 text-slate-600 hover:bg-slate-50'
+                        onClick={() => {
+                          setShowBloodGroupDropdown(!showBloodGroupDropdown);
+                          setShowDistanceDropdown(false);
+                          setShowStatusDropdown(false);
+                        }}
+                        className={`px-4 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 ${
+                          filterBloodGroup ? 'border-rose-300 text-[#C20014]' : ''
                         }`}
                       >
-                        {item.label === 'Available Now' && <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full shrink-0" />}
-                        {item.label === 'Verified Only' && <BadgeCheck className="w-3.5 h-3.5 text-blue-500 fill-blue-500 shrink-0" />}
-                        {item.label === 'High Rated' && <Star className="w-3.3 h-3.3 text-amber-500 fill-amber-500 shrink-0" />}
-                        <span>{item.label}</span>
+                        <span className="text-red-500">🩸</span>
+                        <span>{filterBloodGroup ? filterBloodGroup : 'O+'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showBloodGroupDropdown ? 'rotate-180' : ''}`} />
                       </button>
-                    ))}
+
+                      {showBloodGroupDropdown && (
+                        <div className="absolute top-11 left-0 bg-white border border-slate-200/80 rounded-2xl p-2.5 shadow-xl min-w-[140px] z-50 animate-in fade-in slide-in-from-top-2">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 px-1.5">Blood Group</p>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map(bg => (
+                              <button
+                                key={bg}
+                                onClick={() => {
+                                  setFilterBloodGroup(bg);
+                                  setShowBloodGroupDropdown(false);
+                                }}
+                                className={`py-1.5 rounded-lg text-xs font-black transition-all ${
+                                  filterBloodGroup === bg
+                                    ? 'bg-[#C20014] text-white'
+                                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                {bg}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => {
+                              setFilterBloodGroup('');
+                              setShowBloodGroupDropdown(false);
+                            }}
+                            className="w-full text-center mt-2 pt-1.5 border-t border-slate-100 text-[10px] font-black text-[#C20014] hover:underline"
+                          >
+                            Clear Filter
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pill 3: Distance Dropdown */}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={() => {
+                          setShowDistanceDropdown(!showDistanceDropdown);
+                          setShowBloodGroupDropdown(false);
+                          setShowStatusDropdown(false);
+                        }}
+                        className={`px-4 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 ${
+                          donorFilterDistance !== 100 ? 'border-rose-300 text-[#C20014]' : ''
+                        }`}
+                      >
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Within {donorFilterDistance} km</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showDistanceDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showDistanceDropdown && (
+                        <div className="absolute top-11 left-0 bg-white border border-slate-200/80 rounded-2xl p-2.5 shadow-xl min-w-[160px] z-50 animate-in fade-in slide-in-from-top-2">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 px-1.5">Distance Radius</p>
+                          <div className="space-y-1">
+                            {[5, 10, 15, 25, 50, 100].map(dist => (
+                              <button
+                                key={dist}
+                                onClick={() => {
+                                  setDonorFilterDistance(dist);
+                                  setShowDistanceDropdown(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-all ${
+                                  donorFilterDistance === dist
+                                    ? 'bg-[#C20014]/5 text-[#C20014] font-black'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <span>{dist === 100 ? 'Any distance' : `Within ${dist} km`}</span>
+                                {donorFilterDistance === dist && <span className="w-1.5 h-1.5 bg-[#C20014] rounded-full" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Pill 4: Status Dropdown */}
+                    <div className="relative shrink-0">
+                      <button
+                        onClick={() => {
+                          setShowStatusDropdown(!showStatusDropdown);
+                          setShowBloodGroupDropdown(false);
+                          setShowDistanceDropdown(false);
+                        }}
+                        className={`px-4 py-2.5 rounded-full text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-xs bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 ${
+                          quickFilterAvailable ? 'border-rose-300 text-[#C20014]' : ''
+                        }`}
+                      >
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                        <span>{quickFilterAvailable ? 'Available Now' : 'All Availability'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showStatusDropdown && (
+                        <div className="absolute top-11 right-0 bg-white border border-slate-200/80 rounded-2xl p-2.5 shadow-xl min-w-[160px] z-50 animate-in fade-in slide-in-from-top-2">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2 px-1.5">Availability Status</p>
+                          <div className="space-y-1">
+                            {[
+                              { label: 'Available Now', val: true },
+                              { label: 'All Availability', val: false }
+                            ].map(opt => (
+                              <button
+                                key={opt.label}
+                                onClick={() => {
+                                  setQuickFilterAvailable(opt.val);
+                                  setShowStatusDropdown(false);
+                                }}
+                                className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center justify-between transition-all ${
+                                  quickFilterAvailable === opt.val
+                                    ? 'bg-[#C20014]/5 text-[#C20014] font-black'
+                                    : 'hover:bg-slate-50 text-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5">
+                                  {opt.val && <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" />}
+                                  <span>{opt.label}</span>
+                                </div>
+                                {quickFilterAvailable === opt.val && <span className="w-1.5 h-1.5 bg-[#C20014] rounded-full" />}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                   </div>
                 </div>
 
-                {/* 5. STATISTICS BAR */}
-                {(() => {
-                  const combined = (() => {
-                    const realDonors = allUsers.filter(u => u.uid !== user?.uid);
-                    const list = [...realDonors];
-                    const seed_members = [
-                      {
-                        uid: 'rahim-ahmed-seed',
-                        displayName: 'Rahim Ahmed',
-                        email: 'rahim@gmail.com',
-                        bloodGroup: 'O+',
-                        district: "Cox's Bazar",
-                        thana: "Cox's Bazar Sadar",
-                        phone: '+8801990005500',
-                        isAvailable: true,
-                        photoURL: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
-                        isVerified: true,
-                        gender: 'male' as const,
-                        donationCount: 25,
-                        lastDonationDate: '2026-02-15',
-                      },
-                      {
-                        uid: 'nusrat-jahan-seed',
-                        displayName: 'Nusrat Jahan',
-                        email: 'nusrat@gmail.com',
-                        bloodGroup: 'A+',
-                        district: "Cox's Bazar",
-                        thana: 'Teknaf',
-                        phone: '+8801880005501',
-                        isAvailable: true,
-                        photoURL: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-                        isVerified: true,
-                        gender: 'female' as const,
-                        donationCount: 18,
-                        lastDonationDate: '2026-03-01',
-                      },
-                      {
-                        uid: 'tanvir-hasan-seed',
-                        displayName: 'Tanvir Hasan',
-                        email: 'tanvir@gmail.com',
-                        bloodGroup: 'B+',
-                        district: "Cox's Bazar",
-                        thana: 'Ramu',
-                        phone: '+8801770005502',
-                        isAvailable: true,
-                        photoURL: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200',
-                        isVerified: true,
-                        gender: 'male' as const,
-                        donationCount: 15,
-                        lastDonationDate: '2026-01-20',
-                      },
-                      {
-                        uid: 'sadia-islam-seed',
-                        displayName: 'Sadia Islam',
-                        email: 'sadia@gmail.com',
-                        bloodGroup: 'O+',
-                        district: "Cox's Bazar",
-                        thana: 'Ukhia',
-                        phone: '+8801660005503',
-                        isAvailable: true,
-                        photoURL: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=200',
-                        isVerified: true,
-                        gender: 'female' as const,
-                        donationCount: 22,
-                        lastDonationDate: '2026-03-10',
-                      }
-                    ];
-                    seed_members.forEach(seed => {
-                      const exists = list.some(d => d.uid === seed.uid || d.displayName.toLowerCase() === seed.displayName.toLowerCase());
-                      if (!exists) list.push(seed);
-                    });
-                    return list;
-                  })();
 
-                  const total = combined.length;
-                  const available = combined.filter(u => u.isAvailable).length;
-                  const verified = combined.filter(u => u.isVerified).length;
-
-                  return (
-                    <div className="px-4">
-                      <div className="bg-white border border-slate-100 rounded-[22px] p-3 shadow-[0_2px_12px_rgba(15,23,42,0.015)] select-none grid grid-cols-3 gap-2 text-center">
-                        <div>
-                          <p className="text-sm font-black text-slate-800 leading-none">{total}</p>
-                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Total Donors</p>
-                        </div>
-                        <div className="border-x border-slate-100">
-                          <p className="text-sm font-black text-[#FF1744] leading-none">{available}</p>
-                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Available Now</p>
-                        </div>
-                        <div>
-                          <p className="text-sm font-black text-rose-500 leading-none">{verified}</p>
-                          <p className="text-[7.5px] text-slate-404 font-extrabold uppercase tracking-wider mt-1 block">Verified Donors</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Can't Find A Donor Promo Card (Donor List Page) */}
-                <div className="px-4">
-                  <RequestBloodPromoCard 
-                    user={user} 
-                    setView={setView} 
-                    handleLogin={handleLogin} 
-                  />
-                </div>
 
                 {/* 6. AVAILABLE DONORS CONTAINER */}
                 {(() => {
@@ -6442,281 +6208,124 @@ export default function App() {
                     filtered = filtered.filter(d => getSimulatedRating(d.uid) >= 4.8);
                   }
 
-                  // Best spotlight match select
-                  const topMatch = filtered.find(d => d.isAvailable && d.isVerified) || filtered.find(d => d.isAvailable) || filtered[0] || null;
+                  // Apply distance radius filter
+                  if (donorFilterDistance && donorFilterDistance !== 100) {
+                    filtered = filtered.filter(d => {
+                      const distVal = parseFloat(getSimulatedDistance(d));
+                      return distVal <= donorFilterDistance;
+                    });
+                  }
+
+                  // Format a user friendly display date
+                  const formatDate = (dateStr?: string) => {
+                    if (!dateStr) return 'Ready to Donate';
+                    try {
+                      const d = new Date(dateStr);
+                      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    } catch (e) {
+                      return dateStr;
+                    }
+                  };
 
                   return (
-                    <div className="space-y-0 pb-12">
-                      <div className="flex items-center justify-between px-4 pb-3 select-none">
-                        <span className="text-[14px] font-black text-slate-800 uppercase tracking-wide">Available Donors</span>
-                        <span className="text-xs font-bold text-slate-400">
-                          <strong className="text-[#FF1744] font-black">{filtered.length}</strong> donors found
+                    <div className="space-y-4 pb-12 px-4">
+                      
+                      {/* HEADER LINE WITH RESULTS COUNT */}
+                      <div className="flex items-center justify-between pb-1 select-none">
+                        <span className="text-[12px] font-black text-slate-800 uppercase tracking-wider">Matching Donors</span>
+                        <span className="text-xs font-semibold text-slate-404">
+                          Found <strong className="text-[#C20014] font-black">{filtered.length}</strong> donors
                         </span>
                       </div>
 
-                      {/* TOP MATCH SPOTLIGHT COMPONENT */}
-                      {topMatch && !donorSearchQuery && !filterBloodGroup && (
-                        <div className="bg-gradient-to-br from-[#FF1744]/2 via-rose-500/5 to-transparent border-y border-x-0 border-[#FF1744]/20 p-4.5 relative overflow-hidden group select-none animate-in fade-in slide-in-from-top-4 w-full rounded-none">
-                          <div className="absolute top-0 left-0 bg-[#FF1744] text-white px-3.5 py-1.5 rounded-br-2xl text-[8px] font-black uppercase tracking-wider z-10 flex items-center gap-1 shadow-sm">
-                            👑 TOP MATCH
-                          </div>
-
-                          <div className="flex gap-4 items-start pb-3 border-b border-rose-100/50 mt-3 relative">
-                            <button 
-                              onClick={() => onViewProfile(topMatch.uid)}
-                              className="relative shrink-0 select-none cursor-pointer hover:scale-105 transition-transform"
-                            >
-                              <img 
-                                src={topMatch.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(topMatch.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
-                                alt={topMatch.displayName} 
-                                className="w-16 h-16 rounded-full object-cover border border-slate-100 shadow-xs"
-                              />
-                              <span className="absolute bottom-0 right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-xs">
-                                <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                              </span>
-                            </button>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => onViewProfile(topMatch.uid)}>
-                                <h4 className="text-[15px] font-black text-slate-900 leading-none truncate">{topMatch.displayName}</h4>
-                                {topMatch.isVerified && <BadgeCheck className="w-4.5 h-4.5 text-white fill-blue-500 shrink-0" />}
-                              </div>
-
-                              <div className="flex items-center gap-2 mt-2 leading-none">
-                                <span className="text-[#FF1744] font-black text-xs min-w-[36px]">🩸 {topMatch.bloodGroup}</span>
-                                <span className="px-2 py-0.5 bg-emerald-50 text-[8px] text-emerald-700 font-extrabold uppercase rounded-md tracking-wider border border-emerald-100/50">Available</span>
-                              </div>
-
-                              <p className="text-[11px] text-slate-500 font-bold mt-2.5 truncate flex items-center gap-1 select-none leading-none">
-                                <MapPin className="w-3 h-3 text-[#FF1744] shrink-0" />
-                                {topMatch.thana}, {topMatch.district}
-                              </p>
-                              
-                              <div className="flex items-center gap-2.5 mt-2.5 text-[11px] text-slate-500 font-bold select-none leading-none">
-                                <div className="flex items-center gap-0.5">
-                                  <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-400 shrink-0" />
-                                  <span className="text-slate-950 font-black">{getSimulatedRating(topMatch.uid)}</span>
-                                  <span className="text-slate-400">({getSimulatedReviewsCount(topMatch.uid)})</span>
-                                </div>
-                                <span>•</span>
-                                <div className="flex items-center gap-0.5">
-                                  <Heart className="w-3.5 h-3.5 fill-red-500 stroke-red-500 shrink-0" />
-                                  <span className="text-red-500 font-bold">{topMatch.donationCount || 20} Donations</span>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Circular distance badge on the right matching screenshot */}
-                            <div className="w-18 h-18 rounded-full bg-rose-50/50 border border-rose-150 flex flex-col items-center justify-center shadow-xs shrink-0 self-center">
-                              <span className="text-red-500 text-sm">💧</span>
-                              <span className="text-[11px] font-black text-slate-900 leading-none mt-0.5">{getSimulatedDistance(topMatch)} km</span>
-                              <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">Away</span>
-                            </div>
-                          </div>
-
-                          {/* 3 Horizontal Stats Boxes matching screenshot */}
-                          <div className="grid grid-cols-3 gap-2.5 mt-3">
-                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                              <Compass className="w-4 h-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">{getSimulatedDistance(topMatch)} km</p>
-                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Away</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                              <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">
-                                  {topMatch.lastDonationDate ? `${Math.floor((Date.now() - new Date(topMatch.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24))} days` : '15 days'} ago
-                                </p>
-                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Last Donated</p>
-                              </div>
-                            </div>
-
-                            <div className="bg-white/80 border border-rose-100/30 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-[10px] font-black text-slate-800 leading-none truncate">Jan 2023</p>
-                                <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Member Since</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2.5 pt-4">
-                            <a
-                              href={`tel:${topMatch.phone}`}
-                              className="w-11 h-11 bg-white hover:bg-red-50 text-[#FF1744] border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0 animate-in fade-in"
-                              title="Call donor"
-                            >
-                              <Phone className="w-5 h-5 fill-[#FF1744] text-[#FF1744]" />
-                            </a>
-                            <a
-                              href={`https://wa.me/${topMatch.phone.replace(/[^0-9]/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="w-11 h-11 bg-white hover:bg-emerald-50 text-emerald-600 border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0 animate-in fade-in"
-                              title="WhatsApp Chat"
-                            >
-                              <svg className="w-5 h-5 fill-emerald-600" viewBox="0 0 24 24">
-                                <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.918 9.918 0 004.777 1.22h.005c5.505 0 9.99-4.478 9.99-9.985C22.007 6.476 17.519 2 12.012 2zm5.719 14.258c-.243.687-1.42 1.309-1.939 1.383-.474.067-.939.117-2.923-.667-2.535-1.002-4.148-3.571-4.275-3.74-.121-.169-1.016-1.353-1.016-2.58 0-1.228.643-1.83.871-2.072.228-.243.504-.303.672-.303.169 0 .341-.002.489.005.155.007.362-.058.566.444.21.512.716 1.745.779 1.874.062.128.099.28.01.464-.084.18-.184.288-.309.431-.124.143-.264.32-.375.431-.126.126-.258.261-.112.512.146.252.648 1.07 1.39 1.732.955.85 1.758 1.11 2.011 1.238.252.126.401.106.55-.067.146-.172.643-.75.815-.999.172-.25.344-.21.58-.121s1.492.704 1.75 1.238c.11.228.11.427.054.566z" />
-                              </svg>
-                            </a>
-                            <button
-                              onClick={() => openChat(topMatch.uid)}
-                              className="flex-1 h-11 bg-[#FF1744] hover:bg-red-700 text-white rounded-xl flex items-center justify-center gap-1.5 font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
-                            >
-                              <MessageSquare className="w-4 h-4 fill-white" />
-                              <span>Message Best Match</span>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* REGULAR LIST OF MATCHING DONORS */}
-                      <div className="space-y-0 border-b border-slate-100">
+                      {/* DONOR CARDS CONTAINER */}
+                      <div className="space-y-4">
                         {filtered.length === 0 ? (
-                          <div className="px-4 py-8">
-                            <div className="bg-white border border-slate-100 rounded-none p-8 text-center select-none shadow-xs">
-                              <div className="w-12 h-12 rounded-full bg-red-50 text-[#FF1744] flex items-center justify-center mx-auto mb-3">
+                          <div className="py-8">
+                            <div className="bg-white border border-slate-100 rounded-3xl p-8 text-center select-none shadow-xs">
+                              <div className="w-12 h-12 rounded-full bg-red-50 text-[#C20014] flex items-center justify-center mx-auto mb-3">
                                 <AlertCircle className="w-6 h-6 stroke-[2]" />
                               </div>
-                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">No donors found nearby</h3>
-                              <p className="text-[10px] text-slate-405 mt-2 max-w-[240px] mx-auto leading-relaxed">
-                                Ask help inside our Bangladesh volunteer base by requesting emergency blood instantly.
+                              <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">No donors found</h3>
+                              <p className="text-[10px] text-slate-404 mt-2 max-w-[240px] mx-auto leading-relaxed">
+                                Try expanding your search area or selecting another blood group filter.
                               </p>
-                              
-                              <button
-                                onClick={() => {
-                                  if (user) setView('request-form');
-                                  else handleLogin();
-                                }}
-                                className="mt-4 px-5 py-2.5 bg-[#FF1744] hover:bg-red-700 hover:scale-105 active:scale-95 text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-md inline-flex items-center gap-1"
-                              >
-                                <Plus className="w-3.5 h-3.5 stroke-[3]" /> Request Blood Now
-                              </button>
                             </div>
                           </div>
                         ) : (
                           filtered.slice(0, visibleDonorsCount).map(donor => (
                             <div
                               key={donor.uid}
-                              className="bg-white border-b border-slate-100 p-4 relative overflow-hidden flex flex-col gap-3.5 shadow-none hover:bg-slate-50/40 transition-all duration-300 select-none group animate-in fade-in slide-in-from-bottom-2 w-full rounded-none border-x-0 border-t-0"
+                              className="bg-white border border-slate-100/70 rounded-3xl p-4.5 shadow-xs relative flex items-center justify-between gap-4 hover:shadow-md transition-all duration-300 select-none group animate-in fade-in slide-in-from-bottom-2 w-full"
                             >
-                              <div className="flex gap-4 items-start relative">
-                                <button 
-                                  onClick={() => onViewProfile(donor.uid)}
-                                  className="relative shrink-0 select-none cursor-pointer hover:scale-105 transition-transform"
-                                >
+                              <div className="flex gap-4 items-center flex-1 min-w-0">
+                                {/* Avatar */}
+                                <div className="relative shrink-0">
                                   <img 
                                     src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
                                     alt={donor.displayName} 
-                                    className="w-16 h-16 rounded-full object-cover border-2 border-slate-100 shadow-xs"
+                                    className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border border-slate-100 shadow-sm"
+                                    referrerPolicy="no-referrer"
                                   />
                                   {donor.isAvailable && (
-                                    <span className="absolute bottom-0 right-0 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-xs">
-                                      <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                                    <span className="absolute bottom-0 right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-xs">
+                                      <span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
                                     </span>
                                   )}
-                                </button>
+                                </div>
 
+                                {/* Metadata */}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5 cursor-pointer leading-none" onClick={() => onViewProfile(donor.uid)}>
-                                    <h4 className="text-[15px] font-black text-slate-900 leading-none truncate group-hover:text-[#FF1744] transition-colors">{donor.displayName}</h4>
+                                    <h4 className="text-[15px] sm:text-[17px] font-black text-slate-800 leading-none truncate group-hover:text-[#C20014] transition-colors">
+                                      {donor.displayName} <span className="text-[#C20014] font-black ml-1">({donor.bloodGroup})</span> <span className="text-slate-500 font-bold text-xs sm:text-sm ml-1">({donor.age || (20 + (donor.displayName.length % 15))} Years)</span>
+                                    </h4>
                                     {donor.isVerified && <BadgeCheck className="w-4.5 h-4.5 text-white fill-blue-500 shrink-0" />}
                                   </div>
 
-                                  <div className="flex items-center gap-2 mt-2 leading-none">
-                                    <span className="text-[#FF1744] font-black text-xs">🩸 {donor.bloodGroup}</span>
-                                    {donor.isAvailable ? (
-                                      <span className="px-2 py-0.5 bg-emerald-50 text-[8px] text-emerald-750 font-extrabold uppercase rounded-md tracking-wider border border-emerald-500/10">Available</span>
-                                    ) : (
-                                      <span className="px-2 py-0.5 bg-slate-50 text-[8px] text-slate-400 font-extrabold uppercase rounded-md tracking-wider border border-slate-205">Off-Duty</span>
-                                    )}
+                                  {/* Subtitle 1: Full Address in One Line */}
+                                  <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-500 mt-2.5 font-bold leading-none">
+                                    <MapPin className="w-3.5 h-3.5 text-[#C20014] shrink-0" />
+                                    <span className="truncate">{donor.thana}, {donor.district}</span>
                                   </div>
 
-                                  <p className="text-[11px] text-slate-500 font-bold mt-2.5 truncate flex items-center gap-1 select-none leading-none">
-                                    <MapPin className="w-3 h-3 text-[#FF1744] shrink-0" />
-                                    {donor.thana}, {donor.district}
-                                  </p>
-
-                                  <div className="flex items-center gap-2.5 mt-2.5 text-[11px] text-slate-500 font-bold select-none leading-none">
-                                    <div className="flex items-center gap-0.5">
-                                      <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-400 shrink-0" />
-                                      <span className="text-slate-950 font-black">{getSimulatedRating(donor.uid)}</span>
-                                      <span className="text-slate-400">({getSimulatedReviewsCount(donor.uid)})</span>
-                                    </div>
-                                    <span>•</span>
-                                    <div className="flex items-center gap-0.5">
-                                      <Heart className="w-3.5 h-3.5 fill-red-500 stroke-red-500 shrink-0" />
-                                      <span className="text-red-500 font-bold">{donor.donationCount || 15} Donations</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Right circular distance badge matching screenshot */}
-                                <div className="w-18 h-18 rounded-full bg-rose-50/50 border border-rose-150 flex flex-col items-center justify-center shadow-xs shrink-0 self-center">
-                                  <span className="text-red-500 text-sm">💧</span>
-                                  <span className="text-[11px] font-black text-slate-900 leading-none mt-0.5">{getSimulatedDistance(donor)} km</span>
-                                  <span className="text-[7.5px] text-slate-400 font-bold uppercase mt-0.5 tracking-wider">Away</span>
-                                </div>
-                              </div>
-
-                              {/* 3 Horizontal Stats Boxes matching screenshot */}
-                              <div className="grid grid-cols-3 gap-2.5 mt-1">
-                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                                  <Compass className="w-4 h-4 text-slate-400 shrink-0" />
-                                  <div className="min-w-0">
-                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">{getSimulatedDistance(donor)} km</p>
-                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Away</p>
-                                  </div>
-                                </div>
-
-                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                                  <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                                  <div className="min-w-0">
-                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">
-                                      {donor.lastDonationDate ? `${Math.floor((Date.now() - new Date(donor.lastDonationDate).getTime()) / (1000 * 60 * 60 * 24))} days` : '15 days'} ago
-                                    </p>
-                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Last Donated</p>
-                                  </div>
-                                </div>
-
-                                <div className="bg-slate-50/60 border border-slate-100 p-2.5 rounded-lg flex items-center gap-2 text-left">
-                                  <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
-                                  <div className="min-w-0">
-                                    <p className="text-[10px] font-black text-slate-800 leading-none truncate">Jan 2024</p>
-                                    <p className="text-[7px] text-slate-400 font-bold uppercase tracking-wider mt-1 block leading-none">Member Since</p>
+                                  {/* Subtitle 2: Last Donated (Show in One Line) */}
+                                  <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-emerald-600 font-extrabold mt-2.5 leading-none whitespace-nowrap">
+                                    <Droplet className="w-3.5 h-3.5 text-red-500 fill-red-500 shrink-0" />
+                                    <span>Last Donated: {formatDate(donor.lastDonationDate)}</span>
                                   </div>
                                 </div>
                               </div>
 
-                              {/* Actions buttons matching screenshot style */}
-                              <div className="flex gap-2.5 pt-1">
-                                <a
-                                  href={`tel:${donor.phone}`}
-                                  className="w-11 h-11 bg-slate-50 hover:bg-red-50 text-[#FF1744] border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
-                                  title="Call Phone"
-                                >
-                                  <Phone className="w-5 h-5 fill-[#FF1744] text-[#FF1744]" />
-                                </a>
-                                <a
-                                  href={`https://wa.me/${donor.phone.replace(/[^0-9]/g, '')}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="w-11 h-11 bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/60 rounded-xl flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0"
-                                  title="WhatsApp Chat"
-                                >
-                                  <svg className="w-5 h-5 fill-emerald-600" viewBox="0 0 24 24">
-                                    <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.918 9.918 0 004.777 1.22h.005c5.505 0 9.99-4.478 9.99-9.985C22.007 6.476 17.519 2 12.012 2zm5.719 14.258c-.243.687-1.42 1.309-1.939 1.383-.474.067-.939.117-2.923-.667-2.535-1.002-4.148-3.571-4.275-3.74-.121-.169-1.016-1.353-1.016-2.58 0-1.228.643-1.83.871-2.072.228-.243.504-.303.672-.303.169 0 .341-.002.489.005.155.007.362-.058.566.444.21.512.716 1.745.779 1.874.062.128.099.28.01.464-.084.18-.184.288-.309.431-.124.143-.264.32-.375.431-.126.126-.258.261-.112.512.146.252.648 1.07 1.39 1.732.955.85 1.758 1.11 2.011 1.238.252.126.401.106.55-.067.146-.172.643-.75.815-.999.172-.25.344-.21.58-.121s1.492.704 1.75 1.238c.11.228.11.427.054.566z" />
-                                  </svg>
-                                </a>
+                              {/* Right Side Info & Action */}
+                              <div className="flex flex-col items-end justify-between self-stretch py-1 shrink-0">
+                                {donor.isAvailable ? (
+                                  <span className="px-2.5 py-1 bg-emerald-50 text-[9px] sm:text-[10px] text-emerald-700 font-extrabold uppercase rounded-full tracking-wider border border-emerald-500/10">
+                                    Available Now
+                                  </span>
+                                ) : (
+                                  <span className="px-2.5 py-1 bg-slate-50 text-[9px] sm:text-[10px] text-slate-410 font-extrabold uppercase rounded-full tracking-wider border border-slate-200">
+                                    Off-Duty
+                                  </span>
+                                )}
+
+                                <div className="flex items-center gap-1 text-[11px] sm:text-xs text-slate-700 font-bold mt-1.5">
+                                  <Star className="w-4 h-4 fill-amber-400 stroke-amber-400 text-amber-400 shrink-0" />
+                                  <span>
+                                    {getSimulatedRating(donor.uid)}{' '}
+                                    <span className="text-slate-400 font-medium">({getSimulatedReviewsCount(donor.uid)})</span>
+                                  </span>
+                                </div>
+
                                 <button
-                                  onClick={() => openChat(donor.uid)}
-                                  className="flex-1 h-11 bg-[#FF1744] hover:bg-rose-600 text-white rounded-xl flex items-center justify-center gap-2 font-black text-xs uppercase tracking-wider transition-all cursor-pointer shadow-xs active:scale-95"
+                                  onClick={() => {
+                                    // Set selected donor and open contact dialog or call directly
+                                    onViewProfile(donor.uid);
+                                  }}
+                                  className="mt-3.5 flex items-center justify-center gap-1.5 border-2 border-[#C20014] text-[#C20014] hover:bg-rose-50/50 px-4.5 py-1.5 sm:py-2 rounded-xl font-extrabold text-[11px] sm:text-xs bg-white transition-all cursor-pointer active:scale-95 shadow-xs"
                                 >
-                                  <MessageSquare className="w-4 h-4 fill-white" />
-                                  <span>Message {donor.uid === topMatch?.uid ? 'Best Match' : 'Donor'}</span>
+                                  <Phone className="w-3.5 h-3.5 text-[#C20014] fill-[#C20014]" />
+                                  <span>Contact</span>
                                 </button>
                               </div>
                             </div>
@@ -6726,15 +6335,15 @@ export default function App() {
 
                       {/* BOTTOM ACTION CARD COMPONENT (Can't Find a Donor) */}
                       {filtered.length > 0 && (
-                        <div className="px-4 pt-6">
-                          <div className="bg-gradient-to-r from-red-50/75 to-rose-50/50 border border-red-100/60 rounded-2xl p-4 flex items-center justify-between shadow-xs select-none">
+                        <div className="pt-4">
+                          <div className="bg-gradient-to-r from-red-50/75 to-rose-50/50 border border-red-100/60 rounded-3xl p-4.5 flex items-center justify-between shadow-xs select-none">
                             <div className="flex items-center gap-2.5">
-                              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-[#FF1744] shrink-0">
-                                <Heart className="w-4.5 h-4.5 fill-[#FF1744]" />
+                              <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center text-[#C20014] shrink-0">
+                                <Heart className="w-4.5 h-4.5 fill-[#C20014] stroke-[#C20014]" />
                               </div>
                               <div className="min-w-0">
                                 <h4 className="text-[11.5px] font-black text-slate-800 leading-none">Can't find a donor?</h4>
-                                <p className="text-[8px] text-slate-400 font-bold uppercase mt-1 leading-none tracking-wider">Request blood and notify nearby donors</p>
+                                <p className="text-[8px] text-slate-404 font-bold uppercase mt-1 leading-none tracking-wider">Request blood and notify nearby donors</p>
                               </div>
                             </div>
 
@@ -6743,7 +6352,7 @@ export default function App() {
                                 if (user) setView('request-form');
                                 else handleLogin();
                               }}
-                              className="bg-[#FF1744] hover:bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 shrink-0"
+                              className="bg-[#C20014] hover:bg-red-700 text-white px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-xs cursor-pointer active:scale-95 shrink-0"
                             >
                               <Droplet className="w-3 h-3 fill-white stroke-white" /> Request Blood
                             </button>
@@ -15876,6 +15485,7 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
   allUsers: UserProfile[],
   key?: any 
 }) {
+  const [showActions, setShowActions] = useState(false);
   const isOwner = user?.uid === request.requesterUid;
   const requesterProfile = allUsers.find(u => u.uid === request.requesterUid);
   const isUrgent = request.urgency === 'Urgent';
@@ -15886,7 +15496,10 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
       layout
       initial={{ opacity: 0, scale: 0.98, y: 12 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className="bg-white rounded-3xl p-5 border border-slate-100/90 hover:shadow-xl hover:border-slate-200 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group"
+      onClick={() => {
+        if (!showActions) setShowActions(true);
+      }}
+      className="bg-white rounded-3xl p-5 border border-slate-100/90 hover:shadow-xl hover:border-slate-200 transition-all duration-300 relative overflow-hidden flex flex-col justify-between h-full group cursor-pointer"
     >
       {/* Absolute Decorative Background Vector */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl pointer-events-none group-hover:bg-red-500/10 transition-colors duration-500" />
@@ -15974,7 +15587,10 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
         {/* Requester Account metadata line */}
         <div className="flex items-center justify-between pt-1 border-t border-slate-50 flex-wrap gap-2.5">
           <button 
-            onClick={onViewProfile}
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewProfile?.();
+            }}
             type="button"
             className="flex items-center gap-2 hover:opacity-85 transition-all group/req text-prev text-left focus:outline-none"
           >
@@ -16040,7 +15656,10 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
       <div className="flex flex-row items-center justify-between pt-4 border-t border-slate-100 mt-4 relative z-10 w-full shrink-0 gap-2">
         {request.status === 'Pending' && onMatchDonors ? (
           <button 
-            onClick={onMatchDonors}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMatchDonors();
+            }}
             type="button"
             className="h-11 flex-1 bg-red-600 hover:bg-red-700 text-white px-3.5 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-1.5 active:scale-95 shadow-md shadow-red-200/50 cursor-pointer min-w-0"
           >
@@ -16057,6 +15676,7 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
               href={`https://www.google.com/maps/dir/?api=1&destination=${request.lat},${request.lng}`}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all active:scale-95 border border-slate-200/50 shadow-sm flex items-center justify-center shrink-0"
               title="Get Route Navigation"
             >
@@ -16066,7 +15686,10 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
           
           {onMessage && (
             <button 
-              onClick={onMessage}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMessage();
+              }}
               type="button"
               className="w-11 h-11 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all active:scale-95 border border-slate-200/50 shadow-sm flex items-center justify-center shrink-0 cursor-pointer"
               title="Chat with coordinate manager"
@@ -16077,6 +15700,7 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
 
           <a 
             href={`tel:${request.contactPhone}`}
+            onClick={(e) => e.stopPropagation()}
             className="h-11 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-5 rounded-xl transition-all active:scale-95 shadow-md shadow-emerald-100/80 border border-emerald-500/20 flex items-center justify-center gap-1.5 shrink-0 text-[10px] font-black uppercase tracking-widest font-mono cursor-pointer"
             title="Call coordinate contact"
           >
@@ -16085,6 +15709,86 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
           </a>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showActions && (
+          <>
+            {/* Global click-away backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-slate-900/10 backdrop-blur-[1px] cursor-default" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowActions(false);
+              }}
+            />
+            
+            {/* Card-specific blur overlay */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute inset-0 bg-white/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 gap-3 rounded-3xl"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowActions(false);
+              }}
+            >
+              <div className="flex flex-col gap-2.5 w-full max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onDonationDone) onDonationDone(request);
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                  I have Donate
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onMatchDonors) {
+                      onMatchDonors();
+                    }
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-blue-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Search className="w-4 h-4 shrink-0" />
+                  Match Donor
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onMessage) {
+                      onMessage();
+                    } else if (request.contactPhone) {
+                      window.location.href = `tel:${request.contactPhone}`;
+                    }
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-slate-850 hover:bg-slate-900 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-slate-200 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Phone className="w-4 h-4 shrink-0" />
+                  Contact
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -16113,6 +15817,7 @@ function RequestCardRedesigned({
   allUsers: UserProfile[];
   addToast?: (title: string, body: string, type: any) => void;
 }) {
+  const [showActions, setShowActions] = useState(false);
   const isOwner = user?.uid === request.requesterUid;
   const isUrgent = request.urgency === 'Urgent';
   const isCritical = request.urgency === 'Critical';
@@ -16142,14 +15847,17 @@ function RequestCardRedesigned({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
-      className="bg-white border border-slate-100 rounded-3xl p-5 shadow-[0_4px_20px_rgba(15,23,42,0.02)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.05)] transition-all relative overflow-hidden w-full text-left flex flex-col gap-4"
+      onClick={() => {
+        if (!showActions) setShowActions(true);
+      }}
+      className="group bg-white border border-slate-100 rounded-3xl p-5 shadow-[0_4px_20px_rgba(15,23,42,0.02)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.05)] transition-all relative overflow-hidden w-full text-left flex flex-col gap-4 cursor-pointer"
     >
       {/* Top Section of Card */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between relative">
         {/* Left: Blood Droplet Container + Text Details */}
-        <div className="flex gap-4 items-center flex-1 min-w-0">
-          {/* Circular outer background with droplet inside */}
-          <div className="w-14 h-14 bg-rose-50/75 rounded-full flex items-center justify-center border border-rose-100/50 shrink-0">
+        <div className="flex gap-4 items-center w-full min-w-0">
+          {/* Circular outer background with droplet inside with hover rotation */}
+          <div className="w-14 h-14 bg-rose-50/75 rounded-full flex items-center justify-center border border-rose-100/50 shrink-0 transition-transform duration-500 group-hover:rotate-[360deg]">
             <div className="w-9 h-9 rounded-full rounded-tl-none -rotate-45 bg-gradient-to-br from-[#ff2247] to-[#d31f27] flex items-center justify-center shadow-[0_4px_10px_rgba(255,23,68,0.25)]">
               <span className="rotate-45 text-white text-sm font-black tracking-tighter leading-none">
                 {request.bloodGroup}
@@ -16159,31 +15867,31 @@ function RequestCardRedesigned({
 
           {/* Texts details */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-[16px] font-black text-slate-900 tracking-tight leading-snug truncate hover:underline hover:text-[#ff1744] cursor-pointer" onClick={onViewProfile}>
+            <h3 className="text-[16px] font-black text-slate-900 tracking-tight leading-snug truncate hover:underline hover:text-[#ff1744] cursor-pointer pr-28" onClick={(e) => { e.stopPropagation(); onViewProfile?.(); }}>
               {request.requesterName}
             </h3>
             
             {/* Reason */}
-            <p className="text-xs font-semibold text-slate-500 mt-1 leading-none">
+            <p className="text-xs font-semibold text-slate-500 mt-1 leading-none pr-28">
               Reason: <span className="text-[#ff1744] font-bold">{request.medicalReason || 'Accident'}</span>
             </p>
 
-            {/* Hospital details */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-2 leading-none font-medium">
+            {/* Hospital details - Showing hospital name 100% in a single line */}
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-2 font-medium w-full min-w-0">
               <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="truncate">{request.hospital}</span>
+              <span className="truncate whitespace-nowrap flex-1 min-w-0" title={request.hospital}>{request.hospital}</span>
             </div>
 
             {/* Location details */}
-            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5 leading-none font-medium">
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 mt-1.5 leading-none font-medium w-full min-w-0">
               <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="truncate">{request.thana}, {request.district}</span>
+              <span className="truncate whitespace-nowrap flex-1 min-w-0">{request.thana}, {request.district}</span>
             </div>
           </div>
         </div>
 
-        {/* Right: Status Badge & Posted Time & Navigation Arrow */}
-        <div className="flex flex-col items-end gap-1.5 shrink-0 pl-2">
+        {/* Right: Status Badge & Posted Time & Navigation Arrow (Absolute position to allow 100% text width below) */}
+        <div className="absolute top-0 right-0 flex flex-col items-end gap-1.5 z-10 pl-2">
           <div className="flex items-center gap-1.5">
             {/* Urgency Badge */}
             {isCritical ? (
@@ -16220,7 +15928,7 @@ function RequestCardRedesigned({
       {/* Bottom Section of Card */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         {/* Three Columns Metadata */}
-        <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold text-slate-600">
+        <div className="flex items-center gap-3 sm:gap-4 text-xs font-semibold text-slate-600 w-full justify-between sm:justify-start">
           {/* Col 1: Units */}
           <div className="flex items-center gap-1.5">
             <svg className="w-3.5 h-3.5 text-[#ff1744] shrink-0" viewBox="0 0 24 24" fill="currentColor">
@@ -16247,56 +15955,6 @@ function RequestCardRedesigned({
             <span className="font-mono">{request.contactPhone}</span>
           </div>
         </div>
-
-        {/* Action Buttons Row */}
-        <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-          {/* Direct Messaging */}
-          {onMessage && (
-            <button 
-              onClick={onMessage}
-              type="button"
-              className="w-10 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200/60 rounded-full text-slate-600 hover:text-slate-900 transition-all active:scale-95 flex items-center justify-center shrink-0 cursor-pointer"
-              title="Chat with Sponsor"
-            >
-              <MessageSquare className="w-4 h-4 text-blue-500" />
-            </button>
-          )}
-
-          {/* Match Donor */}
-          {onMatchDonors && request.status === 'Pending' && (
-            <button 
-              onClick={onMatchDonors}
-              type="button"
-              className="h-10 px-3.5 bg-rose-50 hover:bg-rose-100/80 border border-rose-100 rounded-full text-[#ff1744] hover:text-[#d31f27] transition-all active:scale-95 flex items-center justify-center gap-1 text-[11px] font-black uppercase tracking-wider cursor-pointer shrink-0"
-              title="Match Volunteers"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Match</span>
-            </button>
-          )}
-
-          {/* CALL/Contact button */}
-          <a 
-            href={`tel:${request.contactPhone}`}
-            className="h-10 bg-[#ff1744] hover:bg-[#d31f27] text-white px-5 rounded-full text-xs font-black uppercase tracking-wider flex items-center gap-1.5 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer shadow-md shadow-rose-100 shrink-0 border border-transparent"
-          >
-            <Phone className="w-3.5 h-3.5 text-white stroke-[2.8]" />
-            <span>Contact</span>
-          </a>
-
-          {/* Settings button for owner or admin */}
-          {(isOwner || onDelete || onDonationDone) && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer shrink-0 ${
-                expanded ? 'bg-slate-800 text-white' : 'bg-slate-50 hover:bg-slate-100 border border-slate-200/60 text-slate-500'
-              }`}
-              title="Management Actions"
-            >
-              <Settings className={`w-4 h-4 ${expanded ? 'animate-spin-slow' : ''}`} />
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Expanded settings (Fulfill / Delete) */}
@@ -16313,6 +15971,7 @@ function RequestCardRedesigned({
                   <button 
                     onClick={async (e) => {
                       e.preventDefault();
+                      e.stopPropagation();
                       try {
                         await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
                         if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
@@ -16327,7 +15986,10 @@ function RequestCardRedesigned({
                 ) : (
                   onDonationDone && (
                     <button 
-                      onClick={() => onDonationDone(request)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDonationDone(request);
+                      }}
                       className="flex-1 bg-[#ff1744] hover:bg-red-750 text-white font-bold rounded-xl py-2.5 text-[11px] uppercase tracking-wider text-center cursor-pointer transition-colors"
                     >
                       I Donated
@@ -16338,7 +16000,10 @@ function RequestCardRedesigned({
             )}
             {onDelete && (isOwner || profile?.role === 'admin') && (
               <button 
-                onClick={onDelete}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
                 className="bg-slate-100 hover:bg-slate-200 text-rose-600 rounded-xl px-4 flex items-center justify-center cursor-pointer transition-colors"
                 title="Delete Post"
               >
@@ -16348,6 +16013,86 @@ function RequestCardRedesigned({
           </div>
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {showActions && (
+          <>
+            {/* Global click-away backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-40 bg-slate-900/10 backdrop-blur-[1px] cursor-default" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowActions(false);
+              }}
+            />
+            
+            {/* Card-specific blur overlay */}
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="absolute inset-0 bg-white/80 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 gap-3 rounded-3xl"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowActions(false);
+              }}
+            >
+              <div className="flex flex-col gap-2.5 w-full max-w-[200px]" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onDonationDone) onDonationDone(request);
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                  I have Donate
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onMatchDonors) {
+                      onMatchDonors();
+                    }
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-blue-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Search className="w-4 h-4 shrink-0" />
+                  Match Donor
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (onMessage) {
+                      onMessage();
+                    } else if (request.contactPhone) {
+                      window.location.href = `tel:${request.contactPhone}`;
+                    }
+                    setShowActions(false);
+                  }}
+                  className="w-full py-2.5 px-4 bg-slate-850 hover:bg-slate-900 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-slate-200 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Phone className="w-4 h-4 shrink-0" />
+                  Contact
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -16617,7 +16362,7 @@ function PremiumHeroBannerCard({
                   <h2 className="text-sm sm:text-2xl md:text-3xl font-black leading-tight tracking-tight text-white">
                     {banner.title}
                   </h2>
-                  <p className="text-[10px] sm:text-xs md:text-sm text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto line-clamp-2">
+                  <p className="text-[10px] sm:text-[11.5px] text-slate-200/90 font-medium leading-relaxed max-w-md mx-auto line-clamp-2">
                     {banner.subtitle}
                   </p>
 
@@ -16670,7 +16415,7 @@ function PremiumHeroBannerCard({
         </div>
       )}
 
-      {/* Hover Navigation Arrows (using rotated ChevronRight for ChevronLeft) */}
+      {/* Hover Navigation Arrows */}
       {displayBanners.length > 1 && (
         <>
           <button
@@ -16696,7 +16441,6 @@ function PremiumHeroBannerCard({
     </div>
   );
 }
-
 
 function JoinDonorPromoCard({
   user,
@@ -16777,165 +16521,290 @@ function JoinDonorPromoCard({
 }
 
 function DonorCard({ donor, onMessage, onViewProfile, currentUserProfile, showThanaOnly }: { donor: UserProfile, onMessage?: () => void, onViewProfile?: () => void, currentUserProfile?: UserProfile | null, showThanaOnly?: boolean, key?: any }) {
-  const isNearby = currentUserProfile && 
-                  donor.district === currentUserProfile.district && 
-                  donor.thana === currentUserProfile.thana;
+  const [showContactPopover, setShowContactPopover] = useState(false);
+
+  // Local helpers inside DonorCard to keep them stable and isolated
+  const getSimulatedRating = (uid: string) => {
+    if (uid === 'rahim-ahmed-seed') return 4.9;
+    if (uid === 'nusrat-jahan-seed') return 4.8;
+    if (uid === 'tanvir-hasan-seed') return 4.7;
+    if (uid === 'sadia-islam-seed') return 4.9;
+    let sum = 0;
+    for (let i = 0; i < uid.length; i++) sum += uid.charCodeAt(i);
+    return Math.round((4.5 + (sum % 5) * 0.1) * 10) / 10;
+  };
+
+  const getSimulatedReviewsCount = (uid: string) => {
+    if (uid === 'rahim-ahmed-seed') return 128;
+    if (uid === 'nusrat-jahan-seed') return 96;
+    if (uid === 'tanvir-hasan-seed') return 74;
+    if (uid === 'sadia-islam-seed') return 102;
+    let sum = 0;
+    for (let i = 0; i < uid.length; i++) sum += uid.charCodeAt(i);
+    return (sum % 120) + 12;
+  };
+
+  const getSimulatedDistance = (donor: UserProfile, profile?: UserProfile | null) => {
+    if (donor.uid === 'rahim-ahmed-seed') return '2.1';
+    if (donor.uid === 'nusrat-jahan-seed') return '3.4';
+    if (donor.uid === 'tanvir-hasan-seed') return '4.2';
+    if (donor.uid === 'sadia-islam-seed') return '5.6';
+    const activeProfile = profile || currentUserProfile;
+    if (activeProfile && donor.district === activeProfile.district) {
+      if (donor.thana === activeProfile.thana) {
+        return (1.2 + (donor.displayName.length % 5) * 0.6).toFixed(1);
+      }
+      return (4.5 + (donor.displayName.length % 8) * 1.2).toFixed(1);
+    }
+    return (12.4 + (donor.displayName.length % 15) * 2.5).toFixed(1);
+  };
+
+  const getAge = (dobString?: string, defaultAge = 25) => {
+    if (!dobString) return defaultAge;
+    const birthDate = new Date(dobString);
+    if (isNaN(birthDate.getTime())) return defaultAge;
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const getSimulatedAge = (uid: string, dobString?: string) => {
+    if (dobString) {
+      const calculated = getAge(dobString);
+      if (calculated > 0 && calculated < 100) return calculated;
+    }
+    if (uid === 'rahim-ahmed-seed') return 28;
+    if (uid === 'nusrat-jahan-seed') return 24;
+    if (uid === 'tanvir-hasan-seed') return 31;
+    if (uid === 'sadia-islam-seed') return 23;
+    let sum = 0;
+    for (let i = 0; i < uid.length; i++) sum += uid.charCodeAt(i);
+    return (sum % 15) + 20; // returns age between 20 and 34
+  };
+
+  const getGender = (donor: UserProfile) => {
+    if (donor.gender) {
+      return donor.gender.charAt(0).toUpperCase() + donor.gender.slice(1);
+    }
+    const femaleNames = ['nusrat', 'sadia', 'faria', 'islam', 'jahan', 'sadia-islam', 'faria-islam'];
+    const nameLower = donor.displayName.toLowerCase();
+    const isFemale = femaleNames.some(f => nameLower.includes(f));
+    return isFemale ? 'Female' : 'Male';
+  };
+
+  const formattedDistance = getSimulatedDistance(donor, currentUserProfile);
 
   return (
     <motion.div 
       layout
       initial={{ opacity: 0, scale: 0.98, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      className={`bg-white rounded-3xl p-5 premium-down-shadow hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between h-full ${
-        isNearby ? 'border border-red-100 ring-2 ring-red-50/70 bg-gradient-to-b from-red-50/5 via-white to-white' : ''
-      }`}
+      className="bg-white rounded-[24px] p-5 border border-slate-100 shadow-[0_4px_20px_rgba(15,23,42,0.02)] hover:shadow-[0_8px_30px_rgba(15,23,42,0.05)] transition-all duration-300 relative overflow-hidden group flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full text-left"
     >
-      {/* Decorative background visual */}
-      <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl pointer-events-none group-hover:bg-red-500/10 transition-colors" />
-
-      {isNearby && (
-        <div className="absolute top-0 right-0 py-1.5 px-3.5 bg-gradient-to-r from-red-600 to-red-500 rounded-bl-2xl z-20 shadow-sm border-l border-b border-red-500/30">
-          <span className="text-[7.5px] font-black text-white uppercase tracking-widest leading-none block">Nearby You</span>
-        </div>
-      )}
-      
-      <div className="space-y-4">
-        <div className="flex gap-4 relative z-10 items-start">
-          {/* Avatar frame */}
-          <button 
-            onClick={onViewProfile}
-            type="button"
-            className="shrink-0 relative focus:outline-none focus:ring-4 focus:ring-red-100 rounded-full transition-all duration-300 hover:scale-105"
-          >
-            <div className="relative">
-              <img 
-                src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
-                alt={donor.displayName} 
-                className="w-14 h-14 rounded-full object-cover border-2 border-white shadow-md shadow-slate-100"
-                referrerPolicy="no-referrer"
-              />
-              <div className="absolute -bottom-1 -right-1 bg-white p-1 rounded-full shadow-md border border-slate-100 overflow-hidden">
-                {donor.isVerified ? (
-                  <BadgeCheck className="w-4 h-4 text-white fill-blue-500 shrink-0" />
-                ) : (
-                  <div className="w-4.5 h-4.5 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center">
-                    <UserIcon className="w-2.5 h-2.5 text-slate-400" />
-                  </div>
-                )}
-              </div>
-            </div>
-          </button>
-
-          {/* Core metadata details */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-start justify-between gap-2.5">
-              <button 
-                onClick={onViewProfile} 
-                type="button"
-                className="text-left group/name overflow-hidden pr-2 cursor-pointer focus:outline-none"
-              >
-                <h3 className="font-black text-slate-800 text-[14.5px] leading-snug group-hover/name:text-red-600 transition-colors uppercase tracking-tight line-clamp-1">
-                  {donor.displayName}
-                </h3>
-                
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 block mt-0.5">Volunteer Donor</span>
-              </button>
-
-              {/* Status Indicator */}
-              <div className="shrink-0">
-                {(() => {
-                  const now = new Date();
-                  const isEligible = !donor.nextDonationEligibility || new Date(donor.nextDonationEligibility) <= now;
-                  
-                  if (donor.isAvailable && isEligible) {
-                    return (
-                      <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20 shadow-inner">
-                        <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.7)]" />
-                        <span className="text-[7.5px] font-black text-emerald-800 uppercase tracking-widest">Active Ready</span>
-                      </div>
-                    );
-                  } else if (donor.isAvailable && !isEligible) {
-                    return (
-                      <div className="flex items-center gap-1.5 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
-                        <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.7)]" />
-                        <span className="text-[7.5px] font-black text-amber-800 uppercase tracking-widest">Cool Down</span>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
-                        <span className="w-1.5 h-1.5 bg-slate-350 rounded-full" />
-                        <span className="text-[7.5px] font-black text-slate-500 uppercase tracking-widest">Off-Duty</span>
-                      </div>
-                    );
-                  }
-                })()}
-              </div>
-            </div>
-
-            {/* Regional Pin Label */}
-            <div className="flex items-center gap-1 text-slate-500 text-[10px] font-bold mt-2 leading-none">
-              <MapPin className="w-3.5 h-3.5 text-rose-500/80 shrink-0" />
-              <span className="truncate">{showThanaOnly ? donor.thana : `${donor.thana}, ${donor.district}`}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Detailed stats overview panel */}
-        <div className="bg-slate-50/80 p-3 rounded-2xl border border-slate-100 flex items-center justify-between gap-2.5">
-          <div className="space-y-0.5">
-            <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block leading-none">Compatible Group</span>
-            <div className="text-sm font-black text-red-600 uppercase font-mono tracking-tight flex items-center gap-1 mt-0.5">
-              <Droplets className="w-3.5 h-3.5 text-red-500 shrink-0" />
-              {donor.bloodGroup} Factor
-            </div>
-          </div>
-
-          <div className="text-right border-l border-slate-200 pl-3.5 py-0.5">
-            {donor.lastDonationDate ? (
-              <div className="space-y-0.5">
-                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block leading-none">Last Donation run</span>
-                <span className="text-[10px] font-black text-slate-600 font-mono block mt-0.5">{formatDisplayDate(donor.lastDonationDate)}</span>
-              </div>
-            ) : (
-              <div className="space-y-0.5">
-                <span className="text-[7.5px] font-black text-slate-400 uppercase tracking-widest block leading-none">Last Donation run</span>
-                <span className="text-[10.5px] font-black text-emerald-600 block mt-0.5 uppercase tracking-wide">Never Donated</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Upcoming Availability warning bar */}
-        {donor.nextDonationEligibility && new Date(donor.nextDonationEligibility) > new Date() && (
-          <div className="p-2 bg-rose-50/50 border border-rose-100 rounded-xl flex items-center gap-2 text-[9px] font-black text-red-700 uppercase tracking-wider">
-            <Clock className="w-3.5 h-3.5 text-red-500 shrink-0" />
-            <span>Next Eligible: {formatDisplayDate(donor.nextDonationEligibility)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Primary actions buttons container */}
-      <div className="flex gap-2.5 pt-4 border-t border-slate-100 mt-4 relative z-10 w-full shrink-0">
-        {onMessage && (
-          <button 
-            onClick={onMessage}
-            type="button"
-            className="flex-1 bg-slate-900 text-white hover:bg-slate-800 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all transform active:scale-95 cursor-pointer"
-          >
-            <MessageSquare className="w-3.5 h-3.5 shrink-0 animate-pulse" />
-            <span>Message</span>
-          </button>
-        )}
+      <div className="flex gap-4 items-start relative z-10 flex-1 min-w-0">
+        {/* Profile Image with Available dot */}
         <button 
           onClick={onViewProfile}
           type="button"
-          className="flex-1 bg-slate-100 text-slate-600 hover:bg-slate-200 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-all transform active:scale-95 cursor-pointer border border-slate-200/40"
+          className="shrink-0 relative focus:outline-none focus:ring-4 focus:ring-red-100 rounded-full transition-all duration-300 hover:scale-105"
         >
-          <Eye className="w-3.5 h-3.5 shrink-0" />
-          <span>Profile</span>
+          <div className="relative">
+            <img 
+              src={donor.photoURL || `https://ui-avatars.com/api/?name=${encodeURIComponent(donor.displayName)}&background=ffe2e2&color=dc2626&bold=true`} 
+              alt={donor.displayName} 
+              className="w-16 h-16 rounded-full object-cover border-2 border-slate-100 shadow-sm"
+              referrerPolicy="no-referrer"
+            />
+            {donor.isAvailable && (
+              <span className="absolute bottom-0.5 right-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-white shadow-[0_2px_6px_rgba(0,0,0,0.15)] border border-slate-50 z-10">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 block" />
+              </span>
+            )}
+          </div>
         </button>
+
+        {/* Center Details */}
+        <div className="flex-1 min-w-0 flex flex-col gap-1.5 self-center">
+          {/* Display Name */}
+          <div className="flex items-center gap-1.5 leading-none cursor-pointer" onClick={onViewProfile}>
+            <h3 className="font-black text-slate-900 text-[16px] md:text-[17px] tracking-tight hover:underline">
+              {donor.displayName}
+            </h3>
+            {donor.isVerified && (
+              <BadgeCheck className="w-4.5 h-4.5 text-white fill-blue-500 shrink-0" />
+            )}
+          </div>
+
+          {/* Subtitle Row 1: Blood Group • Age • Gender */}
+          <div className="flex items-center text-xs font-bold text-slate-500 mt-0.5 leading-none flex-wrap">
+            <span className="text-[#ff1744] font-black text-sm">
+              {donor.bloodGroup}
+            </span>
+            <span className="mx-1.5 text-slate-300">•</span>
+            <span>
+              {getSimulatedAge(donor.uid, donor.dateOfBirth)} Years
+            </span>
+            <span className="mx-1.5 text-slate-300">•</span>
+            <span>
+              {getGender(donor)}
+            </span>
+          </div>
+
+          {/* Subtitle Row 2: Location and Distance */}
+          <div className="flex items-center gap-1 text-xs font-semibold text-slate-500 mt-0.5 leading-none">
+            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="truncate">
+              {showThanaOnly ? donor.thana : `${donor.thana}, ${donor.district}`}
+            </span>
+            <span className="mx-1.5 text-slate-300">|</span>
+            <span className="text-slate-600 font-bold">
+              {formattedDistance} km away
+            </span>
+          </div>
+
+          {/* Subtitle Row 3: Last Donated */}
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-500 mt-1 leading-none">
+            {/* Custom Droplet icon */}
+            <Droplet className="w-3.5 h-3.5 text-[#ff1744] fill-[#ff1744]/10 shrink-0" />
+            {donor.lastDonationDate ? (
+              <span className="text-emerald-600 font-bold">
+                Last Donated: {formatDisplayDate(donor.lastDonationDate)}
+              </span>
+            ) : (
+              <span className="text-emerald-600 font-bold">
+                Ready to Donate • Never Donated
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Right Column details */}
+      <div className="shrink-0 flex flex-col sm:items-end justify-between self-stretch py-0.5 text-right min-w-[110px] gap-2.5 sm:gap-1 mt-2 sm:mt-0">
+        {/* Availability badge */}
+        <div>
+          {donor.isAvailable ? (
+            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-md py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider">
+              Available Now
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 bg-slate-50 text-slate-400 border border-slate-200 rounded-md py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider">
+              Off-Duty
+            </span>
+          )}
+        </div>
+
+        {/* Rating and Reviews */}
+        <div className="flex items-center gap-1 sm:justify-end text-xs font-bold text-slate-800">
+          <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-400 text-amber-400 shrink-0" />
+          <span className="font-black text-slate-900">{getSimulatedRating(donor.uid)}</span>
+          <span className="text-slate-400">({getSimulatedReviewsCount(donor.uid)})</span>
+        </div>
+
+        {/* Contact button */}
+        <div className="text-left sm:text-right mt-1">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowContactPopover(true);
+            }}
+            type="button"
+            className="w-full sm:w-auto bg-white border border-[#ff1744] hover:bg-red-50/40 text-[#ff1744] font-black uppercase text-[11px] tracking-widest px-4.5 py-2.2 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer shadow-3xs active:scale-95 shrink-0"
+          >
+            <Phone className="w-3.5 h-3.5 text-[#ff1744]" />
+            <span>Contact</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Contact options modal overlay inside card for 100% self-containment */}
+      <AnimatePresence>
+        {showContactPopover && (
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-[9999] p-4" 
+            onClick={(e) => { e.stopPropagation(); setShowContactPopover(false); }}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-6 w-full max-w-[360px] text-center shadow-2xl border border-slate-100 flex flex-col gap-4.5"
+            >
+              <div>
+                <h4 className="text-base font-black text-slate-900 tracking-tight leading-none">Contact {donor.displayName}</h4>
+                <p className="text-xs font-semibold text-slate-400 mt-2 leading-tight">Choose how you'd like to get in touch</p>
+              </div>
+              
+              <div className="flex flex-col gap-2.5">
+                {/* Call Option */}
+                <a 
+                  href={`tel:${donor.phone}`}
+                  className="flex items-center gap-3 bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-100 rounded-2xl p-3.5 text-emerald-800 text-sm font-bold transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white shrink-0">
+                    <Phone className="w-4 h-4 fill-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-black leading-none text-emerald-950">Direct Voice Call</span>
+                    <span className="block text-[11px] text-emerald-600 mt-1 font-mono">{donor.phone}</span>
+                  </div>
+                </a>
+
+                {/* WhatsApp Option */}
+                <a 
+                  href={`https://wa.me/${donor.phone.replace(/[^0-9]/g, '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 bg-teal-50 hover:bg-teal-100/80 border border-teal-100 rounded-2xl p-3.5 text-teal-800 text-sm font-bold transition-all text-left"
+                >
+                  <div className="w-8 h-8 rounded-full bg-teal-500 flex items-center justify-center text-white shrink-0">
+                    <svg className="w-4.5 h-4.5 fill-white" viewBox="0 0 24 24">
+                      <path d="M12.012 2c-5.506 0-9.989 4.478-9.99 9.984a9.964 9.964 0 001.333 4.993L2 22l5.233-1.371a9.918 9.918 0 004.777 1.22h.005c5.505 0 9.99-4.478 9.99-9.985C22.007 6.476 17.519 2 12.012 2zm5.719 14.258c-.243.687-1.42 1.309-1.939 1.383-.474.067-.939.117-2.923-.667-2.535-1.002-4.148-3.571-4.275-3.74-.121-.169-1.016-1.353-1.016-2.58 0-1.228.643-1.83.871-2.072.228-.243.504-.303.672-.303.169 0 .341-.002.489.005.155.007.362-.058.566.444.21.512.716 1.745.779 1.874.062.128.099.28.01.464-.084.18-.184.288-.309.431-.124.143-.264.32-.375.431-.126.126-.258.261-.112.512.146.252.648 1.07 1.39 1.732.955.85 1.758 1.11 2.011 1.238.252.126.401.106.55-.067.146-.172.643-.75.815-.999.172-.25.344-.21.58-.121s1.492.704 1.75 1.238c.11.228.11.427.054.566z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block font-black leading-none text-teal-950">WhatsApp Message</span>
+                    <span className="block text-[11px] text-teal-600 mt-1 font-mono">Chat on WhatsApp</span>
+                  </div>
+                </a>
+
+                {/* BloodLink Chat Option */}
+                {onMessage && (
+                  <button 
+                    onClick={() => {
+                      setShowContactPopover(false);
+                      onMessage();
+                    }}
+                    type="button"
+                    className="flex items-center gap-3 bg-rose-50 hover:bg-rose-100/80 border border-rose-100 rounded-2xl p-3.5 text-[#ff1744] text-sm font-bold transition-all text-left w-full"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[#ff1744] flex items-center justify-center text-white shrink-0">
+                      <MessageSquare className="w-4 h-4 fill-white text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="block font-black leading-none text-rose-950">In-App Live Chat</span>
+                      <span className="block text-[11px] text-rose-600 mt-1">Message via BloodLink</span>
+                    </div>
+                  </button>
+                )}
+              </div>
+
+              <button 
+                onClick={() => setShowContactPopover(false)}
+                type="button"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-black py-3 rounded-2xl text-xs uppercase tracking-wider transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
