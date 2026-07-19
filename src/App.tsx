@@ -15,6 +15,7 @@ import {
   createUserWithEmailAndPassword,
   updateProfile,
   signInWithCredential,
+  sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
@@ -155,6 +156,8 @@ import {
   ThumbsUp,
   ThumbsDown,
   Heart,
+  HeartHandshake,
+  Car,
   Layout,
   Globe,
   MessageSquare,
@@ -589,6 +592,26 @@ export default function App() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [customBanners, setCustomBanners] = useState<AdminCustomBanner[]>([]);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number, lng: number, address: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('user_current_location');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+
+  const effectiveLocation = useMemo(() => {
+    if (profile?.locationData?.lat && profile?.locationData?.lng) {
+      return {
+        lat: profile.locationData.lat,
+        lng: profile.locationData.lng,
+        address: profile.locationData.address || `${profile.locationData.lat.toFixed(4)}, ${profile.locationData.lng.toFixed(4)}`
+      };
+    }
+    return currentLocation;
+  }, [profile?.locationData, currentLocation]);
 
   useEffect(() => {
     if (isQuotaExceeded) {
@@ -4221,6 +4244,36 @@ export default function App() {
       <div className="h-dvh flex flex-col bg-slate-50 overflow-hidden relative">
         <ToastContainer toasts={toasts} onRemove={onRemoveToast} onAction={onActionToast} />
 
+        <LocationPickerModal
+          isOpen={isLocationPickerOpen}
+          onClose={() => setIsLocationPickerOpen(false)}
+          apiKey={effectiveApiKey}
+          mapId={effectiveMapId}
+          initialLocation={effectiveLocation}
+          onSelect={async (lat, lng, address) => {
+            setIsLocationPickerOpen(false);
+            if (user) {
+              try {
+                await updateDoc(doc(db, 'users', user.uid), {
+                  locationData: { lat, lng, address }
+                });
+                setProfile(prev => prev ? { ...prev, locationData: { lat, lng, address } } : null);
+                addToast("Location Updated", `Your current location was successfully set to ${address}`, "success");
+              } catch (err: any) {
+                console.error("Error updating location:", err);
+                addToast("Update Failed", "Could not save your location to profile.", "error");
+              }
+            } else {
+              const loc = { lat, lng, address };
+              setCurrentLocation(loc);
+              try {
+                localStorage.setItem('user_current_location', JSON.stringify(loc));
+              } catch {}
+              addToast("Location Saved", `Temporary location set to ${address}`, "success");
+            }
+          }}
+        />
+
         <AnimatePresence>
           {inAppHeadsUp && (
             <motion.div
@@ -5105,6 +5158,36 @@ export default function App() {
                       </div>
                     )}
 
+                    {/* 📍 Current Location Card */}
+                    <div className="bg-white border border-slate-100 rounded-[24px] sm:rounded-[28px] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.02)] mb-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3.5 text-left">
+                          <div className="w-11 h-11 rounded-full bg-rose-50 flex items-center justify-center text-red-650 shrink-0 shadow-sm">
+                            <MapPin className="w-5 h-5 animate-bounce" />
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase leading-none">Your Current Location</p>
+                            <h4 className="text-[14px] sm:text-[16px] font-black text-slate-900 mt-1.5 leading-tight">
+                              {effectiveLocation ? effectiveLocation.address : "No current location set yet"}
+                            </h4>
+                            {effectiveLocation && (
+                              <p className="text-[10px] text-slate-400 font-mono mt-1">
+                                Coordinates: {effectiveLocation.lat.toFixed(4)}° N, {effectiveLocation.lng.toFixed(4)}° E
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsLocationPickerOpen(true)}
+                          className="bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[11px] sm:text-[12px] tracking-wider uppercase py-3 px-5 sm:px-6 rounded-xl transition-all cursor-pointer select-none shrink-0 active:scale-95 shadow-sm"
+                        >
+                          {effectiveLocation ? "CHANGE" : "SET LOCATION"}
+                        </button>
+                      </div>
+                    </div>
+
                     {/* 3 & 4. Integrated Map Combination Container (Map Background + Bento Overlaid Bottom) */}
                     <div className="relative -mx-4 w-[calc(100%+32px)] sm:-mx-0 sm:w-full h-[480px] bg-slate-100 rounded-none sm:rounded-[36px] overflow-hidden border border-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.03)] flex flex-col justify-between pointer-events-auto">
                       
@@ -5130,6 +5213,8 @@ export default function App() {
                           setMatchingDonorsRequest={setMatchingDonorsRequest}
                           mapResetKey={mapResetKey}
                           onOverviewChange={setMapOverviewOpen}
+                          askConfirm={askConfirm}
+                          addToast={addToast}
                         />
 
                         {/* Modern Control Dock floating inside map view */}
@@ -5801,6 +5886,7 @@ export default function App() {
                                 onDonationDone={handleDonationDone}
                                 onMatchDonors={() => setMatchingDonorsRequest(req)}
                                 addToast={addToast}
+                                askConfirm={askConfirm}
                               />
                             ))}
                           </div>
@@ -15233,6 +15319,8 @@ function OrgDashboard({ org, users, allRequests, allPosts, setView, handleLogin,
                     onDonationDone={onDonationDone}
                     onMatchDonors={onMatchDonors ? () => onMatchDonors(req) : undefined}
                     onDelete={() => onDeleteRequest(req.id)}
+                    askConfirm={askConfirm}
+                    addToast={addToast}
                   />
                 </div>
               ))
@@ -15474,7 +15562,7 @@ function AdminLoginForm({ onBack }: { onBack: () => void }) {
   );
 }
 
-function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDonationDone, onMatchDonors, allUsers }: { 
+function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDonationDone, onMatchDonors, allUsers, askConfirm, addToast }: { 
   request: BloodRequest, 
   user: FirebaseUser | null,
   onMessage?: () => void, 
@@ -15483,6 +15571,8 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
   onDonationDone?: (req: BloodRequest) => void,
   onMatchDonors?: () => void,
   allUsers: UserProfile[],
+  askConfirm?: (title: string, message: string, confirmText?: string, type?: any, cancelText?: string) => Promise<boolean>,
+  addToast?: (title: string, body: string, type: any) => void,
   key?: any 
 }) {
   const [showActions, setShowActions] = useState(false);
@@ -15740,23 +15830,80 @@ function RequestCard({ request, user, onMessage, onViewProfile, onDelete, onDona
               }}
             >
               <div className="flex flex-col gap-2.5 w-full max-w-[200px]" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (onDonationDone) onDonationDone(request);
-                    setShowActions(false);
-                  }}
-                  className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
-                  I have Donate
-                </button>
+                {isOwner ? (
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      let confirmed = true;
+                      if (askConfirm) {
+                        confirmed = await askConfirm(
+                          "Fulfill Blood Request 🩸",
+                          "Are you sure you want to mark this blood request as Managed and Fulfilled? This will close the request.",
+                          "Yes, I Managed It",
+                          "success",
+                          "Cancel"
+                        );
+                      } else {
+                        confirmed = window.confirm("Are you sure you want to mark this blood request as Fulfilled?");
+                      }
+                      if (!confirmed) return;
+                      try {
+                        await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
+                        if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
+                        setShowActions(false);
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.UPDATE, 'requests');
+                      }
+                    }}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                    I have Managed
+                  </button>
+                ) : (
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      let confirmed = true;
+                      if (askConfirm) {
+                        confirmed = await askConfirm(
+                          "Confirm Your Noble Act ❤️",
+                          "Have you successfully donated blood for this request? This will record your life-saving contribution and fulfill the request.",
+                          "Yes, I Donated",
+                          "info",
+                          "Cancel"
+                        );
+                      } else {
+                        confirmed = window.confirm("Have you successfully donated blood for this request?");
+                      }
+                      if (!confirmed) return;
+                      if (onDonationDone) onDonationDone(request);
+                      setShowActions(false);
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                    I have Donated
+                  </button>
+                )}
 
                 <button
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    let confirmed = true;
+                    if (askConfirm) {
+                      confirmed = await askConfirm(
+                        "Match Available Donors 🔍",
+                        `Would you like to find matched donors for this ${request.bloodGroup} blood request?`,
+                        "Find Matches",
+                        "info",
+                        "Cancel"
+                      );
+                    }
+                    if (!confirmed) return;
                     if (onMatchDonors) {
                       onMatchDonors();
                     }
@@ -15803,7 +15950,8 @@ function RequestCardRedesigned({
   onDonationDone, 
   onMatchDonors, 
   allUsers,
-  addToast
+  addToast,
+  askConfirm
 }: { 
   key?: string | number;
   request: BloodRequest; 
@@ -15816,6 +15964,7 @@ function RequestCardRedesigned({
   onMatchDonors?: () => void;
   allUsers: UserProfile[];
   addToast?: (title: string, body: string, type: any) => void;
+  askConfirm?: (title: string, message: string, confirmText?: string, type?: any, cancelText?: string) => Promise<boolean>;
 }) {
   const [showActions, setShowActions] = useState(false);
   const isOwner = user?.uid === request.requesterUid;
@@ -16044,23 +16193,80 @@ function RequestCardRedesigned({
               }}
             >
               <div className="flex flex-col gap-2.5 w-full max-w-[200px]" onClick={(e) => e.stopPropagation()}>
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (onDonationDone) onDonationDone(request);
-                    setShowActions(false);
-                  }}
-                  className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
-                  I have Donate
-                </button>
+                {isOwner ? (
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      let confirmed = true;
+                      if (askConfirm) {
+                        confirmed = await askConfirm(
+                          "Fulfill Blood Request 🩸",
+                          "Are you sure you want to mark this blood request as Managed and Fulfilled? This will close the request.",
+                          "Yes, I Managed It",
+                          "success",
+                          "Cancel"
+                        );
+                      } else {
+                        confirmed = window.confirm("Are you sure you want to mark this blood request as Fulfilled?");
+                      }
+                      if (!confirmed) return;
+                      try {
+                        await updateDoc(doc(db, 'requests', request.id), { status: 'Fulfilled' });
+                        if (addToast) addToast("Marked as Fulfilled", "Blood request successfully closed", "success");
+                        setShowActions(false);
+                      } catch (err) {
+                        handleFirestoreError(err, OperationType.UPDATE, 'requests');
+                      }
+                    }}
+                    className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-emerald-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                    I have Managed
+                  </button>
+                ) : (
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      let confirmed = true;
+                      if (askConfirm) {
+                        confirmed = await askConfirm(
+                          "Confirm Your Noble Act ❤️",
+                          "Have you successfully donated blood for this request? This will record your life-saving contribution and fulfill the request.",
+                          "Yes, I Donated",
+                          "info",
+                          "Cancel"
+                        );
+                      } else {
+                        confirmed = window.confirm("Have you successfully donated blood for this request?");
+                      }
+                      if (!confirmed) return;
+                      if (onDonationDone) onDonationDone(request);
+                      setShowActions(false);
+                    }}
+                    className="w-full py-2.5 px-4 bg-[#ff1744] hover:bg-red-700 text-white font-extrabold text-[11px] uppercase tracking-wider rounded-xl shadow-md shadow-red-100 transition-all active:scale-95 text-center flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Heart className="w-4 h-4 shrink-0 text-white fill-white" />
+                    I have Donated
+                  </button>
+                )}
 
                 <button
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    let confirmed = true;
+                    if (askConfirm) {
+                      confirmed = await askConfirm(
+                        "Match Available Donors 🔍",
+                        `Would you like to find matched donors for this ${request.bloodGroup} blood request?`,
+                        "Find Matches",
+                        "info",
+                        "Cancel"
+                      );
+                    }
+                    if (!confirmed) return;
                     if (onMatchDonors) {
                       onMatchDonors();
                     }
@@ -19762,6 +19968,151 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
   const otherUser = users.find(u => u.uid === otherUserId);
   const typingTimeoutRef = useRef<any>(null);
 
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [selectedImageLightBox, setSelectedImageLightBox] = useState<string | null>(null);
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          const MAX_WIDTH = 600;
+          const MAX_HEIGHT = 600;
+          
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve(dataUrl);
+        };
+        img.onerror = () => reject(new Error('Invalid image'));
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('File reading failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const readDocumentAsDataURL = (file: File): Promise<{ dataUrl: string, name: string }> => {
+    return new Promise((resolve, reject) => {
+      if (file.size > 600 * 1024) {
+        reject(new Error('File is too large. Maximum size is 600KB.'));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        resolve({
+          dataUrl: e.target?.result as string,
+          name: file.name
+        });
+      };
+      reader.onerror = () => reject(new Error('File reading failed'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const sendAttachment = async (
+    type: 'location' | 'image' | 'document', 
+    attachmentUrl?: string, 
+    attachmentName?: string, 
+    locationData?: { lat: number; lng: number; address?: string },
+    customText?: string
+  ) => {
+    setSending(true);
+    const messageText = customText || (type === 'location' ? `Shared Location: ${attachmentName || 'Map Point'}` : type === 'image' ? `Shared a picture` : `Shared a document: ${attachmentName}`);
+    try {
+      await addDoc(collection(db, `chats/${chat.id}/messages`), {
+        senderId: currentUser.uid,
+        text: messageText,
+        createdAt: serverTimestamp(),
+        read: false,
+        type: 'attachment',
+        attachmentType: type,
+        attachmentUrl: attachmentUrl || '',
+        attachmentName: attachmentName || '',
+        locationData: locationData || null
+      });
+
+      await updateDoc(doc(db, 'chats', chat.id), {
+        lastMessage: messageText,
+        lastMessageAt: serverTimestamp(),
+        [`unreadCount.${otherUserId}`]: increment(1)
+      });
+
+      // Send FCM push notification if other user has FCM token
+      if (otherUser && otherUser.fcmToken) {
+        fetch('/api/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: otherUser.fcmToken,
+            title: `New Attachment from ${currentUser.displayName || 'Donor'}`,
+            body: messageText,
+            type: 'chat',
+            chatId: chat.id,
+            senderId: currentUser.uid,
+            senderName: currentUser.displayName || 'Donor',
+            largeIcon: currentUser.photoURL || ''
+          })
+        }).catch(err => console.error('Failed to send FCM push notification:', err));
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `chats/${chat.id}`);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const base64Image = await compressImage(file);
+      await sendAttachment('image', base64Image, file.name);
+    } catch (err: any) {
+      alert(err.message || "Failed to upload image");
+    } finally {
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
+  const handleDocUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const res = await readDocumentAsDataURL(file);
+      await sendAttachment('document', res.dataUrl, res.name);
+    } catch (err: any) {
+      alert(err.message || "Failed to upload document");
+    } finally {
+      if (docInputRef.current) docInputRef.current.value = '';
+    }
+  };
+
   // Listen to chat document updates (for typing indicators)
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, 'chats', chat.id), (docSnapshot) => {
@@ -20023,6 +20374,71 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
                         ? 'bg-red-600 text-white rounded-2xl rounded-tr-sm' 
                         : 'bg-white text-slate-800 border border-slate-100 rounded-2xl rounded-tl-sm'
                     } ${isGrouped ? (isMe ? 'rounded-tr-2xl' : 'rounded-tl-2xl') : ''}`}>
+                      
+                      {/* Image Attachment */}
+                      {m.type === 'attachment' && m.attachmentType === 'image' && m.attachmentUrl && (
+                        <div 
+                          className="mb-1.5 overflow-hidden rounded-xl max-w-xs cursor-pointer hover:opacity-90 transition-all border border-slate-100 shadow-sm"
+                          onClick={() => setSelectedImageLightBox(m.attachmentUrl || null)}
+                        >
+                          <img src={m.attachmentUrl} className="w-full h-auto max-h-60 object-cover" alt="Attachment" referrerPolicy="no-referrer" />
+                        </div>
+                      )}
+
+                      {/* Location Attachment */}
+                      {m.type === 'attachment' && m.attachmentType === 'location' && m.locationData && (
+                        <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-2 max-w-[280px] text-slate-800 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+                              <MapPin className="w-4 h-4 text-red-600 animate-bounce" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">Shared Location</p>
+                              <p className="text-[12px] font-bold text-slate-800 truncate">{m.attachmentName || m.locationData.address || 'Donor Location'}</p>
+                            </div>
+                          </div>
+                          <div className="h-24 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center relative overflow-hidden">
+                            <div className="absolute inset-0 opacity-[0.15] bg-[radial-gradient(#ff1744_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <Navigation className="w-8 h-8 text-red-500/80 animate-pulse" />
+                            </div>
+                            <span className="absolute bottom-1 right-2 text-[8px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded-md border border-slate-200">
+                              {m.locationData.lat.toFixed(4)}, {m.locationData.lng.toFixed(4)}
+                            </span>
+                          </div>
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${m.locationData.lat},${m.locationData.lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[9px] uppercase tracking-wider rounded-lg transition-all active:scale-95 text-center flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Globe className="w-3.5 h-3.5" />
+                            Open Google Maps
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Document Attachment */}
+                      {m.type === 'attachment' && m.attachmentType === 'document' && m.attachmentUrl && (
+                        <div className="mb-2 p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center gap-3 max-w-[280px] text-slate-800 shadow-sm">
+                          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                            <FileText className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-bold text-slate-800 truncate">{m.attachmentName || 'Document'}</p>
+                            <a 
+                              href={m.attachmentUrl} 
+                              download={m.attachmentName || 'document'} 
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-blue-600 font-extrabold uppercase tracking-widest hover:underline flex items-center gap-1 mt-1 cursor-pointer"
+                            >
+                              Download Document
+                            </a>
+                          </div>
+                        </div>
+                      )}
+
                       <p className="leading-snug break-words whitespace-pre-wrap">{m.text}</p>
                       
                       <div className={`flex items-center gap-1 justify-end mt-1 opacity-60 leading-none`}>
@@ -20055,9 +20471,25 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
         </div>
       </div>
 
+      {/* Hidden File Inputs */}
+      <input 
+        type="file" 
+        ref={imageInputRef} 
+        accept="image/*" 
+        className="hidden" 
+        onChange={handleImageUpload} 
+      />
+      <input 
+        type="file" 
+        ref={docInputRef} 
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" 
+        className="hidden" 
+        onChange={handleDocUpload} 
+      />
+
       {/* Input */}
-      <div className="p-4 bg-white border-t border-slate-100 pb-safe z-30 shrink-0">
-        <form onSubmit={sendMessage} className="flex gap-3 items-end max-w-4xl mx-auto">
+      <div className="p-4 bg-white border-t border-slate-100 pb-safe z-30 shrink-0 relative">
+        <form onSubmit={sendMessage} className="flex gap-3 items-end max-w-4xl mx-auto relative">
           <div className="flex-1 relative flex items-center group">
             <textarea 
               rows={1}
@@ -20075,12 +20507,80 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
                 }
               }}
               placeholder="Start typing..."
-              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-4 focus:ring-red-500/10 focus:border-red-500 rounded-2xl md:rounded-[2rem] px-5 py-3.5 transition-all outline-none text-[15px] resize-none max-h-32 shadow-sm"
+              className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-4 focus:ring-red-500/10 focus:border-red-500 rounded-2xl md:rounded-[2rem] pl-5 pr-20 py-3.5 transition-all outline-none text-[15px] resize-none max-h-32 shadow-sm"
             />
-            <div className="absolute right-4 flex items-center gap-2 pointer-events-none opacity-40">
-               <Smile className="w-5 h-5 text-slate-400" />
+            
+            {/* Right-Side Interactive Attachment and Smile Buttons */}
+            <div className="absolute right-4 flex items-center gap-1.5 z-40">
+              <button
+                type="button"
+                onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+                  showAttachmentMenu ? 'bg-red-50 text-red-600 rotate-45' : 'text-slate-400 hover:text-red-600 hover:bg-slate-100'
+                }`}
+                title="Add attachment"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+              <Smile className="w-5 h-5 text-slate-400 opacity-50 hover:opacity-100 cursor-pointer transition-opacity" />
             </div>
+
+            {/* Attachment Popover Menu */}
+            <AnimatePresence>
+              {showAttachmentMenu && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute bottom-16 right-4 bg-white border border-slate-100 rounded-2xl shadow-xl p-3 flex flex-col gap-1 min-w-[200px] z-50 pointer-events-auto"
+                >
+                  <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 px-2 py-1 mb-1 border-b border-slate-50">
+                    Share Attachment
+                  </div>
+                  
+                  {/* Send Picture */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      imageInputRef.current?.click();
+                      setShowAttachmentMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-bold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all text-left cursor-pointer"
+                  >
+                    <Image className="w-4 h-4 text-red-500 shrink-0" />
+                    <span>Send Picture</span>
+                  </button>
+                  
+                  {/* Send Document */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      docInputRef.current?.click();
+                      setShowAttachmentMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-bold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all text-left cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span>Send Document</span>
+                  </button>
+
+                  {/* Send Location */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLocationModal(true);
+                      setShowAttachmentMenu(false);
+                    }}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-[13px] font-bold text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all text-left cursor-pointer"
+                  >
+                    <MapPin className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Send Location</span>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+          
           <button 
             type="submit"
             disabled={!text.trim() || sending}
@@ -20091,6 +20591,138 @@ function ChatRoom({ chat, currentUser, users, onBack, onStartVoiceCall, onStartV
           </button>
         </form>
       </div>
+
+      {/* Location Selection Modal */}
+      <AnimatePresence>
+        {showLocationModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm pointer-events-auto"
+              onClick={() => setShowLocationModal(false)}
+            />
+            
+            {/* Content */}
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100 overflow-hidden z-50 pointer-events-auto"
+            >
+              <div className="flex items-center justify-between mb-5">
+                <h3 className="font-black text-slate-900 text-lg flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-red-500" />
+                  Share Location
+                </h3>
+                <button 
+                  onClick={() => setShowLocationModal(false)}
+                  className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* Real Location Button */}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(
+                        async (position) => {
+                          const { latitude, longitude } = position.coords;
+                          await sendAttachment('location', '', 'My Current Location', { lat: latitude, lng: longitude });
+                          setShowLocationModal(false);
+                        },
+                        (error) => {
+                          alert("Could not get current location: " + error.message);
+                        }
+                      );
+                    } else {
+                      alert("Geolocation is not supported by your browser.");
+                    }
+                  }}
+                  className="w-full p-4 bg-red-50 hover:bg-red-100/80 border border-red-100 rounded-2xl flex items-center gap-4 transition-all active:scale-[0.98] text-left group cursor-pointer"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-red-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-red-200">
+                    <Navigation className="w-6 h-6 group-hover:rotate-45 transition-transform" />
+                  </div>
+                  <div>
+                    <p className="font-black text-red-900 text-[14px]">Send Current GPS Location</p>
+                    <p className="text-[11px] text-red-600 font-medium">Use device's real-time GPS coordinates</p>
+                  </div>
+                </button>
+
+                <div className="relative flex py-2 items-center">
+                  <div className="flex-grow border-t border-slate-100"></div>
+                  <span className="flex-shrink mx-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Or Select Place</span>
+                  <div className="flex-grow border-t border-slate-100"></div>
+                </div>
+
+                {/* Manual Selection */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Select Area</label>
+                    <select 
+                      onChange={async (e) => {
+                        const placeName = e.target.value;
+                        if (!placeName) return;
+                        
+                        let coords = THANA_COORDS[placeName] || DISTRICT_COORDS[placeName];
+                        if (!coords) {
+                          coords = { lat: 23.8103, lng: 90.4125 };
+                        }
+                        await sendAttachment('location', '', placeName, { lat: coords.lat, lng: coords.lng });
+                        setShowLocationModal(false);
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 focus:bg-white focus:ring-4 focus:ring-red-500/10 focus:border-red-500 rounded-2xl px-4 py-3 outline-none text-[14px] transition-all font-bold cursor-pointer"
+                      defaultValue=""
+                    >
+                      <option value="" disabled>Choose a place...</option>
+                      <optgroup label="Popular Districts">
+                        {Object.keys(DISTRICT_COORDS).slice(0, 15).map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Thana/Areas">
+                        {Object.keys(THANA_COORDS).slice(0, 30).map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </optgroup>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Lightbox Modal */}
+      <AnimatePresence>
+        {selectedImageLightBox && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+            <button 
+              onClick={() => setSelectedImageLightBox(null)}
+              className="absolute top-6 right-6 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-50 cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative max-w-4xl max-h-[85vh] overflow-hidden rounded-2xl pointer-events-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <img src={selectedImageLightBox} className="max-w-full max-h-[85vh] object-contain rounded-2xl" alt="Enlarged Attachment" referrerPolicy="no-referrer" />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -21392,6 +22024,214 @@ function OwnUserProfileView({
   const [showOptions, setShowOptions] = React.useState(false);
   const [showCardModal, setShowCardModal] = React.useState(false);
 
+  // New interactive profile feature state hooks
+  const [activeModal, setActiveModal] = React.useState<string | null>(null);
+  const [donationDate, setDonationDate] = React.useState(profile?.lastDonationDate || '');
+  const [passwordForm, setPasswordForm] = React.useState({ old: '', new: '', confirm: '' });
+  const [isUpdatingPassword, setIsUpdatingPassword] = React.useState(false);
+  const [isSubmittingVolunteer, setIsSubmittingVolunteer] = React.useState(false);
+  const [isApplyingNBD, setIsApplyingNBD] = React.useState(false);
+  const [newDonation, setNewDonation] = React.useState({ date: '', location: '', notes: '' });
+
+  const [myRequests, setMyRequests] = React.useState<BloodRequest[]>([]);
+  const [myDonations, setMyDonations] = React.useState<DonationRecord[]>([]);
+
+  // Add event & ambulance state variables
+  const [ambulanceForm, setAmbulanceForm] = React.useState({ vehicleNo: '', area: '', phone: '', available: true });
+  const [myAmbulances, setMyAmbulances] = React.useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (!user?.uid) return;
+    const qReqs = query(collection(db, 'requests'), where('requesterUid', '==', user.uid));
+    const unsubReqs = onSnapshot(qReqs, (snap) => {
+      const list: BloodRequest[] = [];
+      snap.forEach(d => {
+        list.push({ id: d.id, ...d.data() } as any);
+      });
+      setMyRequests(list);
+    }, (error) => {
+      console.error("Failed to listen to my requests:", error);
+    });
+
+    const qDons = query(collection(db, 'users', user.uid, 'donations'), orderBy('date', 'desc'));
+    const unsubDons = onSnapshot(qDons, (snap) => {
+      const list: DonationRecord[] = [];
+      snap.forEach(d => {
+        list.push({ id: d.id, ...d.data() } as any);
+      });
+      setMyDonations(list);
+    }, (error) => {
+      console.error("Failed to listen to my donations:", error);
+    });
+
+    const qAmbs = query(collection(db, 'ambulances'), where('ownerUid', '==', user.uid));
+    const unsubAmbs = onSnapshot(qAmbs, (snap) => {
+      const list: any[] = [];
+      snap.forEach(d => {
+        list.push({ id: d.id, ...d.data() });
+      });
+      setMyAmbulances(list);
+    }, (error) => {
+      console.error("Failed to listen to my ambulances:", error);
+    });
+
+    return () => {
+      unsubReqs();
+      unsubDons();
+      unsubAmbs();
+    };
+  }, [user?.uid]);
+
+  const handleToggleAvailability = async () => {
+    if (!profile) return;
+    const newAvailable = !profile.isAvailable;
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { isAvailable: newAvailable });
+      setProfile(prev => prev ? { ...prev, isAvailable: newAvailable } : null);
+      setAllUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, isAvailable: newAvailable } : u));
+      addToast("Status Updated", `You are now ${newAvailable ? 'Available' : 'Unavailable'} for blood donation.`, "success");
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to update availability status", "error");
+    }
+  };
+
+  const handleUpdateDonationDate = async () => {
+    if (!profile) return;
+    if (!donationDate) {
+      addToast("Error", "Please select a valid date", "error");
+      return;
+    }
+    try {
+      const lastDate = new Date(donationDate);
+      const months = profile.gender === 'female' ? 4 : 3;
+      lastDate.setMonth(lastDate.getMonth() + months);
+      const nextEligibility = lastDate.toISOString().split('T')[0];
+
+      await updateDoc(doc(db, 'users', user.uid), { 
+        lastDonationDate: donationDate,
+        nextDonationEligibility: nextEligibility
+      });
+      setProfile(prev => prev ? { ...prev, lastDonationDate: donationDate, nextDonationEligibility: nextEligibility } : null);
+      setAllUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, lastDonationDate: donationDate, nextDonationEligibility: nextEligibility } : u));
+      addToast("Success", "Last donation date updated successfully!", "success");
+      setActiveModal(null);
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to update donation date", "error");
+    }
+  };
+
+  const handleApplyNBD = async () => {
+    setIsApplyingNBD(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { 
+        verificationStatus: 'pending' 
+      });
+      setProfile(prev => prev ? { ...prev, verificationStatus: 'pending' } : null);
+      addToast("Application Submitted", "Your verification application has been sent for review.", "success");
+      setActiveModal(null);
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to submit verification application", "error");
+    } finally {
+      setIsApplyingNBD(false);
+    }
+  };
+
+  const handleBecomeVolunteer = async () => {
+    setIsSubmittingVolunteer(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { 
+        role: 'volunteer' 
+      });
+      setProfile(prev => prev ? { ...prev, role: 'volunteer' } : null);
+      setAllUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, role: 'volunteer' } : u));
+      addToast("Welcome on Board!", "Thank you for registering as a volunteer! You now have a Volunteer badge.", "success");
+      setActiveModal(null);
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to register as volunteer", "error");
+    } finally {
+      setIsSubmittingVolunteer(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    setIsUpdatingPassword(true);
+    try {
+      await sendPasswordResetEmail(auth, user.email || '');
+      addToast("Reset Email Sent", `We have sent a secure password reset link to ${user.email}. Please check your inbox.`, "success");
+      setActiveModal(null);
+    } catch (error: any) {
+      console.error(error);
+      addToast("Error", error.message || "Failed to trigger password reset", "error");
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
+  const handleAddDonation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDonation.date || !newDonation.location) {
+      addToast("Error", "Please fill in all fields", "error");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'users', user.uid, 'donations'), {
+        donorUid: user.uid,
+        donorName: profile?.displayName || user.displayName || 'Anonymous',
+        date: newDonation.date,
+        location: newDonation.location,
+        notes: newDonation.notes,
+        createdAt: serverTimestamp()
+      });
+
+      // Update donation count
+      const currentCount = profile?.donationCount || 0;
+      const newCount = currentCount + 1;
+      await updateDoc(doc(db, 'users', user.uid), {
+        donationCount: newCount,
+        lastDonationDate: newDonation.date
+      });
+
+      if (profile) {
+        setProfile(prev => prev ? { ...prev, donationCount: newCount, lastDonationDate: newDonation.date } : null);
+        setAllUsers(prev => prev.map(u => u.uid === user.uid ? { ...u, donationCount: newCount, lastDonationDate: newDonation.date } : u));
+      }
+
+      addToast("Donation Recorded", "Your past donation has been successfully logged!", "success");
+      setNewDonation({ date: '', location: '', notes: '' });
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to record donation history", "error");
+    }
+  };
+
+  const handleRegisterAmbulance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ambulanceForm.vehicleNo || !ambulanceForm.area || !ambulanceForm.phone) {
+      addToast("Error", "Please fill in all ambulance fields", "error");
+      return;
+    }
+    try {
+      await addDoc(collection(db, 'ambulances'), {
+        ownerUid: user.uid,
+        ownerName: profile?.displayName || user.displayName || 'Anonymous',
+        vehicleNo: ambulanceForm.vehicleNo,
+        area: ambulanceForm.area,
+        phone: ambulanceForm.phone,
+        available: ambulanceForm.available,
+        createdAt: serverTimestamp()
+      });
+      addToast("Ambulance Registered", "Your emergency ambulance service has been registered!", "success");
+      setAmbulanceForm({ vehicleNo: '', area: '', phone: '', available: true });
+    } catch (error) {
+      console.error(error);
+      addToast("Error", "Failed to register ambulance", "error");
+    }
+  };
+
   if (!profile) {
     return (
       <div className="w-full max-w-md mx-auto bg-[#F4F4F7] h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 flex flex-col items-center justify-center p-6 text-slate-800">
@@ -21605,179 +22445,233 @@ function OwnUserProfileView({
         </div>
       </div>
 
-      {/* Main Settings Card */}
-      <div className="px-6 mt-6">
-        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-3xs space-y-4">
-          
-          {/* 1. Account */}
-          <div 
-            onClick={onEditProfile}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
-              <UserIcon className="w-5 h-5 stroke-[2.2]" />
+      {/* Main Interactive Settings Dashboard matching the requested layout */}
+      <div className="px-6 mt-6 space-y-4">
+        
+        {/* CARD 1: My Awards */}
+        <div 
+          onClick={() => setActiveModal('awards')}
+          className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-3xs flex items-center justify-between cursor-pointer group active:scale-[0.99] transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-[#ff1744] shrink-0">
+              <Trophy className="w-6 h-6 stroke-[2.2]" />
             </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-blue-500 transition-colors">Account</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">
-                {profile.phone || 'No Phone'} • @{profile.username || 'username'} • {profile.gender || 'Not specified'}
-              </p>
+            <div className="text-left">
+              <h4 className="text-[14.5px] font-black text-slate-850 tracking-tight">My Awards</h4>
+              <p className="text-[11px] text-slate-400 font-semibold leading-tight mt-0.5">See your earned badges and milestones.</p>
             </div>
           </div>
+          <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+        </div>
 
-          {/* 2. Chat Settings */}
-          <div 
-            onClick={() => setShowSettingsModal(true)}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-orange-500 text-white flex items-center justify-center shrink-0">
-              <SlidersHorizontal className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-orange-500 transition-colors">Chat Settings</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Wallpaper, Night Mode, Animations</p>
-            </div>
-          </div>
-
-          {/* 3. Privacy & Security */}
-          <div 
-            onClick={() => addToast("Info", `Your last donation was on: ${profile.lastDonationDate ? formatDisplayDate(profile.lastDonationDate) : 'None registered'}`, "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0">
-              <Shield className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-emerald-500 transition-colors">Privacy & Security</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">
-                Last Donation: {profile.lastDonationDate ? formatDisplayDate(profile.lastDonationDate) : 'No donation history'}
-              </p>
-            </div>
-          </div>
-
-          {/* 4. Notifications */}
-          <div 
-            onClick={() => addToast("Notifications", "Notification settings are managed by your device.", "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-rose-500 text-white flex items-center justify-center shrink-0">
-              <Bell className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-rose-500 transition-colors">Notifications</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Sounds, Calls, Badges</p>
-            </div>
-          </div>
-
-          {/* 5. Data and Storage */}
-          <div 
-            onClick={() => addToast("Data & Storage", "Automatic media download is optimized for BloodLink speed.", "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
-              <HardDrive className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-blue-500 transition-colors">Data and Storage</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Media download settings</p>
-            </div>
-          </div>
-
-          {/* 6. Chat Folders */}
-          <div 
-            onClick={() => addToast("Chat Folders", "Organize chats for blood requests, donors and group circles.", "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-sky-500 text-white flex items-center justify-center shrink-0">
-              <Folder className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-sky-500 transition-colors">Chat Folders</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Sort chats into folders</p>
-            </div>
-          </div>
-
-          {/* 7. Devices */}
-          <div 
-            onClick={() => addToast("Devices", "Your session is securely synchronized on this device.", "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-cyan-500 text-white flex items-center justify-center shrink-0">
-              <Smartphone className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-cyan-500 transition-colors">Devices</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Manage connected devices</p>
-            </div>
-          </div>
-
-          {/* 8. Power Saving */}
-          <div 
-            onClick={() => addToast("Power Saving", "Power saving mode is active to reduce background battery drain.", "info")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
-              <Zap className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-amber-500 transition-colors">Power Saving</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Reduce power usage on low charge</p>
-            </div>
-          </div>
-
-          {/* 9. Language */}
-          <div 
-            onClick={() => setShowSettingsModal(true)}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-purple-500 text-white flex items-center justify-center shrink-0">
-              <Globe className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex items-center justify-between flex-1 pb-1">
-              <div>
-                <h4 className="text-sm font-semibold text-slate-800 group-hover:text-purple-500 transition-colors">Language</h4>
-                <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">English</p>
+        {/* CARD 2: Availability & Update Date Group */}
+        <div className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-3xs divide-y divide-slate-100">
+          {/* Row 1: Available to donate blood? */}
+          <div className="flex items-center justify-between pb-3.5">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-white shrink-0">
+                <CheckCircle className="w-6 h-6 stroke-[2.2]" />
               </div>
-              <span className="text-xs font-bold text-slate-400 pr-1">English</span>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Available to donate blood?</h4>
+              </div>
             </div>
+            {/* iOS-Style Toggle Switch */}
+            <button 
+              onClick={handleToggleAvailability}
+              className={`w-12 h-6.5 rounded-full p-0.5 transition-colors duration-300 relative focus:outline-none cursor-pointer ${profile.isAvailable ? 'bg-emerald-500' : 'bg-slate-200'}`}
+            >
+              <div className={`bg-white w-5.5 h-5.5 rounded-full shadow-md transform transition-transform duration-300 ${profile.isAvailable ? 'translate-x-5.5' : 'translate-x-0'}`} />
+            </button>
           </div>
 
-        </div>
-      </div>
-
-      {/* Premium & Achievements Card */}
-      <div className="px-6 mt-4">
-        <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-3xs space-y-4">
-          
-          {/* BloodLink Premium */}
+          {/* Row 2: Update Donate Date */}
           <div 
-            onClick={() => addToast("BloodLink Premium", "Thank you for supporting blood donation! Premium badge is active.", "success")}
-            className="flex items-start gap-4 cursor-pointer group"
+            onClick={() => setActiveModal('update_date')}
+            className="flex items-center justify-between pt-3.5 cursor-pointer group active:scale-[0.99] transition-all"
           >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center shrink-0">
-              <Sparkles className="w-5 h-5 stroke-[2.2]" />
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
+                <Calendar className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Update Donate Date</h4>
+              </div>
             </div>
-            <div className="flex-1 pb-3 border-b border-slate-100">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-purple-600 transition-colors">BloodLink Premium</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">Access custom badging and analytics</p>
-            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
           </div>
-
-          {/* BloodLink Stars & Achievements */}
-          <div 
-            onClick={() => addToast("Achievements", `You have earned donor level status with ${profile.donationCount || 0} donations!`, "success")}
-            className="flex items-start gap-4 cursor-pointer group"
-          >
-            <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 text-white flex items-center justify-center shrink-0">
-              <Trophy className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="flex-1 pb-1">
-              <h4 className="text-sm font-semibold text-slate-800 group-hover:text-amber-500 transition-colors">BloodLink Stars</h4>
-              <p className="text-[11px] text-slate-400 mt-0.5 font-medium leading-tight">{profile.donationCount || 0} Saved Lives • Track milestones</p>
-            </div>
-          </div>
-
         </div>
+
+        {/* CARD 3: NBD Verification, Volunteer, Change Password Group */}
+        <div className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-3xs divide-y divide-slate-100">
+          {/* Row 1: NBD Verification */}
+          <div 
+            onClick={() => setActiveModal('nbd')}
+            className="flex items-center justify-between pb-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-500 shrink-0">
+                <Award className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">NBD Verification</h4>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {profile.isVerified ? (
+                <span className="text-[10px] font-black uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">Verified</span>
+              ) : profile.verificationStatus === 'pending' ? (
+                <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded-md">Pending</span>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md">Unverified</span>
+              )}
+              <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Row 2: Become a Volunteer */}
+          <div 
+            onClick={() => setActiveModal('volunteer')}
+            className="flex items-center justify-between py-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-500 shrink-0">
+                <HeartHandshake className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Become a Volunteer</h4>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              {profile.role === 'volunteer' || profile.role === 'admin' ? (
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">Active</span>
+              ) : (
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md">Join</span>
+              )}
+              <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+            </div>
+          </div>
+
+          {/* Row 3: Change Password */}
+          <div 
+            onClick={() => setActiveModal('change_password')}
+            className="flex items-center justify-between pt-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+                <Lock className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Change Password</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* CARD 4: Donation History & Donor Card Group */}
+        <div className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-3xs divide-y divide-slate-100">
+          {/* Row 1: Donation History */}
+          <div 
+            onClick={() => setActiveModal('donation_history')}
+            className="flex items-center justify-between pb-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-[#ff1744]/5 flex items-center justify-center text-[#ff1744] shrink-0">
+                <Clock className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Donation History</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+
+          {/* Row 2: Donor Card */}
+          <div 
+            onClick={() => setShowCardModal(true)}
+            className="flex items-center justify-between pt-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-500 shrink-0">
+                <QrCode className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Donor Card</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* CARD 5: Manage Requests, Manage Event, Manage Ambulance Group */}
+        <div className="bg-white rounded-[1.5rem] p-4 border border-slate-100 shadow-3xs divide-y divide-slate-100">
+          {/* Row 1: Manage Requests */}
+          <div 
+            onClick={() => setActiveModal('requests')}
+            className="flex items-center justify-between pb-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                <Droplets className="w-6 h-6 stroke-[2.2] text-rose-500" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Manage Requests</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+
+          {/* Row 2: Manage Event */}
+          <div 
+            onClick={() => setActiveModal('events')}
+            className="flex items-center justify-between py-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-sky-50 flex items-center justify-center text-sky-500 shrink-0">
+                <Calendar className="w-6 h-6 stroke-[2.2] text-sky-500" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Manage Event</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+
+          {/* Row 3: Manage Ambulance */}
+          <div 
+            onClick={() => setActiveModal('ambulance')}
+            className="flex items-center justify-between pt-3.5 cursor-pointer group active:scale-[0.99] transition-all"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
+                <Car className="w-6 h-6 stroke-[2.2] text-teal-500" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-[14.5px] font-extrabold text-slate-850 tracking-tight">Manage Ambulance</h4>
+              </div>
+            </div>
+            <ChevronRight className="w-4.5 h-4.5 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+          </div>
+        </div>
+
+        {/* STANDALONE CARD: Logout */}
+        <div 
+          onClick={onLogout}
+          className="border border-rose-200 hover:border-rose-300 bg-white rounded-[1.5rem] p-4 flex items-center justify-between cursor-pointer group active:scale-[0.99] transition-all"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+              <LogOut className="w-6 h-6 stroke-[2.2]" />
+            </div>
+            <div className="text-left">
+              <h4 className="text-[14.5px] font-black text-rose-600 tracking-tight">Logout</h4>
+            </div>
+          </div>
+          <ChevronRight className="w-4.5 h-4.5 text-rose-500 group-hover:translate-x-0.5 transition-transform" />
+        </div>
+
       </div>
 
       {/* Admin Panel Option */}
@@ -21799,6 +22693,523 @@ function OwnUserProfileView({
           </div>
         </div>
       )}
+
+      {/* INTERACTIVE FULL-SCREEN OVERLAY MODALS */}
+      <AnimatePresence>
+        {activeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveModal(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm cursor-pointer"
+            />
+            
+            {/* Modal Content container */}
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="relative bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100 overflow-hidden z-50 flex flex-col max-h-[85vh]"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-50 shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-[#ff1744]">
+                    {activeModal === 'awards' && <Trophy className="w-4.5 h-4.5" />}
+                    {activeModal === 'update_date' && <Calendar className="w-4.5 h-4.5" />}
+                    {activeModal === 'nbd' && <Award className="w-4.5 h-4.5" />}
+                    {activeModal === 'volunteer' && <HeartHandshake className="w-4.5 h-4.5" />}
+                    {activeModal === 'change_password' && <Lock className="w-4.5 h-4.5" />}
+                    {activeModal === 'donation_history' && <Clock className="w-4.5 h-4.5" />}
+                    {activeModal === 'requests' && <Droplets className="w-4.5 h-4.5" />}
+                    {activeModal === 'events' && <Calendar className="w-4.5 h-4.5 text-sky-500" />}
+                    {activeModal === 'ambulance' && <Car className="w-4.5 h-4.5 text-teal-600" />}
+                  </div>
+                  <h3 className="font-black text-slate-900 text-base uppercase tracking-tight">
+                    {activeModal === 'awards' && 'My Donor Awards'}
+                    {activeModal === 'update_date' && 'Update Donate Date'}
+                    {activeModal === 'nbd' && 'NBD Verification'}
+                    {activeModal === 'volunteer' && 'Become a Volunteer'}
+                    {activeModal === 'change_password' && 'Change Password'}
+                    {activeModal === 'donation_history' && 'Donation Logs'}
+                    {activeModal === 'requests' && 'Manage Requests'}
+                    {activeModal === 'events' && 'Blood Drives & Campaigns'}
+                    {activeModal === 'ambulance' && 'Emergency Ambulance'}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setActiveModal(null)}
+                  className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                >
+                  <X className="w-4.5 h-4.5" />
+                </button>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+
+                {/* 1. My Awards Modal */}
+                {activeModal === 'awards' && (
+                  <div className="space-y-4 text-slate-700">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Earn beautiful milestones on BloodLink Bangladesh by logging your physical blood donations. Each logged donation saves up to 3 lives!
+                    </p>
+                    
+                    <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-amber-400 flex items-center justify-center text-white shadow-md">
+                        <Trophy className="w-6 h-6 animate-pulse" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-amber-900">Total Lives Saved</p>
+                        <p className="text-2xl font-black text-amber-500 leading-none mt-1">{(profile.donationCount || 0) * 3}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {/* Bronze Drop Badge */}
+                      <div className={`p-3 rounded-2xl border flex items-center justify-between ${ (profile.donationCount || 0) >= 1 ? 'bg-rose-50/40 border-rose-100' : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">🥉</span>
+                          <div className="text-left">
+                            <p className="text-xs font-black text-slate-800">Bronze Drop Medal</p>
+                            <p className="text-[10px] text-slate-400 font-bold">1 Logged Donation</p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(profile.donationCount || 0) >= 1 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          {(profile.donationCount || 0) >= 1 ? 'Unlocked' : 'Locked'}
+                        </span>
+                      </div>
+
+                      {/* Silver Life Saver Badge */}
+                      <div className={`p-3 rounded-2xl border flex items-center justify-between ${ (profile.donationCount || 0) >= 3 ? 'bg-indigo-50/40 border-indigo-100' : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">🥈</span>
+                          <div className="text-left">
+                            <p className="text-xs font-black text-slate-800">Silver Life Saver</p>
+                            <p className="text-[10px] text-slate-400 font-bold">3 Logged Donations</p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(profile.donationCount || 0) >= 3 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          {(profile.donationCount || 0) >= 3 ? 'Unlocked' : `Locked (${profile.donationCount || 0}/3)`}
+                        </span>
+                      </div>
+
+                      {/* Gold Community Hero Badge */}
+                      <div className={`p-3 rounded-2xl border flex items-center justify-between ${ (profile.donationCount || 0) >= 5 ? 'bg-amber-50/40 border-amber-100' : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">🏆</span>
+                          <div className="text-left">
+                            <p className="text-xs font-black text-slate-800">Gold Hero Badge</p>
+                            <p className="text-[10px] text-slate-400 font-bold">5 Logged Donations</p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(profile.donationCount || 0) >= 5 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          {(profile.donationCount || 0) >= 5 ? 'Unlocked' : `Locked (${profile.donationCount || 0}/5)`}
+                        </span>
+                      </div>
+
+                      {/* Diamond Champion Badge */}
+                      <div className={`p-3 rounded-2xl border flex items-center justify-between ${ (profile.donationCount || 0) >= 10 ? 'bg-blue-50/40 border-blue-100' : 'bg-slate-50/50 border-slate-100 opacity-60'}`}>
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">💎</span>
+                          <div className="text-left">
+                            <p className="text-xs font-black text-slate-800">Diamond Champion</p>
+                            <p className="text-[10px] text-slate-400 font-bold">10 Logged Donations</p>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${(profile.donationCount || 0) >= 10 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          {(profile.donationCount || 0) >= 10 ? 'Unlocked' : `Locked (${profile.donationCount || 0}/10)`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Update Donate Date Modal */}
+                {activeModal === 'update_date' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Select the date of your last physical blood donation. We will automatically calculate your eligibility and display your countdown on the platform.
+                    </p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Donation Date</label>
+                      <input 
+                        type="date"
+                        value={donationDate}
+                        onChange={(e) => setDonationDate(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-[#ff2247]"
+                      />
+                    </div>
+                    <button
+                      onClick={handleUpdateDonationDate}
+                      className="w-full py-3 bg-[#ff2247] hover:bg-[#de1c3f] text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md mt-4 active:scale-98 cursor-pointer select-none"
+                    >
+                      Save Donation Date
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. NBD Verification Modal */}
+                {activeModal === 'nbd' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      National Blood Donor Verification builds trust. Submit your credentials to receive the exclusive verified badge on your public card.
+                    </p>
+                    
+                    {profile.verificationStatus === 'pending' ? (
+                      <div className="p-4 bg-amber-50/50 border border-amber-100 rounded-2xl text-center">
+                        <span className="text-2xl">⏳</span>
+                        <p className="text-xs font-bold text-amber-800 mt-2">Verification Application Pending</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Our system administrators are validating your credentials with hospital databases.</p>
+                      </div>
+                    ) : profile.isVerified ? (
+                      <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-center">
+                        <span className="text-2xl">✅</span>
+                        <p className="text-xs font-bold text-emerald-800 mt-2">Verified National Blood Donor</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Your credentials are authenticated. Your public badge is live.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">National Donor ID Card No.</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. BD-DONOR-88219"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold focus:outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Hospital Verification Code</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. LAB-7729-X"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold focus:outline-none"
+                          />
+                        </div>
+                        <button
+                          onClick={handleApplyNBD}
+                          disabled={isApplyingNBD}
+                          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-98 cursor-pointer select-none disabled:opacity-55"
+                        >
+                          {isApplyingNBD ? 'Applying...' : 'Apply for NBD Seal'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 4. Become a Volunteer Modal */}
+                {activeModal === 'volunteer' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Volunteers coordinate local emergency matches, moderate feed communications, support blood collections, and save lives on-ground across Bangladesh.
+                    </p>
+
+                    {profile.role === 'volunteer' || profile.role === 'admin' ? (
+                      <div className="p-4 bg-emerald-50/50 border border-emerald-100 rounded-2xl text-center">
+                        <span className="text-2xl">❤️</span>
+                        <p className="text-xs font-bold text-emerald-800 mt-2">You are an active Volunteer!</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-medium">Thank you for your noble support. You are a valued savior of Bangladesh's blood communities.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-3.5 bg-slate-50 rounded-xl space-y-2">
+                          <p className="text-xs font-black text-slate-800">Savior Responsibilities:</p>
+                          <ul className="list-disc pl-4 text-[10.5px] text-slate-500 font-bold space-y-1">
+                            <li>Help verify emergency blood requests in your Upazila/Thana</li>
+                            <li>Reach out to eligible matched donors</li>
+                            <li>Coordinate logistics for critical patients</li>
+                          </ul>
+                        </div>
+
+                        <button
+                          onClick={handleBecomeVolunteer}
+                          disabled={isSubmittingVolunteer}
+                          className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-98 cursor-pointer select-none disabled:opacity-55"
+                        >
+                          {isSubmittingVolunteer ? 'Registering...' : 'Yes, Pledge as Volunteer'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 5. Change Password Modal */}
+                {activeModal === 'change_password' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      We utilize secure Firebase Authentication. Click below to trigger a secured reset link delivered instantly to your registered email address.
+                    </p>
+                    <div className="p-3 bg-slate-50 rounded-xl">
+                      <p className="text-xs font-black text-slate-800">Your Registered Email:</p>
+                      <p className="text-[11px] text-slate-500 font-bold mt-0.5 truncate">{user.email || 'No email associated'}</p>
+                    </div>
+
+                    <button
+                      onClick={handleChangePassword}
+                      disabled={isUpdatingPassword}
+                      className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-md active:scale-98 cursor-pointer select-none disabled:opacity-55"
+                    >
+                      {isUpdatingPassword ? 'Sending...' : 'Send Reset Email'}
+                    </button>
+                  </div>
+                )}
+
+                {/* 6. Donation History Modal */}
+                {activeModal === 'donation_history' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Review your logs or register a past donation to update your life-saving accomplishments count and update your eligibility!
+                    </p>
+
+                    {/* Log Form */}
+                    <form onSubmit={handleAddDonation} className="bg-slate-50/50 p-3.5 border border-slate-100 rounded-2xl space-y-3">
+                      <p className="text-xs font-black text-slate-800">Register Past Donation</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Date</label>
+                          <input 
+                            type="date"
+                            value={newDonation.date}
+                            onChange={(e) => setNewDonation({ ...newDonation, date: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Hospital/Location</label>
+                          <input 
+                            type="text"
+                            placeholder="e.g. Dhaka Medical"
+                            value={newDonation.location}
+                            onChange={(e) => setNewDonation({ ...newDonation, location: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">Notes (Optional)</label>
+                        <input 
+                          type="text"
+                          placeholder="e.g. Voluntary, emergency platelets"
+                          value={newDonation.notes}
+                          onChange={(e) => setNewDonation({ ...newDonation, notes: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                        />
+                      </div>
+                      <button 
+                        type="submit"
+                        className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all cursor-pointer"
+                      >
+                        Add to History
+                      </button>
+                    </form>
+
+                    {/* Donation Logs List */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Your Logs</p>
+                      {myDonations.length === 0 ? (
+                        <div className="p-6 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 font-bold">
+                          No logged donations yet. Save a life today!
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {myDonations.map((d: any, index) => (
+                            <div key={d.id || index} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between">
+                              <div className="text-left">
+                                <p className="text-xs font-black text-slate-800">{d.location}</p>
+                                <p className="text-[10px] text-slate-400 font-medium">{formatDisplayDate(d.date)}</p>
+                                {d.notes && <p className="text-[9px] text-slate-400 italic mt-0.5">"{d.notes}"</p>}
+                              </div>
+                              <span className="text-xs">🩸</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 7. Manage Requests Modal */}
+                {activeModal === 'requests' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Track and coordinate the blood requests you have initiated. Resolve requests once the blood bags are successfully managed.
+                    </p>
+
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {myRequests.length === 0 ? (
+                        <div className="p-6 bg-slate-50 rounded-2xl text-center text-xs text-slate-400 font-bold">
+                          You haven't posted any blood requests yet.
+                        </div>
+                      ) : (
+                        myRequests.map((req) => (
+                          <div key={req.id} className="p-3 bg-white border border-slate-100 rounded-xl flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md">
+                                {req.bloodGroup} Needed
+                              </span>
+                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${req.status === 'resolved' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                                {req.status}
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-800 leading-tight">
+                              Hospital: {req.hospitalName}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                              Patient: {req.patientName} • Required: {req.dateRequired}
+                            </p>
+                            {req.status !== 'resolved' && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    await updateDoc(doc(db, 'requests', req.id), { status: 'resolved' });
+                                    addToast("Resolved", "Blood request marked as resolved. Thank you!", "success");
+                                  } catch (error) {
+                                    console.error(error);
+                                    addToast("Error", "Failed to resolve request", "error");
+                                  }
+                                }}
+                                className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                              >
+                                Mark as Resolved ✅
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* 8. Manage Event Modal */}
+                {activeModal === 'events' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Upcoming Voluntary Blood Donation drives, camps and campaigns across Bangladesh. Make an impact by coordinating or joining!
+                    </p>
+
+                    <div className="space-y-3">
+                      {/* Active Drive 1 */}
+                      <div className="p-3.5 bg-sky-50/40 border border-sky-100 rounded-2xl flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] font-black uppercase text-sky-600 bg-sky-50 px-2 py-0.5 rounded-md">National Camp</span>
+                          <span className="text-[10px] font-bold text-slate-500">25 July, 2026</span>
+                        </div>
+                        <h5 className="text-xs font-black text-slate-800">Dhaka Medical Voluntary Drive</h5>
+                        <p className="text-[10px] text-slate-500 font-bold leading-normal">
+                          📍 Venue: DMC College Corridor Gate-2, Dhaka
+                        </p>
+                        <button
+                          onClick={() => addToast("Registered", "You have successfully registered to participate in Dhaka Medical Voluntary Drive!", "success")}
+                          className="w-full mt-1 py-1.5 bg-sky-500 hover:bg-sky-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                        >
+                          Join Campaign
+                        </button>
+                      </div>
+
+                      {/* Active Drive 2 */}
+                      <div className="p-3.5 bg-indigo-50/40 border border-indigo-100 rounded-2xl flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">Emergency Camp</span>
+                          <span className="text-[10px] font-bold text-slate-500">10 August, 2026</span>
+                        </div>
+                        <h5 className="text-xs font-black text-slate-800">Chittagong Sandhani Blood Drive</h5>
+                        <p className="text-[10px] text-slate-500 font-bold leading-normal">
+                          📍 Venue: Sandhani Office, Chittagong Medical Campus
+                        </p>
+                        <button
+                          onClick={() => addToast("Registered", "You have successfully registered for Chittagong Sandhani Blood Drive!", "success")}
+                          className="w-full mt-1 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                        >
+                          Join Campaign
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 9. Manage Ambulance Modal */}
+                {activeModal === 'ambulance' && (
+                  <div className="space-y-4 text-left">
+                    <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                      Register your own private vehicle, community van, or hospital ambulance as an emergency vehicle, or search for ambulance resources in Bangladesh.
+                    </p>
+
+                    {/* Registration Form */}
+                    <form onSubmit={handleRegisterAmbulance} className="bg-slate-50/50 p-3.5 border border-slate-100 rounded-2xl space-y-3">
+                      <p className="text-xs font-black text-slate-800">Register Ambulance Service</p>
+                      <div className="space-y-2">
+                        <input 
+                          type="text"
+                          placeholder="Vehicle No (e.g. Dhaka Metro-129-XX)"
+                          value={ambulanceForm.vehicleNo}
+                          onChange={(e) => setAmbulanceForm({ ...ambulanceForm, vehicleNo: e.target.value })}
+                          className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                          required
+                        />
+                        <div className="grid grid-cols-2 gap-2">
+                          <input 
+                            type="text"
+                            placeholder="Operation Area (Thana)"
+                            value={ambulanceForm.area}
+                            onChange={(e) => setAmbulanceForm({ ...ambulanceForm, area: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                            required
+                          />
+                          <input 
+                            type="text"
+                            placeholder="Direct Call Hotline"
+                            value={ambulanceForm.phone}
+                            onChange={(e) => setAmbulanceForm({ ...ambulanceForm, phone: e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs font-semibold focus:outline-none"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <button 
+                        type="submit"
+                        className="w-full py-2 bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-all cursor-pointer"
+                      >
+                        Register Ambulance
+                      </button>
+                    </form>
+
+                    {/* Ambulance List */}
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Registered Ambulances</p>
+                      {myAmbulances.length === 0 ? (
+                        <div className="p-3 bg-teal-50/30 border border-teal-100/60 rounded-xl">
+                          <p className="text-xs font-bold text-teal-900 text-center leading-relaxed">
+                            No ambulance registrations logged by you. Registering saves critical travel search times!
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {myAmbulances.map((amb: any) => (
+                            <div key={amb.id} className="p-3 bg-white border border-slate-100 rounded-xl flex items-center justify-between">
+                              <div className="text-left">
+                                <p className="text-xs font-black text-slate-800">{amb.vehicleNo}</p>
+                                <p className="text-[10px] text-slate-400 font-semibold">📍 {amb.area} • Hotline: {amb.phone}</p>
+                              </div>
+                              <span className="text-xs">🚑</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <DonorCardModal
         isOpen={showCardModal}
@@ -22809,7 +24220,9 @@ function MapView({
   handleLogin,
   setMatchingDonorsRequest,
   mapResetKey,
-  onOverviewChange
+  onOverviewChange,
+  askConfirm,
+  addToast
 }: { 
   requests: BloodRequest[], 
   donors: UserProfile[], 
@@ -22827,10 +24240,21 @@ function MapView({
   handleLogin: () => void,
   setMatchingDonorsRequest: (req: BloodRequest | null) => void,
   mapResetKey?: number,
-  onOverviewChange?: (isOpen: boolean) => void
+  onOverviewChange?: (isOpen: boolean) => void,
+  askConfirm?: (title: string, message: string, confirmText?: string, type?: any, cancelText?: string) => Promise<boolean>,
+  addToast?: (title: string, body: string, type: any) => void
 }) {
   const [selectedThanaKey, setSelectedThanaKey] = useState<string | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<BloodRequest | null>(null);
+  const [selectedMapTarget, setSelectedMapTarget] = useState<{
+    type: 'donor' | 'request';
+    id: string;
+    uid: string;
+    displayName: string;
+    bloodGroup: string;
+    location: string;
+    photoURL?: string;
+  } | null>(null);
   const [mapFilter, setMapFilter] = useState<'all' | 'donors' | 'requests'>('all');
   const [isUnlocked, setIsUnlocked] = useState(false);
   const isEnabled = Boolean(apiKey) && apiKey !== '';
@@ -22839,9 +24263,9 @@ function MapView({
 
   useEffect(() => {
     if (onOverviewChange) {
-      onOverviewChange(!!selectedThanaKey || !!selectedRequest);
+      onOverviewChange(!!selectedThanaKey || !!selectedRequest || !!selectedMapTarget);
     }
-  }, [selectedThanaKey, selectedRequest, onOverviewChange]);
+  }, [selectedThanaKey, selectedRequest, selectedMapTarget, onOverviewChange]);
 
   useEffect(() => {
     if (map && activeDistrict) {
@@ -23000,6 +24424,9 @@ function MapView({
   }, [selectedThanaKey, thanaData, requests, donors]);
 
   const getInitialCenter = () => {
+    if (profile?.locationData?.lat && profile?.locationData?.lng) {
+      return { lat: profile.locationData.lat, lng: profile.locationData.lng };
+    }
     if (activeDistrict) {
       return getDistrictCoords(activeDistrict);
     }
@@ -23010,10 +24437,37 @@ function MapView({
   };
 
   const getInitialZoom = () => {
+    if (profile?.locationData?.lat && profile?.locationData?.lng) {
+      return 13;
+    }
     if (activeDistrict || profile?.district) {
       return 10;
     }
     return 7;
+  };
+
+  const getDonorCoords = (donor: UserProfile, index: number) => {
+    if (donor.locationData?.lat && donor.locationData?.lng) {
+      return { lat: donor.locationData.lat, lng: donor.locationData.lng };
+    }
+    
+    const thanaName = donor.thana;
+    const districtName = donor.district;
+    
+    let baseCoords = { lat: 23.6850, lng: 90.3563 };
+    if (thanaName && THANA_COORDS[thanaName.trim()]) {
+      baseCoords = THANA_COORDS[thanaName.trim()];
+    } else if (districtName) {
+      baseCoords = getDistrictCoords(districtName);
+    }
+    
+    // Spiral dispersion using golden angle to avoid overlapping markers
+    const angle = (index * 137.5) * (Math.PI / 180);
+    const r = 0.005 + (index * 0.0016) % 0.018;
+    return {
+      lat: baseCoords.lat + r * Math.sin(angle),
+      lng: baseCoords.lng + r * Math.cos(angle)
+    };
   };
 
   return (
@@ -23043,50 +24497,55 @@ function MapView({
         disableDefaultUI={true}
         gestureHandling={isUnlocked ? 'greedy' : 'none'}
         minZoom={6.5}
-        maxZoom={12}
+        maxZoom={20}
         internalUsageAttributionIds= {['gmp_mcp_codeassist_v1_aistudio']}
         style={{ width: '100%', height: '100%' }}
       >
-        {thanaData.map((t) => {
-          const showRequests = t.count > 0 && settings?.showDistrictRequests !== false && (mapFilter === 'all' || mapFilter === 'requests');
-          const showDonors = t.donorsCount > 0 && settings?.showDonorsOnMap !== false && (mapFilter === 'all' || mapFilter === 'donors');
+        {/* Individual Donor Markers */}
+        {settings?.showDonorsOnMap !== false && (mapFilter === 'all' || mapFilter === 'donors') && donors.map((donor, idx) => {
+          const coords = getDonorCoords(donor, idx);
+          if (!coords || !donor.bloodGroup) return null;
           
-          if (!showRequests && !showDonors) return null;
-
           return (
             <AdvancedMarker
-              key={t.key}
-              position={{ lat: t.lat, lng: t.lng }}
+              key={`donor-${donor.uid}-${idx}`}
+              position={coords}
               onClick={() => {
-                setSelectedThanaKey(t.key);
+                setSelectedMapTarget({
+                  type: 'donor',
+                  id: donor.uid,
+                  uid: donor.uid,
+                  displayName: donor.displayName || 'Anonymous Donor',
+                  bloodGroup: donor.bloodGroup,
+                  location: donor.locationData?.address || `${donor.thana}, ${donor.district}`,
+                  photoURL: donor.photoURL
+                });
                 if (map) {
-                  map.panTo({ lat: t.lat, lng: t.lng });
-                  map.setZoom(11.5);
+                  map.panTo(coords);
+                  map.setZoom(18);
                 }
               }}
             >
-              <div className="flex flex-col items-center cursor-pointer transform hover:scale-110 transition-transform">
-                <div className="flex gap-1 items-center">
-                  {showRequests && (
-                    <div className={`flex items-center gap-1 px-1.5 h-[24px] rounded-full border border-white shadow-md text-white font-black text-[9px] transition-all shrink-0 ${t.urgencyCount > 0 ? 'bg-red-600 animate-pulse' : 'bg-slate-900'}`}>
-                      <Droplets className="w-2.5 h-2.5" />
-                      {t.count}
-                    </div>
-                  )}
-                  {showDonors && (
-                    <div className={`flex items-center gap-1 px-1.5 h-[24px] rounded-full border border-white shadow-md text-white font-black text-[9px] shrink-0 transition-all ${
-                      t.donorsCount <= 3 
-                        ? 'bg-[#10b981] shadow-[0_4px_12px_rgba(16,185,129,0.35)]' 
-                        : t.donorsCount <= 10 
-                        ? 'bg-[#06b6d4] shadow-[0_4px_12px_rgba(6,182,212,0.35)]' 
-                        : t.donorsCount <= 25 
-                        ? 'bg-[#2563eb] shadow-[0_4px_12px_rgba(37,99,235,0.35)]' 
-                        : 'bg-[#8b5cf6] shadow-[0_4px_12px_rgba(139,92,246,0.35)]'
-                    }`}>
-                      <Users className="w-2.5 h-2.5" />
-                      {t.donorsCount}
-                    </div>
-                  )}
+              <div className="relative w-10 h-13 flex flex-col items-center justify-center cursor-pointer transform hover:scale-110 transition-all duration-200 group">
+                {/* Glowing Pulsing Ring */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-9 h-9 bg-red-600/15 rounded-full animate-pulse pointer-events-none" />
+                
+                {/* Classic map pin SVG */}
+                <svg className="w-full h-full drop-shadow-[0_6px_12px_rgba(220,38,38,0.35)]" viewBox="0 0 38 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path 
+                    d="M19 0C8.5 0 0 8.5 0 19C0 31.5 19 48 19 48C19 48 38 31.5 38 19C38 8.5 29.5 0 19 0Z" 
+                    fill="#DC2626" 
+                    stroke="#FFFFFF" 
+                    strokeWidth="2"
+                  />
+                  <circle cx="19" cy="18" r="9" fill="#FFFFFF" />
+                </svg>
+
+                {/* Center Blood Group Text Overlay */}
+                <div className="absolute top-[6px] left-0 right-0 flex items-center justify-center h-6 pointer-events-none select-none">
+                  <span className="text-[11px] font-black text-red-600 tracking-tighter leading-none">
+                    {donor.bloodGroup}
+                  </span>
                 </div>
               </div>
             </AdvancedMarker>
@@ -23105,7 +24564,21 @@ function MapView({
             profile={profile}
             onDeleteRequest={onDeleteRequest}
             onDonationDone={onDonationDone}
-            onClick={() => setSelectedRequest(r)}
+            onClick={() => {
+              setSelectedMapTarget({
+                type: 'request',
+                id: r.id,
+                uid: r.requesterUid,
+                displayName: r.requesterName || 'Blood Requester',
+                bloodGroup: r.bloodGroup,
+                location: r.hospitalAddress || `${r.hospital}, ${r.thana}, ${r.district}`,
+                photoURL: r.requesterPhoto
+              });
+              if (map && r.lat && r.lng) {
+                map.panTo({ lat: r.lat, lng: r.lng });
+                map.setZoom(18);
+              }
+            }}
           />
         ))}
       </Map>
@@ -23203,6 +24676,8 @@ function MapView({
                             onViewProfile={() => onViewProfile(req.requesterUid)}
                             onMatchDonors={() => setMatchingDonorsRequest(req)}
                             onDelete={(profile?.role === 'admin' || user?.uid === req.requesterUid) ? () => onDeleteRequest(req.id) : undefined}
+                            askConfirm={askConfirm}
+                            addToast={addToast}
                           />
                       ))}
                     </div>
@@ -23307,6 +24782,8 @@ function MapView({
                     onDeleteRequest(selectedRequest.id);
                     setSelectedRequest(null);
                   } : undefined}
+                  askConfirm={askConfirm}
+                  addToast={addToast}
                 />
 
                 {/* Nearby Donors for this specific request */}
@@ -23351,6 +24828,91 @@ function MapView({
             </motion.div>
           </>
         )}
+
+        {selectedMapTarget && (
+          <>
+            {/* Backdrop click to dismiss */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedMapTarget(null)}
+              className="absolute inset-0 bg-slate-900/10 backdrop-blur-[0.5px] z-20 pointer-events-auto"
+            />
+            
+            {/* Bottom Sheet Card */}
+            <motion.div 
+              initial={{ y: '100%', opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: '100%', opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 220 }}
+              className="absolute bottom-4 left-4 right-4 z-30 md:left-auto md:right-4 md:w-[380px] bg-white rounded-[32px] p-5 shadow-[0_12px_36px_rgba(15,23,42,0.15)] border border-slate-100 flex flex-col gap-4 pointer-events-auto"
+            >
+              {/* Drag Handle Bar */}
+              <div className="w-12 h-1 bg-slate-400/60 rounded-full mx-auto" />
+
+              {/* Core Info Row */}
+              <div className="flex items-center justify-between gap-3 mt-1">
+                <div className="flex items-center gap-3.5">
+                  {/* Circular Avatar Badge with Droplet */}
+                  <div className="w-14 h-14 rounded-full bg-red-100/80 flex items-center justify-center shrink-0 shadow-sm relative">
+                    <svg className="w-7 h-7 text-red-600 fill-current" viewBox="0 0 24 24">
+                      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+                    </svg>
+                  </div>
+
+                  {/* Display Name and Blood Group */}
+                  <div className="text-left space-y-1">
+                    <h4 className="text-[16px] font-black text-slate-900 tracking-tight leading-tight">
+                      {selectedMapTarget.displayName}
+                    </h4>
+                    <div className="flex items-center gap-1.5">
+                      {/* Blood Group Badge */}
+                      <span className="bg-rose-50 border border-rose-100 text-red-650 text-[11px] font-black px-2.5 py-0.5 rounded-full tracking-wider leading-none">
+                        {selectedMapTarget.bloodGroup}
+                      </span>
+                      {/* Role type (Donor vs Request) */}
+                      <span className="bg-slate-50 border border-slate-100 text-slate-400 text-[9px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded-md leading-none">
+                        {selectedMapTarget.type === 'donor' ? 'Donor' : 'Requester'}
+                      </span>
+                    </div>
+                    {/* Location Text */}
+                    <p className="text-[11px] font-semibold text-slate-500 max-w-[170px] truncate leading-tight flex items-center gap-1" title={selectedMapTarget.location}>
+                      <span className="shrink-0 text-red-500">📍</span>
+                      <span className="truncate">{selectedMapTarget.location}</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Red Chat Action Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!user) {
+                      handleLogin();
+                    } else {
+                      onMessage(selectedMapTarget.uid);
+                      setSelectedMapTarget(null);
+                    }
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white font-black text-[14px] px-6 py-3.5 rounded-full flex items-center gap-2 transition-all active:scale-95 shadow-md shadow-red-500/15 cursor-pointer shrink-0"
+                >
+                  <MessageCircle className="w-4 h-4 fill-current" />
+                  <span>Chat</span>
+                </button>
+              </div>
+
+              {/* Dismiss Button */}
+              <button
+                type="button"
+                onClick={() => setSelectedMapTarget(null)}
+                className="w-full py-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 hover:text-slate-800 font-bold text-[12px] uppercase tracking-widest rounded-full transition-all flex items-center justify-center cursor-pointer border-2"
+              >
+                Dismiss
+              </button>
+            </motion.div>
+          </>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -23373,10 +24935,239 @@ function MarkerWithInfoWindow({ request, donors, onMessage, onViewProfile, profi
       position={{ lat: request.lat!, lng: request.lng! }}
       onClick={onClick}
     >
-      <div className={`relative px-2 py-1 rounded-full shadow-lg border-2 border-white flex items-center justify-center min-w-[45px] hover:scale-110 transition-transform cursor-pointer ${request.urgency === 'Urgent' ? 'bg-red-600 animate-pulse' : 'bg-red-500'}`}>
-        <span className="text-[10px] font-black text-white">{request.bloodGroup}</span>
-        <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 border-r-2 border-b-2 border-white ${request.urgency === 'Urgent' ? 'bg-red-600' : 'bg-red-500'}`}></div>
+      <div className="relative w-12 h-16 flex flex-col items-center justify-center cursor-pointer transform hover:scale-110 transition-all duration-200 group">
+        {/* Urgent Pulsing Ambient Aura */}
+        {request.urgency === 'Urgent' ? (
+          <>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 bg-red-650/20 rounded-full animate-ping pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-12 h-12 bg-red-650/30 rounded-full animate-pulse pointer-events-none" />
+          </>
+        ) : (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-10 h-10 bg-red-650/15 rounded-full animate-pulse pointer-events-none" />
+        )}
+        
+        {/* High-contrast floating urgency badge */}
+        {request.urgency === 'Urgent' && (
+          <div className="absolute -top-4.5 bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-md border border-red-500 z-10 whitespace-nowrap leading-none uppercase animate-bounce">
+            Urgent
+          </div>
+        )}
+
+        {/* Realistic Blood Bag SVG Icon */}
+        <svg className="w-full h-full drop-shadow-[0_8px_16px_rgba(239,68,68,0.45)]" viewBox="0 0 44 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Transparent Outer Plastic Sheath / Bag Outline */}
+          <path 
+            d="M6 10 C6 7 8 5 11 5 H33 C36 5 38 7 38 10 V46 C38 49 36 51 33 51 H11 C8 51 6 49 6 46 V10 Z" 
+            fill="rgba(255,255,255,0.15)" 
+            stroke="#FFFFFF" 
+            strokeWidth="1.5" 
+          />
+          
+          {/* Hanger Bracket at top */}
+          <rect x="16" y="1" width="12" height="4" rx="2" fill="none" stroke="#FFFFFF" strokeWidth="1.5" />
+          
+          {/* Main Red Liquid Fill */}
+          <path 
+            d="M8 12 C8 10 10 9 12 9 H32 C34 9 36 10 36 12 V44 C36 46 34 47 32 47 H12 C10 47 8 46 8 44 V12 Z" 
+            fill={request.urgency === 'Urgent' ? '#DC2626' : '#EF4444'} 
+            stroke="#FFFFFF" 
+            strokeWidth="1.5" 
+          />
+
+          {/* 3D Gloss Highlight curve */}
+          <path d="M11 13 Q22 11 33 13" stroke="rgba(255,255,255,0.4)" strokeWidth="2.5" strokeLinecap="round" />
+          <path d="M10 16 V28" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* Bottom Tubes/Ports */}
+          <rect x="14" y="47" width="4" height="6" rx="1.5" fill={request.urgency === 'Urgent' ? '#B91C1C' : '#DC2626'} stroke="#FFFFFF" strokeWidth="1" />
+          <rect x="20" y="47" width="4" height="9" rx="1.5" fill={request.urgency === 'Urgent' ? '#B91C1C' : '#DC2626'} stroke="#FFFFFF" strokeWidth="1" />
+          <rect x="26" y="47" width="4" height="6" rx="1.5" fill={request.urgency === 'Urgent' ? '#B91C1C' : '#DC2626'} stroke="#FFFFFF" strokeWidth="1" />
+
+          {/* Connection Line pointing straight down to act as precise location anchor pin */}
+          <path d="M22 55 L22 60" stroke={request.urgency === 'Urgent' ? '#DC2626' : '#EF4444'} strokeWidth="3" strokeLinecap="round" />
+
+          {/* Central White Information Label */}
+          <rect x="11" y="15" width="22" height="26" rx="3.5" fill="#FFFFFF" />
+
+          {/* Micro details inside white label (barcode, horizontal lines, tiny heart) */}
+          {/* Mini Heart */}
+          <path d="M 27,33.5 A 1.2,1.2 0 0,0 25.5,34 A 1.2,1.2 0 0,0 24,33.5 C 23.2,34.2 23.2,35.2 25.5,36.5 C 27.8,35.2 27.8,34.2 27,33.5 Z" fill="#EF4444" />
+          
+          {/* Barcode Lines */}
+          <line x1="14" y1="34" x2="14" y2="38" stroke="#475569" strokeWidth="0.8" />
+          <line x1="15.5" y1="34" x2="15.5" y2="38" stroke="#475569" strokeWidth="1.2" />
+          <line x1="17" y1="34" x2="17" y2="38" stroke="#475569" strokeWidth="0.5" />
+          <line x1="18.5" y1="34" x2="18.5" y2="38" stroke="#475569" strokeWidth="1" />
+          <line x1="20" y1="34" x2="20" y2="38" stroke="#475569" strokeWidth="0.8" />
+          
+          {/* Tiny details lines */}
+          <line x1="14" y1="30" x2="20" y2="30" stroke="#94A3B8" strokeWidth="0.8" />
+          <line x1="14" y1="31.8" x2="18" y2="31.8" stroke="#94A3B8" strokeWidth="0.8" />
+
+          {/* Bold blood group abbreviation, centered inside white label */}
+          <text 
+            x="22" 
+            y="26" 
+            fontFamily="Inter, system-ui, sans-serif" 
+            fontWeight="900" 
+            fontSize="8.5" 
+            fill="#0F172A" 
+            textAnchor="middle" 
+            letterSpacing="-0.03em"
+          >
+            {request.bloodGroup}
+          </text>
+        </svg>
       </div>
     </AdvancedMarker>
+  );
+}
+
+function LocationPickerModal({ 
+  isOpen, 
+  onClose, 
+  onSelect, 
+  initialLocation, 
+  apiKey, 
+  mapId 
+}: { 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSelect: (lat: number, lng: number, address: string) => void; 
+  initialLocation?: { lat: number; lng: number; address?: string } | null;
+  apiKey: string;
+  mapId?: string;
+}) {
+  const [markerPos, setMarkerPos] = useState({ lat: 23.8103, lng: 90.4125 });
+  const [addressInput, setAddressInput] = useState('');
+  
+  useEffect(() => {
+    if (initialLocation?.lat && initialLocation?.lng) {
+      setMarkerPos({ lat: initialLocation.lat, lng: initialLocation.lng });
+      setAddressInput(initialLocation.address || '');
+    } else {
+      // Default center (Dhaka)
+      setMarkerPos({ lat: 23.8103, lng: 90.4125 });
+    }
+  }, [initialLocation, isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-[32px] shadow-2xl border border-slate-100 w-full max-w-lg flex flex-col max-h-[90%] overflow-hidden">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">Select Current Location</h3>
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mt-1">Pin your exact location on Google Maps</p>
+          </div>
+          <button 
+            type="button"
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-slate-650 hover:bg-slate-50 rounded-full transition-all cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Map Area */}
+        <div className="flex-1 h-[320px] min-h-[300px] relative bg-slate-50">
+          <Map
+            defaultCenter={markerPos}
+            defaultZoom={13}
+            mapId={mapId || 'DEMO_MAP_ID'}
+            disableDefaultUI={true}
+            gestureHandling="greedy"
+            onClick={(e) => {
+              if (e.detail.latLng) {
+                setMarkerPos(e.detail.latLng);
+              }
+            }}
+            style={{ width: '100%', height: '100%' }}
+          >
+            <AdvancedMarker
+              position={markerPos}
+              draggable={true}
+              onDragEnd={(e) => {
+                if (e.latLng) {
+                  setMarkerPos({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+                }
+              }}
+            >
+              <div className="flex flex-col items-center">
+                <div className="px-2.5 py-1 bg-slate-900 text-white text-[10px] font-black rounded-full shadow-md border border-slate-700/50 mb-1 z-10">
+                  Your Location
+                </div>
+                <div className="w-6 h-6 rounded-full bg-rose-500 border-2 border-white shadow-lg flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+                </div>
+              </div>
+            </AdvancedMarker>
+          </Map>
+
+          {/* Draggable Guide Overlay */}
+          <div className="absolute top-4 left-4 right-4 bg-white/95 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-slate-200/50 shadow-md text-center">
+            <p className="text-[10px] font-black text-slate-600 uppercase tracking-wider leading-relaxed">
+              👉 Click map or drag the pin to select location
+            </p>
+          </div>
+
+          {/* Browser GPS Quick Action */}
+          <button
+            type="button"
+            onClick={() => {
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (pos) => {
+                    setMarkerPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+                  },
+                  (err) => {
+                    console.error("Geolocation failed:", err);
+                  }
+                );
+              }
+            }}
+            className="absolute bottom-4 right-4 w-10 h-10 bg-white hover:bg-slate-50 text-slate-800 rounded-full shadow-lg border border-slate-200 flex items-center justify-center transition-all cursor-pointer active:scale-95"
+            title="Locate Me"
+          >
+            <Navigation className="w-5 h-5 text-red-650" />
+          </button>
+        </div>
+
+        {/* Footer Area */}
+        <div className="p-6 bg-slate-50 border-t border-slate-100 space-y-4">
+          <div className="space-y-1.5 text-left">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Custom name/landmark (e.g. "My Home")</label>
+            <input 
+              type="text"
+              placeholder="e.g. Mirpur, Dhaka"
+              value={addressInput}
+              onChange={(e) => setAddressInput(e.target.value)}
+              className="w-full bg-white border border-slate-200 px-4 py-3 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 font-extrabold text-[12px] uppercase tracking-wider rounded-2xl transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onSelect(markerPos.lat, markerPos.lng, addressInput || `${markerPos.lat.toFixed(4)}, ${markerPos.lng.toFixed(4)}`);
+              }}
+              className="flex-1 py-3.5 bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[12px] uppercase tracking-wider rounded-2xl transition-all shadow-md shadow-slate-900/10 cursor-pointer"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

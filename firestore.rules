@@ -95,7 +95,7 @@ service cloud.firestore {
 
       match /donations/{donationId} {
         allow read: if true;
-        allow create: if isValidId(donationId) && isOwner(userId) && incoming().requestId != null && isValidId(incoming().requestId);
+        allow create: if isValidId(donationId) && isOwner(userId) && (!('requestId' in incoming()) || incoming().requestId == null || isValidId(incoming().requestId));
         allow delete: if isOwner(userId) || isAdmin();
       }
     }
@@ -348,6 +348,26 @@ service cloud.firestore {
         && (incoming().createdAt == existing().createdAt)
         && (!('updatedAt' in incoming()) || incoming().updatedAt == request.time || incoming().updatedAt == existing().updatedAt);
       allow delete: if isAdmin();
+    }
+
+    // --- Ambulances ---
+    match /ambulances/{ambulanceId} {
+      function isValidAmbulance(data) {
+        return data.ownerUid == request.auth.uid
+          && data.vehicleNo is string && data.vehicleNo.size() <= 100
+          && data.area is string && data.area.size() <= 200
+          && data.phone is string && data.phone.size() <= 30
+          && data.available is bool;
+      }
+
+      allow read: if true;
+      allow create: if isValidId(ambulanceId) && isSignedIn() && isValidAmbulance(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isSignedIn() && (
+        (existing().ownerUid == request.auth.uid && isValidAmbulance(incoming()) && incoming().createdAt == existing().createdAt) ||
+        isAdmin()
+      );
+      allow delete: if (isSignedIn() && existing().ownerUid == request.auth.uid) || isAdmin();
     }
   }
 }

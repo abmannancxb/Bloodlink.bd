@@ -38,7 +38,8 @@ export interface UserProfile {
   photoURL?: string;
   lastDonationDate?: string;
   fcmToken?: string;
-  role?: 'user' | 'admin';
+  role?: 'user' | 'admin' | 'volunteer';
+  verificationStatus?: string;
   isBlocked?: boolean;
   isVerified?: boolean;
   organizationId?: string;
@@ -58,6 +59,11 @@ export interface UserProfile {
   statusBubble?: string;
   createdAt?: any;
   dateOfBirth?: string;
+  locationData?: {
+    lat: number;
+    lng: number;
+    address?: string;
+  };
 }
 
 export function getDonorId(profile: UserProfile, allUsers: UserProfile[] = []) {
@@ -240,10 +246,18 @@ export interface ChatMessage {
   text: string;
   createdAt: any;
   read?: boolean;
-  type?: 'text' | 'call';
+  type?: 'text' | 'call' | 'attachment';
   callId?: string;
   callDuration?: number;
   callStatus?: VoiceCall['status'];
+  attachmentType?: 'location' | 'image' | 'document';
+  attachmentUrl?: string;
+  attachmentName?: string;
+  locationData?: {
+    lat: number;
+    lng: number;
+    address?: string;
+  };
 }
 
 export interface VoiceCall {
