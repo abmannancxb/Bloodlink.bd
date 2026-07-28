@@ -19884,11 +19884,32 @@ function CallOverlay({
 
   const servers = {
     iceServers: [
-      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.l.google.com:19305'] },
-      { urls: ['stun:global.stun.twilio.com:3478'] },
-      { urls: ['stun:stun.relay.metered.ca:443'] }
+      {
+        urls: [
+          'stun:stun.l.google.com:19302',
+          'stun:stun1.l.google.com:19302',
+          'stun:stun2.l.google.com:19302',
+          'stun:stun3.l.google.com:19302',
+          'stun:stun4.l.google.com:19302',
+          'stun:stun.l.google.com:19305',
+          'stun:global.stun.twilio.com:3478',
+          'stun:stun.relay.metered.ca:443'
+        ]
+      },
+      {
+        urls: [
+          'turn:openrelay.metered.ca:80',
+          'turn:openrelay.metered.ca:3478',
+          'turn:openrelay.metered.ca:443',
+          'turn:openrelay.metered.ca:443?transport=tcp',
+          'turns:openrelay.metered.ca:443?transport=tcp'
+        ],
+        username: 'openrelayproject',
+        credential: 'openrelayproject'
+      }
     ],
-    iceCandidatePoolSize: 5,
+    iceCandidatePoolSize: 10,
+    iceTransportPolicy: 'all' as RTCIceTransportPolicy,
   };
 
   const [shouldConnect, setShouldConnect] = useState(!isIncoming || connected);
@@ -20023,51 +20044,79 @@ function CallOverlay({
   };
 
   const setupWebRTC = async () => {
-    console.log("Setting up WebRTC connection... isIncoming:", isIncoming);
+    console.log("[WebRTC] Setting up connection... isIncoming:", isIncoming);
     const pc = new RTCPeerConnection(servers);
     pcRef.current = pc;
 
     // Helper to safely check closed state without triggering TypeScript's restrictive type-narrowing error TS2367
     const isClosed = (conn: RTCPeerConnection) => (conn.signalingState as string) === 'closed';
 
+    const handleIceFailure = async () => {
+      if (pcRef.current !== pc || isClosed(pc)) return;
+      console.warn(`[WebRTC] Handling ICE failure. signalingState=${pc.signalingState}, isIncoming=${isIncoming}`);
+      try {
+        if (!isIncoming) {
+          console.log("[WebRTC] Caller: Restarting ICE renegotiation...");
+          pc.restartIce();
+          const offerDescription = await pc.createOffer({
+            iceRestart: true,
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: isVideoCall
+          });
+          await pc.setLocalDescription(offerDescription);
+          console.log("[WebRTC] Caller: ICE restart offer set locally. Writing to Firestore.");
+          await updateDoc(doc(db, 'calls', call.id), { 
+            offer: { sdp: offerDescription.sdp, type: offerDescription.type, restartTime: Date.now() },
+            answer: deleteField()
+          });
+        } else {
+          console.log("[WebRTC] Receiver: ICE failure detected. Waiting for Caller to trigger ICE restart offer.");
+        }
+      } catch (err) {
+        console.error("[WebRTC] ICE restart failed:", err);
+      }
+    };
+
     pc.oniceconnectionstatechange = () => {
       if (pcRef.current !== pc || isClosed(pc)) return;
-      console.log("ICE state change:", pc.iceConnectionState);
+      console.log(`[WebRTC] ICE Connection State changed to: ${pc.iceConnectionState}`);
       setIceState(pc.iceConnectionState);
-      if (pc.iceConnectionState === 'failed') {
-        console.warn("ICE connection failed, attempting restart...");
-        try { 
-          if (!isClosed(pc)) {
-            pc.restartIce(); 
-          }
-        } catch (e) { console.error("ICE restart failed", e); }
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        console.warn(`[WebRTC] ICE connection lost or failed. Attempting self-healing restart.`);
+        handleIceFailure();
       }
     };
 
     pc.onconnectionstatechange = () => {
       if (pcRef.current !== pc || isClosed(pc)) return;
-      console.log("Connection state change:", pc.connectionState);
+      console.log(`[WebRTC] Peer Connection State changed to: ${pc.connectionState}`);
       setConnectionState(pc.connectionState);
       if (pc.connectionState === 'failed') {
+        console.warn("[WebRTC] Connection failed. Triggering recovery...");
         addToast("Connection Error", "Connection failed. Retrying...", "error");
-        try {
-          if (!isClosed(pc)) {
-            pc.restartIce();
-          }
-        } catch (e) { console.error("ICE restart failed on connection failed state", e); }
+        handleIceFailure();
       }
     };
 
     pc.onicegatheringstatechange = () => {
-      console.log("ICE gathering state:", pc.iceGatheringState);
+      console.log(`[WebRTC] ICE Gathering State: ${pc.iceGatheringState}`);
     };
 
     pc.onsignalingstatechange = () => {
-      console.log("Signaling state:", pc.signalingState);
+      console.log(`[WebRTC] Signaling State: ${pc.signalingState}`);
     };
 
+    const handleOnlineStatus = () => {
+      console.log("[WebRTC] Network 'online' event detected. Checking peer connection...");
+      if (pcRef.current && (pcRef.current.iceConnectionState === 'failed' || pcRef.current.iceConnectionState === 'disconnected')) {
+        console.log("[WebRTC] Peer connection is currently broken. Forcing ICE restart on network reconnect.");
+        handleIceFailure();
+      }
+    };
+    window.addEventListener('online', handleOnlineStatus);
+
     try {
-      console.log(`Requesting ${isVideoCall ? 'microphone and camera' : 'microphone'} access...`);
+      console.log(`[WebRTC] Requesting ${isVideoCall ? 'microphone and camera' : 'microphone'} access...`);
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
@@ -20091,17 +20140,17 @@ function CallOverlay({
       setLocalStream(stream);
       
       stream.getTracks().forEach(track => {
-        console.log("Adding local track to PC:", track.kind, track.id);
+        console.log("[WebRTC] Adding local track to PeerConnection:", track.kind, track.id);
         if (pcRef.current === pc && !isClosed(pc)) {
           try {
             pc.addTrack(track, stream);
           } catch (trackError) {
-            console.error("Error adding track:", trackError);
+            console.error("[WebRTC] Error adding track:", trackError);
           }
         }
       });
     } catch (e) {
-      console.error("Access failed:", e);
+      console.error("[WebRTC] Media access failed:", e);
       addToast("Call Error", "Permission denied or media busy. Call transfer may not work.", "error");
       if (pcRef.current === pc && !isClosed(pc)) {
         try {
@@ -20110,17 +20159,17 @@ function CallOverlay({
             pc.addTransceiver('video', { direction: 'recvonly' });
           }
         } catch (transceiverError) {
-          console.error("Failed to add transceivers in catch", transceiverError);
+          console.error("[WebRTC] Failed to add transceivers in catch", transceiverError);
         }
       }
     }
 
     pc.ontrack = (event) => {
-      console.log("Received remote track:", event.track.kind);
+      console.log("[WebRTC] Received remote track:", event.track.kind);
       if (pcRef.current === pc) {
         // Explicitly enable the received track
         event.track.enabled = true;
-        console.log("Remote track enabled:", event.track.kind, event.track.id);
+        console.log("[WebRTC] Remote track enabled:", event.track.kind, event.track.id);
 
         const baseStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
         
@@ -20129,20 +20178,22 @@ function CallOverlay({
           t.enabled = true;
         });
 
-        // To force React to detect a new stream reference and trigger updates (e.g. for checkVideo/hasRemoteVideo),
-        // we construct a new MediaStream instance from the tracks of the baseStream.
+        // Construct a new MediaStream instance to force React updates
         const newStream = new MediaStream(baseStream.getTracks());
-        console.log(`Updated remote stream tracks: audio=${newStream.getAudioTracks().length}, video=${newStream.getVideoTracks().length}`);
+        console.log(`[WebRTC] Updated remote stream tracks: audio=${newStream.getAudioTracks().length}, video=${newStream.getVideoTracks().length}`);
         setRemoteStream(newStream);
       }
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate && pcRef.current === pc && !isClosed(pc)) {
+        console.log(`[WebRTC] Local candidate gathered: ${event.candidate.candidate}`);
         const candidatesPath = isIncoming ? 'receiverCandidates' : 'callerCandidates';
         addDoc(collection(db, 'calls', call.id, candidatesPath), event.candidate.toJSON()).catch(e => {
-          console.error("Error adding candidate", e);
+          console.error("[WebRTC] Error adding candidate to DB:", e);
         });
+      } else if (!event.candidate) {
+        console.log("[WebRTC] Local ICE candidate gathering fully completed.");
       }
     };
 
@@ -20151,15 +20202,18 @@ function CallOverlay({
       snapshot.docChanges().forEach(async (change) => {
         if (change.type === 'added' && pcRef.current === pc && !isClosed(pc)) {
           const candidateData = change.doc.data();
+          console.log(`[WebRTC] Received remote ICE candidate: ${candidateData.candidate || 'm-line configuration'}`);
           if (pc.remoteDescription && pc.remoteDescription.type) {
             try {
               if (pcRef.current === pc && !isClosed(pc)) {
                 await pc.addIceCandidate(new RTCIceCandidate(candidateData));
+                console.log("[WebRTC] Remote candidate applied successfully.");
               }
             } catch (e) {
-              console.error("addIceCandidate error", e);
+              console.error("[WebRTC] Error applying remote candidate:", e);
             }
           } else {
+            console.log("[WebRTC] No remote description yet. Queueing candidate.");
             candidateQueue.current.push(candidateData);
           }
         }
@@ -20168,16 +20222,17 @@ function CallOverlay({
 
     const processQueue = async () => {
       if (pcRef.current !== pc || isClosed(pc) || !pc.remoteDescription || !pc.remoteDescription.type) return;
-      console.log("Processing ICE candidate queue, size:", candidateQueue.current.length);
+      console.log("[WebRTC] Processing ICE candidate queue, size:", candidateQueue.current.length);
       while (candidateQueue.current.length > 0) {
         const cand = candidateQueue.current.shift();
         if (cand) {
           try {
             if (pcRef.current === pc && !isClosed(pc)) {
               await pc.addIceCandidate(new RTCIceCandidate(cand));
+              console.log("[WebRTC] Queued candidate applied successfully.");
             }
           } catch (e) {
-            console.error("Delayed addIceCandidate error", e);
+            console.error("[WebRTC] Error applying queued remote candidate:", e);
           }
         }
       }
@@ -20185,45 +20240,48 @@ function CallOverlay({
 
     let unsubCall: () => void = () => {};
     let signalingInProgress = false;
-    let offerProcessed = false;
-    let answerProcessed = false;
 
     try {
       if (!isIncoming) {
         if (pcRef.current !== pc || isClosed(pc)) {
           unsubCandidates();
+          window.removeEventListener('online', handleOnlineStatus);
           return () => {};
         }
+        console.log("[WebRTC] Caller: Creating session offer...");
         const offerDescription = await pc.createOffer({
           offerToReceiveAudio: true,
           offerToReceiveVideo: isVideoCall
         });
         if (pcRef.current !== pc || isClosed(pc)) {
           unsubCandidates();
+          window.removeEventListener('online', handleOnlineStatus);
           return () => {};
         }
         await pc.setLocalDescription(offerDescription);
         if (pcRef.current !== pc || isClosed(pc)) {
           unsubCandidates();
+          window.removeEventListener('online', handleOnlineStatus);
           return () => {};
         }
+        console.log("[WebRTC] Caller: Local description (offer) set. Writing to Firestore...");
         await updateDoc(doc(db, 'calls', call.id), { 
           offer: { sdp: offerDescription.sdp, type: offerDescription.type } 
         });
 
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-          if (data?.answer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress && !answerProcessed) {
+          const isNewAnswer = data?.answer && (!pc.remoteDescription || pc.remoteDescription.sdp !== data.answer.sdp);
+          
+          if (isNewAnswer && pcRef.current === pc && pc.signalingState === 'have-local-offer' && !signalingInProgress) {
             try {
               signalingInProgress = true;
-              answerProcessed = true;
-              console.log("Caller: Setting remote description (answer)...");
+              console.log("[WebRTC] Caller: Setting remote description (answer)...");
               await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
               if (pcRef.current !== pc || isClosed(pc)) return;
               await processQueue();
             } catch (e) {
-              console.error("setRemoteDescription answer error", e);
-              answerProcessed = false;
+              console.error("[WebRTC] Caller signaling setRemoteDescription (answer) error:", e);
             } finally {
               signalingInProgress = false;
             }
@@ -20233,29 +20291,30 @@ function CallOverlay({
         // Receiver waits for offer
         unsubCall = onSnapshot(doc(db, 'calls', call.id), async (snapshot) => {
           const data = snapshot.data();
-          if (data?.offer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress && !offerProcessed) {
+          const isNewOffer = data?.offer && (!pc.remoteDescription || pc.remoteDescription.sdp !== data.offer.sdp);
+          
+          if (isNewOffer && pcRef.current === pc && pc.signalingState === 'stable' && !signalingInProgress) {
             try {
               signalingInProgress = true;
-              offerProcessed = true;
-              console.log("Receiver: Setting remote description (offer)...");
+              console.log("[WebRTC] Receiver: Setting remote description (offer)...");
               await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
               if (pcRef.current !== pc || isClosed(pc)) return;
               await processQueue();
               if (pcRef.current !== pc || isClosed(pc)) return;
               
-              console.log("Receiver: Creating answer...");
+              console.log("[WebRTC] Receiver: Creating session answer...");
               const answerDescription = await pc.createAnswer();
               if (pcRef.current !== pc || isClosed(pc)) return;
               await pc.setLocalDescription(answerDescription);
               if (pcRef.current !== pc || isClosed(pc)) return;
               
+              console.log("[WebRTC] Receiver: Local description (answer) set. Sending answer via Firestore...");
               await updateDoc(doc(db, 'calls', call.id), { 
                 answer: { sdp: answerDescription.sdp, type: answerDescription.type } 
               });
-              console.log("Receiver: Answer sent.");
+              console.log("[WebRTC] Receiver: Answer successfully transmitted.");
             } catch (e) {
-              console.error("Receiver signaling error:", e);
-              offerProcessed = false;
+              console.error("[WebRTC] Receiver signaling error:", e);
             } finally {
               signalingInProgress = false;
             }
@@ -20266,11 +20325,13 @@ function CallOverlay({
       return () => {
         unsubCandidates();
         unsubCall();
+        window.removeEventListener('online', handleOnlineStatus);
       };
     } catch (e) {
-      console.error("Signaling error:", e);
+      console.error("[WebRTC] Signaling error during initialization:", e);
       unsubCandidates();
       unsubCall();
+      window.removeEventListener('online', handleOnlineStatus);
       return () => {};
     }
   };
