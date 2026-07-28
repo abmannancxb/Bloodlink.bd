@@ -30,6 +30,13 @@ import com.google.firebase.messaging.FirebaseMessaging;
         @Permission(
             alias = "notifications",
             strings = { "android.permission.POST_NOTIFICATIONS" }
+        ),
+        @Permission(
+            alias = "location",
+            strings = {
+                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                android.Manifest.permission.ACCESS_FINE_LOCATION
+            }
         )
     }
 )
@@ -252,6 +259,49 @@ public class BloodLinkNativePlugin extends Plugin {
     private void notificationsCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
+            ret.put("status", "granted");
+        } else {
+            ret.put("status", "denied");
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestLocationPermission(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (getActivity() != null) {
+                getActivity().runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            BloodLinkNativePlugin.this.requestPermissionForAlias("location", call, "locationCallback");
+                        } catch (Exception e) {
+                            // Fallback to direct Android request
+                            String[] permissions = {
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                                android.Manifest.permission.ACCESS_FINE_LOCATION
+                            };
+                            getActivity().requestPermissions(permissions, 23456);
+                            JSObject ret = new JSObject();
+                            ret.put("status", "requested");
+                            call.resolve(ret);
+                        }
+                    }
+                });
+            } else {
+                call.reject("Activity is null");
+            }
+        } else {
+            JSObject ret = new JSObject();
+            ret.put("status", "granted");
+            call.resolve(ret);
+        }
+    }
+
+    @com.getcapacitor.annotation.PermissionCallback
+    private void locationCallback(PluginCall call) {
+        JSObject ret = new JSObject();
+        if (getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED) {
             ret.put("status", "granted");
         } else {
             ret.put("status", "denied");
