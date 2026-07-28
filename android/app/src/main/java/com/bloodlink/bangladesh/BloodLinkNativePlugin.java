@@ -216,7 +216,7 @@ public class BloodLinkNativePlugin extends Plugin {
     }
 
     @com.getcapacitor.annotation.PermissionCallback
-    private void microphoneCallback(PluginCall call) {
+    public void microphoneCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("microphone") == com.getcapacitor.PermissionState.GRANTED) {
             ret.put("status", "granted");
@@ -256,7 +256,7 @@ public class BloodLinkNativePlugin extends Plugin {
     }
 
     @com.getcapacitor.annotation.PermissionCallback
-    private void notificationsCallback(PluginCall call) {
+    public void notificationsCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("notifications") == com.getcapacitor.PermissionState.GRANTED) {
             ret.put("status", "granted");
@@ -299,7 +299,7 @@ public class BloodLinkNativePlugin extends Plugin {
     }
 
     @com.getcapacitor.annotation.PermissionCallback
-    private void locationCallback(PluginCall call) {
+    public void locationCallback(PluginCall call) {
         JSObject ret = new JSObject();
         if (getPermissionState("location") == com.getcapacitor.PermissionState.GRANTED) {
             ret.put("status", "granted");
