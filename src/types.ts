@@ -328,4 +328,14 @@ export interface AdminCustomBanner {
   createdBy?: string;
 }
 
+export interface Review {
+  id: string;
+  reviewerUid: string;
+  reviewerName: string;
+  reviewerPhoto?: string;
+  rating: number;
+  comment: string;
+  createdAt: any;
+}
+
 export { BANGLADESH_LOCATIONS, BLOOD_GROUPS } from './constants';

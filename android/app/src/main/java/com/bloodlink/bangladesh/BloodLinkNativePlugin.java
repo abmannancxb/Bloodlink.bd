@@ -18,6 +18,7 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 @CapacitorPlugin(
     name = "BloodLinkNative",
@@ -278,5 +279,45 @@ public class BloodLinkNativePlugin extends Plugin {
         JSObject ret = new JSObject();
         ret.put("status", "success");
         call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void getFcmToken(PluginCall call) {
+        Context context = getContext();
+        if (context == null) {
+            call.reject("Context is null");
+            return;
+        }
+        
+        SharedPreferences prefs = context.getSharedPreferences("BloodLinkPrefs", Context.MODE_PRIVATE);
+        String token = prefs.getString("fcm_token", null);
+        
+        if (token != null) {
+            JSObject ret = new JSObject();
+            ret.put("token", token);
+            call.resolve(ret);
+            return;
+        }
+        
+        try {
+            FirebaseMessaging.getInstance().getToken()
+                .addOnCompleteListener(task -> {
+                    if (!task.isSuccessful()) {
+                        Log.w(TAG, "Fetching FCM registration token failed", task.getException());
+                        call.reject("Failed to fetch FCM token: " + (task.getException() != null ? task.getException().getMessage() : "unknown"));
+                        return;
+                    }
+
+                    String fcmToken = task.getResult();
+                    prefs.edit().putString("fcm_token", fcmToken).apply();
+                    
+                    JSObject ret = new JSObject();
+                    ret.put("token", fcmToken);
+                    call.resolve(ret);
+                });
+        } catch (Exception e) {
+            Log.e(TAG, "Error getting Firebase Messaging token directly", e);
+            call.reject("Firebase messaging error: " + e.getMessage());
+        }
     }
 }

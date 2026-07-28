@@ -876,51 +876,42 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          {/* Ambient backdrop glass */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="absolute inset-0 bg-slate-900/85 backdrop-blur-md"
-          />
-
-          {/* Modal Container */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="bg-white rounded-3xl shadow-2xl relative w-full max-w-[540px] overflow-hidden border border-slate-100 z-10 flex flex-col"
-          >
-            {/* Header */}
-            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 bg-slate-50/50">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-rose-50 flex items-center justify-center text-rose-500">
-                  <QrCode className="w-4.5 h-4.5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">{profile.displayName}'s Donor Card</h3>
-                  <p className="text-[10px] text-slate-400 font-bold leading-none">Share & Spread the Voluntary Blood Movement</p>
-                </div>
-              </div>
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 30 }}
+          className="fixed inset-0 bg-white z-[99999] flex flex-col font-sans"
+        >
+          {/* Header */}
+          <div className="px-6 py-4.5 flex justify-between items-center border-b border-slate-100 bg-white shadow-3xs shrink-0">
+            <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer outline-none"
+                className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors cursor-pointer outline-none border-none"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
+              <div className="text-left">
+                <h3 className="text-base font-black text-slate-900 uppercase tracking-wider">{profile.displayName}'s Donor Card</h3>
+                <p className="text-[11px] text-slate-400 font-bold leading-none mt-0.5">Official Voluntary Blood Donor Registry Card</p>
+              </div>
             </div>
+            
+            <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-500">
+              <QrCode className="w-5.5 h-5.5" />
+            </div>
+          </div>
 
-            {/* Main Visual Render Zone */}
-            <div className="p-6 flex flex-col items-center justify-center bg-slate-50/20 text-center gap-4">
-              <p className="text-[11px] text-slate-500 font-extrabold flex items-center gap-1 leading-none select-none">
+          {/* Main Visual Render Zone */}
+          <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center bg-slate-50/40 text-center gap-6">
+            <div className="max-w-md w-full flex flex-col items-center gap-4">
+              <p className="text-xs text-slate-500 font-extrabold flex items-center gap-1 leading-none select-none">
                 <span>🌟</span>
                 <span>Generating High-Definition shareable badge card for {profile.displayName}...</span>
               </p>
 
               {/* Responsive container bounding widescreen canvas */}
-              <div className="w-full relative rounded-2xl overflow-hidden aspect-[1200/800] shadow-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-red-50 flex items-center justify-center max-w-[480px]">
+              <div className="w-full relative rounded-2xl overflow-hidden aspect-[1200/800] shadow-2xl border border-rose-100 bg-gradient-to-br from-rose-50 to-red-50 flex items-center justify-center max-w-[500px]">
                 {generating && (
                   <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center gap-2.5 z-10">
                     <div className="w-8 h-8 rounded-full border-3 border-rose-500 border-t-transparent animate-spin" />
@@ -931,42 +922,44 @@ export function DonorCardModal({ isOpen, onClose, profile, addToast, allUsers = 
                 <canvas ref={canvasRef} className="w-full h-full object-contain" />
               </div>
 
-              <span className="text-[9.5px] text-slate-400 font-bold max-w-[340px] leading-tight">
+              <span className="text-xs text-slate-400 font-bold max-w-[380px] leading-relaxed">
                 This secure identity card includes your Verified Blood Group badges, physical location, and real-time voluntary donor registry serial ID.
               </span>
             </div>
+          </div>
 
-            {/* Action footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50/80 grid grid-cols-2 gap-3.5">
+          {/* Action footer */}
+          <div className="p-6 border-t border-slate-100 bg-white shrink-0 shadow-lg">
+            <div className="max-w-md mx-auto grid grid-cols-2 gap-3.5">
               <button
                 onClick={handleShareJPG}
                 disabled={sharing || generating}
-                className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-3.5 flex items-center justify-center gap-2.5 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-red-500/10 active:scale-97 select-none"
+                className="w-full bg-[#FF1744] hover:bg-[#D50000] text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md shadow-red-500/10 active:scale-97 select-none"
               >
-                <Share2 className="w-4.5 h-4.5" />
-                <span>{sharing ? "Sharing..." : "Share to WhatsApp / Apps"}</span>
+                <Share2 className="w-5 h-5" />
+                <span>{sharing ? "Sharing..." : "Share Card"}</span>
               </button>
 
               <button
                 onClick={handleDownloadJPG}
                 disabled={downloading || generating}
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-2xl py-3.5 flex items-center justify-center gap-2.5 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md active:scale-97 select-none"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-2xl py-4 flex items-center justify-center gap-2.5 font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 cursor-pointer shadow-md active:scale-97 select-none"
               >
-                <Download className="w-4.5 h-4.5" />
-                <span>{downloading ? "Downloading..." : "Download JPG (HD)"}</span>
+                <Download className="w-5 h-5" />
+                <span>{downloading ? "Downloading..." : "Download JPG"}</span>
               </button>
 
               <button
                 onClick={handleCopyLink}
                 disabled={generating}
-                className="col-span-2 w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl py-3 flex items-center justify-center gap-1.5 font-bold text-[10px] uppercase tracking-wider transition-all active:scale-98 cursor-pointer select-none mt-1"
+                className="col-span-2 w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl py-3.5 flex items-center justify-center gap-1.5 font-bold text-xs uppercase tracking-wider transition-all active:scale-98 cursor-pointer select-none mt-1"
               >
-                {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4 text-slate-500" />}
-                <span>{copied ? "Profile Link Copied!" : "Copy Public Profile Web Link"}</span>
+                {copied ? <Check className="w-4.5 h-4.5 text-emerald-500" /> : <Copy className="w-4.5 h-4.5 text-slate-500" />}
+                <span>{copied ? "Profile Link Copied!" : "Copy Public Profile Link"}</span>
               </button>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

@@ -237,7 +237,8 @@ import {
   QrCode,
   Maximize2,
   Minimize2,
-  Smartphone
+  Smartphone,
+  Truck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { motion, AnimatePresence } from 'motion/react';
@@ -481,7 +482,12 @@ export function registerErrorListener(listener: (errInfo: FirestoreErrorInfo) =>
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const message = error instanceof Error ? error.message : String(error);
-  const isOffline = message.includes('offline');
+  const lowerMessage = message.toLowerCase();
+  const isOffline = lowerMessage.includes('offline') || 
+                    lowerMessage.includes('could not reach') || 
+                    lowerMessage.includes('backend didn\'t respond') ||
+                    lowerMessage.includes('unreachable') ||
+                    lowerMessage.includes('connection');
 
   const errInfo: FirestoreErrorInfo = {
     error: message,
@@ -601,6 +607,36 @@ export default function App() {
     }
   });
   const [isLocationPickerOpen, setIsLocationPickerOpen] = useState(false);
+
+
+  const handleRemoveLocation = async () => {
+    if (user) {
+      try {
+        await updateDoc(doc(db, 'users', user.uid), {
+          locationData: deleteField()
+        });
+        setProfile(prev => prev ? { ...prev, locationData: undefined } : null);
+        addToast("Location Removed", "Your location was successfully removed from your profile.", "success");
+      } catch (err) {
+        console.error("Error removing location:", err);
+        try {
+          await updateDoc(doc(db, 'users', user.uid), {
+            locationData: null
+          });
+          setProfile(prev => prev ? { ...prev, locationData: null as any } : null);
+          addToast("Location Removed", "Your location was successfully removed from your profile.", "success");
+        } catch (e2) {
+          addToast("Removal Failed", "Could not remove location from profile.", "error");
+        }
+      }
+    } else {
+      setCurrentLocation(null);
+      try {
+        localStorage.removeItem('user_current_location');
+      } catch {}
+      addToast("Location Cleared", "Temporary location cleared.", "success");
+    }
+  };
 
   const effectiveLocation = useMemo(() => {
     if (profile?.locationData?.lat && profile?.locationData?.lng) {
@@ -1215,7 +1251,13 @@ export default function App() {
         lower.includes('vite') || 
         lower.includes('sockjs') || 
         lower.includes('socket') || 
-        lower.includes('hmr')
+        lower.includes('hmr') ||
+        lower.includes('firestore') ||
+        lower.includes('firebase') ||
+        lower.includes('offline') ||
+        lower.includes('could not reach') ||
+        lower.includes('unreachable') ||
+        lower.includes('connection')
       ) {
         return;
       }
@@ -1230,13 +1272,19 @@ export default function App() {
       const reason = event.reason;
       const message = reason instanceof Error ? reason.message : String(reason);
       const lower = message.toLowerCase();
-      // Skip benign developer socket rejection logs
+      // Skip benign developer socket rejection logs or Firebase offline warning logs
       if (
         lower.includes('websocket') || 
         lower.includes('vite') || 
         lower.includes('sockjs') || 
         lower.includes('socket') || 
-        lower.includes('hmr')
+        lower.includes('hmr') ||
+        lower.includes('firestore') ||
+        lower.includes('firebase') ||
+        lower.includes('offline') ||
+        lower.includes('could not reach') ||
+        lower.includes('unreachable') ||
+        lower.includes('connection')
       ) {
         return;
       }
@@ -1754,6 +1802,21 @@ export default function App() {
     }
   }, []);
 
+  const rejectCall = useCallback(async (callId: string) => {
+    try {
+      await updateDoc(doc(db, 'calls', callId), {
+        status: 'rejected',
+        endedAt: serverTimestamp()
+      });
+    } catch (e) {
+      if (!(e instanceof Error && e.message.includes('NOT_FOUND'))) {
+        console.error("Reject call failed", e);
+      }
+    } finally {
+      setIncomingCall(null);
+    }
+  }, []);
+
   const acceptCall = useCallback(async (call: VoiceCall) => {
     const isVideo = call.type === 'video';
     const hasMicPermission = await ensureMicPermission();
@@ -1863,13 +1926,17 @@ export default function App() {
         .map(doc => ({ id: doc.id, ...doc.data() } as VoiceCall))
         .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))[0];
 
-      if (incoming && !activeCall && !incomingCall) {
-        // Only accept if within last 60 seconds
-        const callTime = incoming.createdAt?.toMillis?.() || Date.now();
-        if (Date.now() - callTime < 60000) {
-          setIncomingCall(incoming);
-          playNotificationSound();
+      if (incoming) {
+        if (!activeCall && !incomingCall) {
+          // Only accept if within last 60 seconds
+          const callTime = incoming.createdAt?.toMillis?.() || Date.now();
+          if (Date.now() - callTime < 60000) {
+            setIncomingCall(incoming);
+            playNotificationSound();
+          }
         }
+      } else {
+        setIncomingCall(null);
       }
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'calls'));
     
@@ -1902,9 +1969,42 @@ export default function App() {
     }
   };
 
-  const requestLocationPermission = () => {
+  const requestLocationPermission = async () => {
     setShowLocationConsent(false);
     localStorage.setItem('location_asked', 'true');
+
+    // For Android Native
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const res = await BloodLinkNative.requestLocationPermission();
+        console.log("Native location permission status:", res?.status);
+        if (res?.status === 'granted') {
+          addToast("Location Enabled", "We've synced your location for a better map experience.", 'success');
+          if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude, address: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}` };
+                if (user) {
+                  updateDoc(doc(db, 'users', user.uid), { locationData: loc })
+                    .then(() => {
+                      setProfile(prev => prev ? { ...prev, locationData: loc } : null);
+                    })
+                    .catch(e => console.error(e));
+                } else {
+                  setCurrentLocation(loc);
+                  localStorage.setItem('user_current_location', JSON.stringify(loc));
+                }
+              },
+              (err) => console.error(err)
+            );
+          }
+          return;
+        }
+      } catch (err) {
+        console.error("Failed to request native location permission, trying web fallback", err);
+      }
+    }
+
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
@@ -2794,6 +2894,33 @@ export default function App() {
           // Always register the device with FCM to receive a token.
           // This allows background targeting even if permission is currently disabled or later toggled.
           await PushNotifications.register();
+
+          // Fallback / direct token retrieval via custom native plugin
+          try {
+            console.log("Attempting direct token retrieval via BloodLinkNative...");
+            const nativeTokenRes = await BloodLinkNative.getFcmToken();
+            if (nativeTokenRes && nativeTokenRes.token) {
+              const nativeToken = nativeTokenRes.token;
+              console.log("==================================================");
+              console.log("     BLOODLINK FCM TOKEN (via Native Plugin)      ");
+              console.log(nativeToken);
+              console.log("==================================================");
+              
+              if (nativeToken && profile.fcmToken !== nativeToken) {
+                try {
+                  await updateDoc(doc(db, 'users', user.uid), { fcmToken: nativeToken });
+                  setProfile(prev => prev ? { ...prev, fcmToken: nativeToken } : null);
+                  console.log("Native FCM Token (from custom plugin) saved to Firestore.");
+                } catch (fsErr) {
+                  console.error("Error saving custom native FCM token to Firestore:", fsErr);
+                }
+              }
+            } else {
+              console.warn("No token returned from BloodLinkNative.getFcmToken()");
+            }
+          } catch (nativeTokenErr) {
+            console.warn("Failed to retrieve token via custom plugin:", nativeTokenErr);
+          }
 
           // If permissions are not granted, warn the user exactly once per session/launch to prevent toast fatigue and duplicate stacking
           if (permStatus.receive !== 'granted') {
@@ -4274,7 +4401,83 @@ export default function App() {
           }}
         />
 
+
+
         <AnimatePresence>
+          {incomingCall && !activeCall && (
+            <motion.div
+              id="inapp-incoming-call-notification"
+              initial={{ opacity: 0, y: -100, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -100, scale: 0.95 }}
+              transition={{ type: "spring", damping: 15, stiffness: 150 }}
+              className="fixed top-4 left-4 right-4 md:left-auto md:right-4 md:w-[420px] z-[999999] bg-slate-900 text-white rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.3)] border border-slate-800 overflow-hidden pointer-events-auto"
+            >
+              {/* Animated high importance indicator strip */}
+              <div className="h-1.5 w-full bg-gradient-to-r from-green-500 via-emerald-500 to-green-500 animate-pulse" />
+              
+              <div className="p-4">
+                <div className="flex gap-4 items-center">
+                  {/* Avatar with pulsing background ring */}
+                  <div className="relative shrink-0">
+                    <motion.div
+                      animate={{ scale: [1, 1.4, 1], opacity: [0.4, 0.1, 0.4] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="absolute inset-0 bg-green-500 rounded-full"
+                    />
+                    <img
+                      id="call-banner-avatar"
+                      src={incomingCall.callerPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(incomingCall.callerName)}&background=f1f5f9&color=64748b&bold=true`}
+                      alt={incomingCall.callerName}
+                      className="relative w-12 h-12 rounded-full object-cover border-2 border-slate-700 shadow-lg"
+                      referrerPolicy="no-referrer"
+                    />
+                    {/* Ringing icon overlay */}
+                    <div className="absolute -bottom-1 -right-1 bg-green-500 text-white p-1 rounded-full border border-slate-950">
+                      <Phone className="w-2.5 h-2.5 animate-bounce fill-current text-white" />
+                    </div>
+                  </div>
+
+                  {/* Text Contents */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-1">
+                      <p className="font-black text-white text-sm truncate tracking-tight uppercase">
+                        {incomingCall.callerName}
+                      </p>
+                      <span className="text-[8px] text-green-400 font-extrabold font-mono shrink-0 uppercase tracking-widest bg-green-950/50 border border-green-800 px-2 py-0.5 rounded-full animate-pulse">
+                        Ringing
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5 font-medium flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping shrink-0" />
+                      Incoming {incomingCall.type === 'video' ? 'HD Video Call...' : 'Secure Voice Call...'}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Call Controls inside Notification */}
+                <div className="flex gap-2.5 justify-end mt-4 pt-3 border-t border-slate-800">
+                  <button
+                    id="call-banner-reject"
+                    onClick={() => rejectCall(incomingCall.id)}
+                    className="px-4 py-2 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/20 hover:border-transparent rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  >
+                    <PhoneOff className="w-3.5 h-3.5" />
+                    Reject
+                  </button>
+                  <button
+                    id="call-banner-accept"
+                    onClick={() => acceptCall(incomingCall)}
+                    className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-md shadow-green-500/20 cursor-pointer active:scale-95 border-none outline-none"
+                  >
+                    {incomingCall.type === 'video' ? <Video className="w-3.5 h-3.5 fill-current" /> : <PhoneCall className="w-3.5 h-3.5 fill-current" />}
+                    Receive
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {inAppHeadsUp && (
             <motion.div
               id="inapp-heads-up-notification"
@@ -4769,7 +4972,8 @@ export default function App() {
           />
         )}
 
-        <header className="fixed top-0 left-0 right-0 h-16 safe-header bg-white/95 backdrop-blur-md border-b border-slate-100 z-[100] px-4 py-2 flex items-center justify-between shadow-sm">
+        {!(view === 'edit-profile' && !profile) && (
+          <header className="fixed top-0 left-0 right-0 h-16 safe-header bg-white/95 backdrop-blur-md border-b border-slate-100 z-[100] px-4 py-2 flex items-center justify-between shadow-sm">
           {view === 'requests' && !showRequestsOverlay ? (
             <>
               <div className="flex items-center gap-2 cursor-pointer select-none" onClick={() => { setView('requests'); resetFilters(); }}>
@@ -4852,7 +5056,8 @@ export default function App() {
               </div>
             </>
           )}
-        </header>
+          </header>
+        )}
 
 
       {/* Main Content */}
@@ -5178,13 +5383,24 @@ export default function App() {
                           </div>
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setIsLocationPickerOpen(true)}
-                          className="bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[11px] sm:text-[12px] tracking-wider uppercase py-3 px-5 sm:px-6 rounded-xl transition-all cursor-pointer select-none shrink-0 active:scale-95 shadow-sm"
-                        >
-                          {effectiveLocation ? "CHANGE" : "SET LOCATION"}
-                        </button>
+                        <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
+                          {effectiveLocation && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveLocation}
+                              className="bg-rose-50 hover:bg-rose-100 text-red-650 font-extrabold text-[11px] sm:text-[12px] tracking-wider uppercase py-3 px-4 rounded-xl transition-all cursor-pointer select-none active:scale-95 border border-rose-200 shrink-0"
+                            >
+                              REMOVE
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIsLocationPickerOpen(true)}
+                            className="bg-slate-950 hover:bg-slate-800 text-white font-extrabold text-[11px] sm:text-[12px] tracking-wider uppercase py-3 px-5 sm:px-6 rounded-xl transition-all cursor-pointer select-none shrink-0 active:scale-95 shadow-sm"
+                          >
+                            {effectiveLocation ? "CHANGE" : "SET LOCATION"}
+                          </button>
+                        </div>
                       </div>
                     </div>
 
@@ -7041,7 +7257,7 @@ export default function App() {
 
         {view === 'profile' && user && (
           <motion.div key="profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-24 pb-28 p-4">
-            <div className="max-w-md mx-auto pb-4">
+            <div className="w-full max-w-3xl mx-auto pb-4">
               <OwnUserProfileView 
                 user={user}
                 profile={profile}
@@ -7096,8 +7312,14 @@ export default function App() {
         )}
 
         {view === 'edit-profile' && user && (
-          <motion.div key="edit-profile" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full overflow-y-auto pt-20 pb-20 p-4">
-            <div className="max-w-md mx-auto pb-4">
+          <motion.div 
+            key="edit-profile" 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }} 
+            className={`h-full overflow-y-auto pb-20 ${!profile ? 'pt-0 px-0' : 'pt-20 p-4'}`}
+          >
+            <div className={`w-full mx-auto pb-4 ${!profile ? 'max-w-full' : 'max-w-3xl'}`}>
               <ProfileForm 
                 user={user} 
                 initialProfile={profile} 
@@ -7209,7 +7431,7 @@ export default function App() {
               profileTouchStartRef.current = null;
             }}
           >
-            <div className="max-w-md mx-auto pb-4">
+            <div className="w-full max-w-3xl mx-auto pb-4">
               <PublicProfileView 
                 uid={selectedUserId} 
                 onBack={() => setView('requests')} 
@@ -8008,13 +8230,13 @@ export default function App() {
     </main>
 
       <AnimatePresence>
-        {(activeCall || incomingCall) && (
+        {activeCall && (
           <CallOverlay 
-            key={(activeCall || incomingCall)?.id}
-            call={(activeCall || incomingCall)!}
-            isIncoming={(activeCall || incomingCall)?.receiverUid === user?.uid}
-            onAccept={() => incomingCall && acceptCall(incomingCall)}
-            onEnd={() => endCall((activeCall || incomingCall)!.id)}
+            key={activeCall.id}
+            call={activeCall}
+            isIncoming={activeCall.receiverUid === user?.uid}
+            onAccept={() => {}}
+            onEnd={() => endCall(activeCall.id)}
             addToast={addToast}
           />
         )}
@@ -13571,6 +13793,8 @@ function AdminPanel({ users, requests, posts, reports, organizations, orgApplica
           </motion.div>
         )}
 
+
+
         {tab === 'banners' && (
           <motion.div 
             key="banners"
@@ -18039,6 +18263,7 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
   mapId?: string
 }) {
   const [historyTab, setHistoryTab] = useState<'donations' | 'requests'>('donations');
+  const [activeStep, setActiveStep] = useState<number>(1);
   const [formData, setFormData] = useState<UserProfile>({
     uid: user.uid,
     displayName: user.displayName || localStorage.getItem('reg_display_name') || '',
@@ -18063,7 +18288,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
     heightFeet: initialProfile?.heightFeet || undefined,
     heightInches: initialProfile?.heightInches || undefined,
     lastProfileSaveDate: initialProfile?.lastProfileSaveDate || '',
-    statusBubble: initialProfile?.statusBubble || ''
+    statusBubble: initialProfile?.statusBubble || '',
+    dateOfBirth: initialProfile?.dateOfBirth || ''
   });
 
   useEffect(() => {
@@ -18087,7 +18313,8 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
         heightFeet: initialProfile.heightFeet || prev.heightFeet,
         heightInches: initialProfile.heightInches || prev.heightInches,
         lastProfileSaveDate: initialProfile.lastProfileSaveDate || prev.lastProfileSaveDate,
-        statusBubble: initialProfile.statusBubble || prev.statusBubble || ''
+        statusBubble: initialProfile.statusBubble || prev.statusBubble || '',
+        dateOfBirth: initialProfile.dateOfBirth || prev.dateOfBirth || ''
       }));
     }
   }, [initialProfile]);
@@ -18260,13 +18487,399 @@ function ProfileForm({ user, initialProfile, requests, donations, posts, allUser
   const [showAdvanced, setShowAdvanced] = useState(false);
   const dCoords = DISTRICT_COORDS[formData.district] || { lat: 23.6850, lng: 90.3563 };
 
+  const handleNextStep1 = () => {
+    if (!formData.displayName?.trim()) {
+      addToast("Full Name Required", "Please enter your full name.", "warning");
+      return;
+    }
+    if (!formData.bloodGroup) {
+      addToast("Blood Group Required", "Please select your blood group.", "warning");
+      return;
+    }
+    if (!formData.gender) {
+      addToast("Gender Required", "Please select your gender.", "warning");
+      return;
+    }
+    if (!formData.dateOfBirth) {
+      addToast("Date of Birth Required", "Please select your date of birth.", "warning");
+      return;
+    }
+    setActiveStep(2);
+  };
+
+  const handleNextStep2 = () => {
+    if (!formData.district) {
+      addToast("District Required", "Please select your district.", "warning");
+      return;
+    }
+    if (!formData.thana) {
+      addToast("Thana/Upazila Required", "Please select your thana.", "warning");
+      return;
+    }
+    if (!formData.phone?.trim()) {
+      addToast("Phone Number Required", "Please enter your phone number.", "warning");
+      return;
+    }
+    setActiveStep(3);
+  };
+
+  if (!initialProfile) {
+    return (
+      <div className="min-h-screen bg-[#FDFEFE] flex flex-col font-sans pb-16 animate-fade-in text-slate-800">
+        {/* Native Mockup Header Bar */}
+        <div className="bg-[#80152B] px-5 py-4 flex items-center shrink-0 shadow-md">
+          <button 
+            type="button"
+            onClick={onCancel}
+            className="p-1.5 -ml-1 rounded-full text-white hover:bg-white/10 active:scale-95 transition-all cursor-pointer flex items-center justify-center"
+          >
+            <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
+          </button>
+          <span className="text-white font-extrabold text-base ml-3 tracking-tight select-none uppercase">
+            Become Member
+          </span>
+        </div>
+
+        {/* Scrollable Container */}
+        <div className="flex-1 overflow-y-auto px-5 pb-12">
+          <div className="max-w-[440px] mx-auto">
+            {/* Title */}
+            <h1 className="text-xl font-black text-[#1E293B] mt-6 mb-4 tracking-tight">
+              Donor Registration Form
+            </h1>
+
+            {/* Pink Notice Box */}
+            <div className="bg-[#FFF0F2] rounded-2xl p-4 flex gap-3.5 items-start mb-6 border border-red-50/50 shadow-3xs">
+              <div className="p-1.5 bg-red-100 rounded-full text-[#80152B] shrink-0 mt-0.5 flex items-center justify-center">
+                <Info className="w-4 h-4 fill-current text-[#80152B]" />
+              </div>
+              <p className="text-[12px] font-bold text-[#80152B] leading-relaxed">
+                Please ensure that you enter only valid information. All information are manually verified once your application is submitted.
+              </p>
+            </div>
+
+            {/* Stepper Timeline container */}
+            <div className="space-y-1">
+              {/* Step 1: Personal Information */}
+              <div className="relative pl-12 pb-6">
+                <div className="absolute left-0 top-0.5 z-10">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs transition-all ${
+                    activeStep === 1 
+                      ? 'bg-[#80152B] text-white ring-4 ring-rose-50 shadow-sm' 
+                      : activeStep > 1 
+                      ? 'bg-[#80152B] text-white shadow-3xs' 
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    1
+                  </div>
+                </div>
+                <div className={`absolute left-4 top-8 bottom-0 w-[2.5px] ${
+                  activeStep >= 1 ? 'bg-[#80152B]' : 'bg-slate-200'
+                }`} />
+                
+                <h3 className={`font-black text-sm uppercase tracking-wider ${
+                  activeStep === 1 ? 'text-[#80152B]' : 'text-slate-400'
+                }`}>
+                  Personal Information
+                </h3>
+
+                {activeStep === 1 && (
+                  <div className="mt-4 space-y-4 animate-fade-in pr-1">
+                    {/* Full Name Input */}
+                    <div className="space-y-1">
+                      <input 
+                        type="text"
+                        placeholder="Full Name"
+                        value={formData.displayName}
+                        onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all shadow-3xs"
+                        required
+                      />
+                    </div>
+
+                    {/* Blood Group Select */}
+                    <div className="relative">
+                      <select
+                        value={formData.bloodGroup}
+                        onChange={(e) => setFormData({ ...formData, bloodGroup: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 appearance-none outline-none transition-all cursor-pointer shadow-3xs"
+                      >
+                        <option value="">Select Blood Group</option>
+                        {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Gender Select */}
+                    <div className="relative">
+                      <select
+                        value={formData.gender}
+                        onChange={(e) => setFormData({ ...formData, gender: e.target.value as any })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 appearance-none outline-none transition-all cursor-pointer shadow-3xs"
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                      </select>
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Date of Birth Picker */}
+                    <div className="relative">
+                      <input 
+                        type="date"
+                        value={formData.dateOfBirth || ''}
+                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 pr-12 text-sm font-semibold text-slate-800 outline-none transition-all cursor-pointer shadow-3xs"
+                      />
+                      {!formData.dateOfBirth && (
+                        <div className="absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none text-sm font-semibold text-slate-400 bg-white pr-2">
+                          Date Of Birth
+                        </div>
+                      )}
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <Calendar className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Next Button */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleNextStep1}
+                        className="w-full bg-[#80152B] hover:bg-[#6c0f22] text-white font-extrabold text-sm py-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-98 border-none outline-none"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 2: Contact Information */}
+              <div className="relative pl-12 pb-6">
+                <div className="absolute left-0 top-0.5 z-10">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs transition-all ${
+                    activeStep === 2 
+                      ? 'bg-[#80152B] text-white ring-4 ring-rose-50 shadow-sm' 
+                      : activeStep > 2 
+                      ? 'bg-[#80152B] text-white shadow-3xs' 
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    2
+                  </div>
+                </div>
+                <div className={`absolute left-4 top-8 bottom-0 w-[2.5px] ${
+                  activeStep >= 2 ? 'bg-[#80152B]' : 'bg-slate-200'
+                }`} />
+
+                <h3 className={`font-black text-sm uppercase tracking-wider ${
+                  activeStep === 2 ? 'text-[#80152B]' : 'text-slate-400'
+                }`}>
+                  Contact Information
+                </h3>
+
+                {activeStep === 2 && (
+                  <div className="mt-4 space-y-4 animate-fade-in pr-1">
+                    {/* District Select */}
+                    <div className="relative">
+                      <select 
+                        value={formData.district}
+                        onChange={(e) => setFormData({ ...formData, district: e.target.value, thana: '' })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 appearance-none outline-none transition-all cursor-pointer shadow-3xs"
+                      >
+                        <option value="">Select District</option>
+                        {Object.keys(BANGLADESH_LOCATIONS).map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Thana Select */}
+                    <div className="relative">
+                      <select 
+                        disabled={!formData.district}
+                        value={formData.thana}
+                        onChange={(e) => setFormData({ ...formData, thana: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 disabled:opacity-45 appearance-none outline-none transition-all cursor-pointer shadow-3xs"
+                      >
+                        <option value="">Select Thana/Upazila</option>
+                        {formData.district && BANGLADESH_LOCATIONS[formData.district].map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                        <ChevronDown className="w-5 h-5" />
+                      </div>
+                    </div>
+
+                    {/* Phone Input */}
+                    <div className="space-y-1">
+                      <input 
+                        type="tel" 
+                        placeholder="Phone Number" 
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all shadow-3xs"
+                        required
+                      />
+                    </div>
+
+                    {/* Controls */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveStep(1)}
+                        className="flex-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-extrabold text-sm py-4 rounded-2xl shadow-sm transition-all cursor-pointer active:scale-98 outline-none"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleNextStep2}
+                        className="flex-1 bg-[#80152B] hover:bg-[#6c0f22] text-white font-extrabold text-sm py-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-98 border-none outline-none"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Step 3: Confirmation */}
+              <div className="relative pl-12">
+                <div className="absolute left-0 top-0.5 z-10">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-extrabold text-xs transition-all ${
+                    activeStep === 3 
+                      ? 'bg-[#80152B] text-white ring-4 ring-rose-50 shadow-sm' 
+                      : 'bg-slate-200 text-slate-500'
+                  }`}>
+                    3
+                  </div>
+                </div>
+
+                <h3 className={`font-black text-sm uppercase tracking-wider ${
+                  activeStep === 3 ? 'text-[#80152B]' : 'text-slate-400'
+                }`}>
+                  Confirmation
+                </h3>
+
+                {activeStep === 3 && (
+                  <div className="mt-4 space-y-4 animate-fade-in pr-1">
+                    {/* Last Donation Date */}
+                    <div className="space-y-1">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">Last Donation Date (Optional)</label>
+                      <input 
+                        type="date"
+                        value={formData.lastDonationDate}
+                        onChange={(e) => setFormData({ ...formData, lastDonationDate: e.target.value })}
+                        className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 outline-none transition-all cursor-pointer shadow-3xs"
+                      />
+                    </div>
+
+                    {/* Weight and Height */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">Weight (KG)</label>
+                        <input 
+                          type="number"
+                          placeholder="KG"
+                          value={formData.weight !== undefined ? formData.weight : ''}
+                          onChange={(e) => setFormData({ ...formData, weight: e.target.value === '' ? undefined : Number(e.target.value) })}
+                          className="w-full bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-5 text-sm font-semibold text-slate-800 outline-none transition-all shadow-3xs"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400 ml-1">Height (Ft/In)</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="number"
+                            placeholder="Ft"
+                            value={formData.heightFeet !== undefined ? formData.heightFeet : ''}
+                            onChange={(e) => setFormData({ ...formData, heightFeet: e.target.value === '' ? undefined : Number(e.target.value) })}
+                            className="w-1/2 bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-2 text-center text-sm font-semibold text-slate-800 outline-none transition-all shadow-3xs"
+                          />
+                          <input 
+                            type="number"
+                            placeholder="In"
+                            value={formData.heightInches !== undefined ? formData.heightInches : ''}
+                            onChange={(e) => setFormData({ ...formData, heightInches: e.target.value === '' ? undefined : Number(e.target.value) })}
+                            className="w-1/2 bg-white border border-slate-200 focus:border-[#80152B] focus:ring-1 focus:ring-[#80152B] rounded-2xl py-4 px-2 text-center text-sm font-semibold text-slate-800 outline-none transition-all shadow-3xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ready & Available Status Bubble and Toggle */}
+                    <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 mt-2">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 uppercase tracking-wide">Ready & Available to Donate</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Appear in regional matching searches</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, isAvailable: !formData.isAvailable })}
+                        className={`w-12 h-6.5 rounded-full transition-colors relative cursor-pointer ${formData.isAvailable ? 'bg-[#80152B]' : 'bg-slate-300'}`}
+                      >
+                        <motion.div 
+                          animate={{ x: formData.isAvailable ? 22 : 3 }}
+                          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                          className="absolute top-0.5 w-5.5 h-5.5 bg-white rounded-full shadow-md"
+                        />
+                      </button>
+                    </div>
+
+                    {/* Terms/verification note */}
+                    <p className="text-[10.5px] text-slate-400 font-medium leading-relaxed px-1">
+                      By submitting this form, you verify that your entered information is completely authentic. Your account details will be instantly stored in our secure database.
+                    </p>
+
+                    {/* Action buttons */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => setActiveStep(2)}
+                        className="flex-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-extrabold text-sm py-4 rounded-2xl shadow-sm transition-all cursor-pointer active:scale-98 outline-none disabled:opacity-50"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => handleSubmit({ preventDefault: () => {} } as any)}
+                        className="flex-1 bg-[#80152B] hover:bg-[#6c0f22] text-white font-extrabold text-sm py-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-98 border-none outline-none disabled:opacity-50"
+                      >
+                        {saving ? 'Registering...' : 'Submit'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.99 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.99 }}
       transition={{ duration: 0.3 }}
-      className="w-full max-w-[430px] mx-auto bg-white rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-8 animate-fade-in"
+      className="w-full bg-white rounded-3xl border border-slate-100 relative text-slate-800 font-sans pb-8 animate-fade-in shadow-3xs"
     >
       {/* Red point roof header shape */}
       <div className="relative w-full h-11 overflow-visible mb-6" style={{ filter: 'drop-shadow(0px 6px 4px rgba(0,0,0,0.08))' }}>
@@ -22234,7 +22847,7 @@ function OwnUserProfileView({
 
   if (!profile) {
     return (
-      <div className="w-full max-w-md mx-auto bg-[#F4F4F7] h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 flex flex-col items-center justify-center p-6 text-slate-800">
+      <div className="w-full bg-[#F4F4F7] min-h-[500px] flex flex-col items-center justify-center p-6 text-slate-800">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 border-4 border-red-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-xs font-black uppercase tracking-widest text-slate-400">Loading Profile...</p>
@@ -22276,7 +22889,7 @@ function OwnUserProfileView({
   };
 
   return (
-    <div className="w-full max-w-md mx-auto bg-[#F4F4F7] min-h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-12 flex flex-col">
+    <div className="w-full bg-[#F4F4F7] min-h-screen relative text-slate-800 font-sans pb-12 flex flex-col">
       {/* Hidden File Input for Direct Upload */}
       <input 
         type="file" 
@@ -23237,35 +23850,46 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
+  // Reviews and Ratings state
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [showRatingPopup, setShowRatingPopup] = useState(false);
+  const [hasShownPopup, setHasShownPopup] = useState(false);
+  const [targetUid, setTargetUid] = useState<string>('');
+  const [rating, setRating] = useState<number>(0);
+  const [ratingHover, setRatingHover] = useState<number>(0);
+  const [comment, setComment] = useState<string>('');
+  const [submittingReview, setSubmittingReview] = useState<boolean>(false);
+
   useEffect(() => {
     let unsubscribeProfile: () => void;
     let unsubscribeRequests: () => void;
     let unsubscribeDonations: () => void;
     let unsubscribePosts: () => void;
+    let unsubscribeReviews: () => void;
 
     const loadData = async () => {
       setLoading(true);
       setProfileLoaded(false);
       
-      let targetUid = uid;
+      let resolvedUid = uid;
       
       if (uid) {
         // 1. Try checking if a doc exists with document ID == uid
         try {
           const directDoc = await getDoc(doc(db, 'users', uid));
           if (directDoc.exists()) {
-            targetUid = uid;
+            resolvedUid = uid;
           } else {
             // Document with ID == uid does not exist. Let's try querying by username metric
             const usernameQuery = query(collection(db, 'users'), where('username', '==', uid.toLowerCase().trim()));
             const qSnapshot = await getDocs(usernameQuery);
             if (!qSnapshot.empty) {
-              targetUid = qSnapshot.docs[0].id;
+              resolvedUid = qSnapshot.docs[0].id;
             } else {
               // 3. Fallback: match by bdnr-XX serial if needed or from allUsers search
               const foundUser = allUsers.find(u => u.username?.toLowerCase() === uid.toLowerCase().trim() || u.uid === uid);
               if (foundUser) {
-                targetUid = foundUser.uid;
+                resolvedUid = foundUser.uid;
               } else {
                 // Check if it matches bdnr-(\d+) in formatted serial
                 const bdnrMatch = uid.match(/^bdnr-(\d+)$/i);
@@ -23273,7 +23897,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
                   const indexValue = parseInt(bdnrMatch[1], 10) - 1;
                   const sortedAll = [...allUsers].sort((a, b) => a.uid.localeCompare(b.uid));
                   if (indexValue >= 0 && indexValue < sortedAll.length) {
-                    targetUid = sortedAll[indexValue].uid;
+                    resolvedUid = sortedAll[indexValue].uid;
                   }
                 }
               }
@@ -23284,19 +23908,21 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
           // Fallback to allUsers search
           const foundUser = allUsers.find(u => u.username?.toLowerCase() === uid.toLowerCase().trim() || u.uid === uid);
           if (foundUser) {
-            targetUid = foundUser.uid;
+            resolvedUid = foundUser.uid;
           }
         }
       }
 
-      if (!targetUid) {
+      if (!resolvedUid) {
         setProfileLoaded(true);
         setLoading(false);
         return;
       }
 
-      // Now set up snapshot listeners using the correct resolved targetUid!
-      const profileRef = doc(db, 'users', targetUid);
+      setTargetUid(resolvedUid);
+
+      // Now set up snapshot listeners using the correct resolved resolvedUid!
+      const profileRef = doc(db, 'users', resolvedUid);
       unsubscribeProfile = onSnapshot(profileRef, (doc) => {
         if (doc.exists()) {
           setProfile(doc.data() as UserProfile);
@@ -23309,9 +23935,9 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         setProfileLoaded(true);
       });
 
-      // Load Requests (Need History) using resolved targetUid
+      // Load Requests (Need History) using resolved resolvedUid
       const requestsRef = collection(db, 'requests');
-      const q = query(requestsRef, where('requesterUid', '==', targetUid), orderBy('createdAt', 'desc'));
+      const q = query(requestsRef, where('requesterUid', '==', resolvedUid), orderBy('createdAt', 'desc'));
       unsubscribeRequests = onSnapshot(q, (snapshot) => {
         setUserRequests(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as BloodRequest)));
       }, (err) => {
@@ -23319,7 +23945,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       });
 
       // Load Donations History
-      const donationsRef = collection(db, 'users', targetUid, 'donations');
+      const donationsRef = collection(db, 'users', resolvedUid, 'donations');
       const dq = query(donationsRef, orderBy('date', 'desc'));
       unsubscribeDonations = onSnapshot(dq, (snapshot) => {
         setDonations(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as DonationRecord)));
@@ -23329,7 +23955,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
 
       // Load Posts
       const postsRef = collection(db, 'posts');
-      const pq = query(postsRef, where('authorUid', '==', targetUid));
+      const pq = query(postsRef, where('authorUid', '==', resolvedUid));
       unsubscribePosts = onSnapshot(pq, (snapshot) => {
         const postsList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any)) as CommunityPost[];
         postsList.sort((a, b) => {
@@ -23343,6 +23969,20 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         console.error("Posts fetch failed:", err);
         setLoading(false);
       });
+
+      // Load Reviews
+      const reviewsRef = collection(db, 'users', resolvedUid, 'reviews');
+      unsubscribeReviews = onSnapshot(reviewsRef, (snapshot) => {
+        const list = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        list.sort((a: any, b: any) => {
+          const tA = a.createdAt?.seconds || a.createdAt?.toMillis?.() || 0;
+          const tB = b.createdAt?.seconds || b.createdAt?.toMillis?.() || 0;
+          return tB - tA;
+        });
+        setReviews(list);
+      }, (err) => {
+        console.error("Reviews fetch failed:", err);
+      });
     };
 
     loadData();
@@ -23351,8 +23991,42 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       if (unsubscribeRequests) unsubscribeRequests();
       if (unsubscribeDonations) unsubscribeDonations();
       if (unsubscribePosts) unsubscribePosts();
+      if (unsubscribeReviews) unsubscribeReviews();
     };
   }, [uid, allUsers]);
+
+  // Reviews calculations
+  const totalReviews = reviews.length;
+  const avgRating = totalReviews > 0 
+    ? (reviews.reduce((acc, curr) => acc + (curr.rating || 0), 0) / totalReviews).toFixed(1)
+    : null;
+
+  const existingUserReview = reviews.find(r => r.reviewerUid === currentUser?.uid);
+
+  // 5-second rating popup timer
+  useEffect(() => {
+    if (!profile || !currentUser) return;
+    if (currentUser.uid === profile.uid) return; // cannot rate self
+    
+    // Check if the current user has already reviewed
+    const hasReviewed = reviews.some(r => r.reviewerUid === currentUser.uid);
+    if (hasReviewed || hasShownPopup) return;
+
+    const timer = setTimeout(() => {
+      setShowRatingPopup(true);
+      setHasShownPopup(true);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [profile?.uid, currentUser?.uid, reviews, hasShownPopup]);
+
+  // Prepopulate form when editing/updating
+  useEffect(() => {
+    if (showRatingPopup) {
+      setRating(existingUserReview?.rating || 0);
+      setComment(existingUserReview?.comment || '');
+    }
+  }, [showRatingPopup, existingUserReview]);
 
   if (loading || !profileLoaded) {
     return (
@@ -23411,6 +24085,87 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
     });
   };
 
+  // Handle submit review
+  const handleSubmitReview = async () => {
+    if (!currentUser || !targetUid) return;
+    if (rating === 0) {
+      addToast("Rating Required", "Please select a star rating between 1 and 5.", "error");
+      return;
+    }
+    if (!comment.trim()) {
+      addToast("Comment Required", "Please leave a comment describing your experience.", "error");
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      const reviewId = currentUser.uid;
+      const docRef = doc(db, 'users', targetUid, 'reviews', reviewId);
+      
+      const payload: any = {
+        reviewerUid: currentUser.uid,
+        reviewerName: currentUser.displayName || 'Anonymous Donor',
+        reviewerPhoto: currentUser.photoURL || null,
+        rating: Number(rating),
+        comment: comment.trim(),
+      };
+
+      if (existingUserReview) {
+        // Update existing review (keeps createdAt constant)
+        await updateDoc(docRef, payload);
+        addToast("Review Updated", "Your feedback was updated successfully.", "success");
+      } else {
+        // Create new review
+        payload.createdAt = serverTimestamp();
+        await setDoc(docRef, payload);
+        addToast("Review Submitted", "Thank you for sharing your feedback!", "success");
+      }
+      setShowRatingPopup(false);
+    } catch (err) {
+      console.error("Error saving review:", err);
+      handleFirestoreError(err, existingUserReview ? OperationType.UPDATE : OperationType.CREATE, `users/${targetUid}/reviews/${currentUser.uid}`);
+      addToast("Submission Failed", "Could not submit review.", "error");
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  // Handle delete review
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!targetUid) return;
+    const confirm = await askConfirm(
+      "Delete Review",
+      "Are you sure you want to delete this review? This action cannot be undone.",
+      "Delete"
+    );
+    if (confirm) {
+      try {
+        const docRef = doc(db, 'users', targetUid, 'reviews', reviewId);
+        await deleteDoc(docRef);
+        addToast("Review Deleted", "Your review has been successfully removed.", "success");
+      } catch (err) {
+        console.error("Error deleting review:", err);
+        handleFirestoreError(err, OperationType.DELETE, `users/${targetUid}/reviews/${reviewId}`);
+        addToast("Deletion Failed", "Could not delete review.", "error");
+      }
+    }
+  };
+
+  // Helper for relative date formatting
+  const formatRelativeTime = (date: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    if (diffMs < 0) return 'Just now';
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
   // Eligibility details
   const isEligibleNow = !profile.nextDonationEligibility || new Date(profile.nextDonationEligibility) <= new Date();
 
@@ -23419,7 +24174,7 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="w-full max-w-[430px] md:max-w-md mx-auto bg-[#F4F4F7] min-h-[640px] rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 relative text-slate-800 font-sans pb-12 flex flex-col"
+      className="w-full bg-[#F4F4F7] min-h-screen relative text-slate-800 font-sans pb-12 flex flex-col"
     >
       {/* Red Blood Cover Banner */}
       <div className="w-full h-36 bg-gradient-to-r from-[#ff1744] via-[#ff2a55] to-[#d50000] relative overflow-hidden shrink-0 select-none">
@@ -23548,6 +24303,13 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         <p className="text-[13px] text-slate-400 font-bold mt-1 text-center tracking-wide lowercase">
           last donation {formatDisplayDate(profile.lastDonationDate) || 'recently'}
         </p>
+
+        {avgRating && (
+          <div className="flex items-center gap-1 mt-2 bg-amber-50/80 border border-amber-100/60 px-2.5 py-0.5 rounded-full text-amber-700 text-xs font-black shadow-3xs select-none">
+            <Star className="w-3.5 h-3.5 fill-amber-400 stroke-amber-500" />
+            <span>{avgRating} ({totalReviews} {totalReviews === 1 ? 'review' : 'reviews'})</span>
+          </div>
+        )}
       </div>
 
       {/* Row of Action Buttons (Telegram style, customized with Red bloodlink accent) */}
@@ -23625,6 +24387,137 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
             {copiedPhone ? 'Copied!' : 'Copy'}
           </span>
         </div>
+
+        {/* Reviews and Ratings Section */}
+        <div className="bg-white rounded-[20px] p-5 border border-slate-100/80 shadow-3xs mt-4 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+              Donor Reviews & Feedback
+            </h3>
+            
+            {currentUser && currentUser.uid !== profile.uid && (
+              <button 
+                onClick={() => setShowRatingPopup(true)}
+                className="text-xs font-bold text-[#ff1744] hover:underline cursor-pointer flex items-center gap-1"
+              >
+                {existingUserReview ? 'Edit Review' : 'Write a Review'}
+              </button>
+            )}
+          </div>
+
+          {/* Average Breakdown Panel */}
+          {totalReviews > 0 ? (
+            <div className="flex flex-col md:flex-row md:items-center gap-6 pb-4 border-b border-slate-100/80 mb-4">
+              <div className="flex flex-col items-center shrink-0">
+                <span className="text-3xl font-black text-slate-900 leading-none">{avgRating}</span>
+                <div className="flex items-center gap-0.5 mt-1">
+                  {[1, 2, 3, 4, 5].map((s) => {
+                    const val = Number(avgRating || 0);
+                    return (
+                      <Star 
+                        key={s} 
+                        className={`w-3.5 h-3.5 ${s <= val ? 'fill-amber-400 text-amber-400' : 'text-slate-200 stroke-slate-200'}`} 
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-wide">
+                  {totalReviews} rating{totalReviews > 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Stars progress bar breakdown */}
+              <div className="flex-1 flex flex-col gap-1 w-full">
+                {[5, 4, 3, 2, 1].map((starsCount) => {
+                  const count = reviews.filter(r => r.rating === starsCount).length;
+                  const pct = totalReviews > 0 ? (count / totalReviews) * 100 : 0;
+                  return (
+                    <div key={starsCount} className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-slate-400 w-3 text-right">{starsCount}</span>
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-amber-400 rounded-full transition-all duration-300" 
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 w-4 text-left">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl mb-4 bg-slate-50/50">
+              <Star className="w-8 h-8 text-slate-300 mx-auto mb-1.5 stroke-[1.5]" />
+              <p className="text-xs font-semibold text-slate-500">No feedback given yet.</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Be the first to share your experience with this donor!</p>
+            </div>
+          )}
+
+          {/* Individual comments list */}
+          {totalReviews > 0 && (
+            <div className="flex flex-col gap-3.5 max-h-96 overflow-y-auto pr-1">
+              {reviews.map((rev) => {
+                const revDate = rev.createdAt?.toDate?.() || (rev.createdAt ? new Date(rev.createdAt?.seconds * 1000 || rev.createdAt) : new Date());
+                return (
+                  <div key={rev.id || rev.reviewerUid} className="flex flex-col bg-slate-50/50 border border-slate-100 rounded-xl p-3.5 relative text-left animate-in fade-in duration-300">
+                    
+                    {/* Review Header */}
+                    <div className="flex items-center gap-2.5 mb-1.5 pr-8">
+                      {rev.reviewerPhoto ? (
+                        <img 
+                          src={rev.reviewerPhoto} 
+                          alt={rev.reviewerName} 
+                          className="w-7 h-7 rounded-full object-cover border border-slate-100" 
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-500 font-bold flex items-center justify-center text-[11px] border border-slate-100 shrink-0">
+                          {rev.reviewerName?.charAt(0) || 'U'}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-extrabold text-slate-800 truncate">
+                          {rev.reviewerName}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <div className="flex items-center gap-0.2 shrink-0">
+                            {[1,2,3,4,5].map((s) => (
+                              <Star 
+                                key={s} 
+                                className={`w-3 h-3 ${s <= rev.rating ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} 
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider shrink-0">
+                            {formatRelativeTime(revDate)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Delete button (owner of review or admin) */}
+                    {(currentUser?.uid === rev.reviewerUid || currentProfile?.role === 'admin') && (
+                      <button 
+                        onClick={() => handleDeleteReview(rev.id || rev.reviewerUid)}
+                        className="w-6 h-6 rounded-md hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-rose-600 transition-colors absolute top-3.5 right-3 cursor-pointer animate-in fade-in"
+                        title="Delete Review"
+                      >
+                        <Trash className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {/* Review Comment */}
+                    <p className="text-xs text-slate-600 leading-relaxed break-words font-medium pl-9 pr-2">
+                      {rev.comment}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <DonorCardModal
@@ -23634,6 +24527,104 @@ function PublicProfileView({ uid, onBack, onMessage, currentUser, currentProfile
         addToast={addToast}
         allUsers={allUsers}
       />
+
+      {/* 5-Star Rating & Comment Popup */}
+      {showRatingPopup && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-[999] animate-in fade-in duration-200">
+          <motion.div 
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            className="bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 w-full max-w-md flex flex-col relative"
+          >
+            {/* Close Button */}
+            <button 
+              onClick={() => setShowRatingPopup(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-50 border border-slate-100 hover:bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex flex-col items-center text-center mt-2">
+              <div className="w-12 h-12 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-500 mb-3">
+                <Star className="w-6 h-6 fill-amber-400 stroke-amber-500" />
+              </div>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                {existingUserReview ? 'Edit Your Review' : `Rate ${profile.displayName}`}
+              </h3>
+              <p className="text-xs text-slate-400 font-bold mt-1 max-w-xs lowercase tracking-wide">
+                Share your donation experience to support others in the community
+              </p>
+            </div>
+
+            {/* Star selector */}
+            <div className="flex items-center justify-center gap-2.5 my-6">
+              {[1, 2, 3, 4, 5].map((s) => {
+                const isSelected = s <= (ratingHover || rating);
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setRating(s)}
+                    onMouseEnter={() => setRatingHover(s)}
+                    onMouseLeave={() => setRatingHover(0)}
+                    className="p-1 focus:outline-none transition-all hover:scale-115 active:scale-95 cursor-pointer"
+                  >
+                    <Star 
+                      className={`w-9 h-9 transition-all ${
+                        isSelected 
+                          ? 'fill-amber-400 text-amber-400 filter drop-shadow-3xs' 
+                          : 'text-slate-200'
+                      }`} 
+                    />
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Comment textbox */}
+            <div className="flex flex-col mb-6">
+              <label className="text-[10px] text-slate-400 font-black uppercase tracking-wider mb-1.5 text-left pl-1">
+                Your Review Comment
+              </label>
+              <textarea
+                value={comment}
+                onChange={(e) => setComment(e.target.value.slice(0, 1000))}
+                placeholder="Write about their availability, communication, behavior or how smooth the blood donation was..."
+                className="w-full h-28 bg-slate-50 border border-slate-150 rounded-2xl p-3.5 text-sm font-medium text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#ff1744]/20 focus:border-[#ff1744] resize-none transition-all text-left"
+                maxLength={1000}
+              />
+              <span className="text-[9px] text-slate-400 font-bold self-end mt-1 uppercase tracking-wider">
+                {comment.length} / 1000 characters
+              </span>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowRatingPopup(false)}
+                className="flex-1 bg-slate-50 hover:bg-slate-100 border border-slate-150 text-slate-700 text-sm font-black py-3 rounded-2xl transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReview}
+                disabled={submittingReview}
+                className="flex-1 bg-[#ff1744] hover:bg-[#d50000] disabled:bg-slate-300 text-white text-sm font-black py-3 rounded-2xl transition-all shadow-sm shadow-red-500/10 cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {submittingReview ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Submit Review</span>
+                )}
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -25040,16 +26031,55 @@ function LocationPickerModal({
 }) {
   const [markerPos, setMarkerPos] = useState({ lat: 23.8103, lng: 90.4125 });
   const [addressInput, setAddressInput] = useState('');
+  const isInitializing = useRef(true);
   
   useEffect(() => {
-    if (initialLocation?.lat && initialLocation?.lng) {
-      setMarkerPos({ lat: initialLocation.lat, lng: initialLocation.lng });
-      setAddressInput(initialLocation.address || '');
-    } else {
-      // Default center (Dhaka)
-      setMarkerPos({ lat: 23.8103, lng: 90.4125 });
+    if (isOpen) {
+      isInitializing.current = true;
+      if (initialLocation?.lat && initialLocation?.lng) {
+        setMarkerPos({ lat: initialLocation.lat, lng: initialLocation.lng });
+        setAddressInput(initialLocation.address || '');
+      } else {
+        // Automatically ask for location permission and collect location from map
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              setMarkerPos({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            },
+            (err) => {
+              console.warn("Auto-geolocation failed, using Dhaka default:", err);
+              setMarkerPos({ lat: 23.8103, lng: 90.4125 });
+              setAddressInput('');
+            },
+            { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+          );
+        } else {
+          setMarkerPos({ lat: 23.8103, lng: 90.4125 });
+          setAddressInput('');
+        }
+      }
+      setTimeout(() => {
+        isInitializing.current = false;
+      }, 500);
     }
   }, [initialLocation, isOpen]);
+
+  useEffect(() => {
+    if (isOpen && !isInitializing.current) {
+      if (typeof window !== 'undefined' && (window as any).google && (window as any).google.maps) {
+        const geocoder = new (window as any).google.maps.Geocoder();
+        geocoder.geocode({ location: markerPos }, (results: any, status: any) => {
+          if (status === 'OK' && results && results[0]) {
+            setAddressInput(results[0].formatted_address);
+          } else {
+            setAddressInput(`${markerPos.lat.toFixed(4)}, ${markerPos.lng.toFixed(4)}`);
+          }
+        });
+      } else {
+        setAddressInput(`${markerPos.lat.toFixed(4)}, ${markerPos.lng.toFixed(4)}`);
+      }
+    }
+  }, [markerPos, isOpen]);
 
   if (!isOpen) return null;
 
@@ -25171,3 +26201,5 @@ function LocationPickerModal({
     </div>
   );
 }
+
+

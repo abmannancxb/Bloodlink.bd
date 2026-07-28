@@ -85,10 +85,24 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         super.onNewToken(token);
         Log.d(TAG, "Refreshed token: " + token);
         // Save token to SharedPreferences so the app can retrieve it or upload it if needed
-        getSharedPreferences("BloodLinkPrefs", MODE_PRIVATE)
-                .edit()
+        android.content.SharedPreferences prefs = getSharedPreferences("BloodLinkPrefs", MODE_PRIVATE);
+        prefs.edit()
                 .putString("fcm_token", token)
                 .apply();
+
+        // Robust update to Firestore if user is already logged in natively
+        String uid = prefs.getString("user_uid", null);
+        if (uid != null) {
+            try {
+                FirebaseFirestore db = FirebaseFirestore.getInstance();
+                db.collection("users").document(uid)
+                        .update("fcmToken", token)
+                        .addOnSuccessListener(aVoid -> Log.d(TAG, "Token updated in Firestore on refresh"))
+                        .addOnFailureListener(e -> Log.e(TAG, "Failed to update token in Firestore on refresh", e));
+            } catch (Exception e) {
+                Log.e(TAG, "Exception updating token in Firestore on refresh: " + e.getMessage());
+            }
+        }
     }
 
     @Override

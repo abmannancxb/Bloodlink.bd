@@ -29,6 +29,21 @@
       },
       "required": ["uid", "displayName", "bloodGroup", "district", "thana"]
     },
+    "Review": {
+      "title": "Profile Review",
+      "description": "A review with rating and comment left by other users on a profile.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "reviewerUid": { "type": "string" },
+        "reviewerName": { "type": "string" },
+        "reviewerPhoto": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["reviewerUid", "reviewerName", "rating", "comment", "createdAt"]
+    },
     "BloodRequest": {
       "title": "Blood Request",
       "description": "A request for blood donation in a specific area.",
@@ -278,9 +293,35 @@
         "createdBy": { "type": "string" }
       },
       "required": ["title", "subtitle", "isActive", "createdAt"]
+    },
+    "AmbulanceRequest": {
+      "title": "Ambulance Request",
+      "description": "An emergency request for ambulance service.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientName": { "type": "string" },
+        "phone": { "type": "string" },
+        "district": { "type": "string" },
+        "thana": { "type": "string" },
+        "pickupAddress": { "type": "string" },
+        "hospitalDestination": { "type": "string" },
+        "condition": { "type": "string" },
+        "urgency": { "type": "string", "enum": ["Normal", "High", "Critical"] },
+        "status": { "type": "string", "enum": ["Pending", "Assigned", "Completed", "Cancelled"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "createdByUid": { "type": "string" },
+        "createdByEmail": { "type": "string" },
+        "createdByName": { "type": "string" }
+      },
+      "required": ["patientName", "phone", "district", "thana", "pickupAddress", "condition", "urgency", "status", "createdAt", "createdByUid"]
     }
   },
   "firestore": {
+    "/ambulance_requests/{requestId}": {
+      "schema": "AmbulanceRequest",
+      "description": "Emergency ambulance requests submitted by seekers."
+    },
     "/banners/{bannerId}": {
       "schema": "AdminCustomBanner",
       "description": "Announcement banners created by admins."
@@ -288,6 +329,10 @@
     "/users/{userId}": {
       "schema": "User",
       "description": "User profiles and donor status."
+    },
+    "/users/{userId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Reviews and ratings left for this user."
     },
     "/requests/{requestId}": {
       "schema": "BloodRequest",

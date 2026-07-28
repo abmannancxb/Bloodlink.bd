@@ -48,16 +48,4 @@ if (typeof window !== 'undefined') {
   setPersistence(auth, browserLocalPersistence).catch((error) => {
     console.error("Auth persistence error:", error);
   });
-
-  // Test Connection
-  const testConnection = async () => {
-    try {
-      await getDocFromServer(doc(db, '_connection_test', 'status'));
-    } catch (error) {
-      if (error instanceof Error && error.message.includes('offline')) {
-        console.warn("Firestore client is running in offline mode.");
-      }
-    }
-  };
-  testConnection();
 }

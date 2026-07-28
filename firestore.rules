@@ -98,6 +98,23 @@ service cloud.firestore {
         allow create: if isValidId(donationId) && isOwner(userId) && (!('requestId' in incoming()) || incoming().requestId == null || isValidId(incoming().requestId));
         allow delete: if isOwner(userId) || isAdmin();
       }
+
+      match /reviews/{reviewId} {
+        function isValidReview(data) {
+          return data.reviewerUid == request.auth.uid
+            && data.reviewerName is string && data.reviewerName.size() <= 100
+            && (!('reviewerPhoto' in data) || data.reviewerPhoto == null || (data.reviewerPhoto is string && data.reviewerPhoto.size() <= 2000))
+            && data.rating is number && data.rating >= 1 && data.rating <= 5
+            && data.comment is string && data.comment.size() <= 1000;
+        }
+
+        allow read: if true;
+        allow create: if isValidId(reviewId) && isSignedIn() && request.auth.uid != userId && isValidReview(incoming())
+          && incoming().createdAt == request.time;
+        allow update: if isSignedIn() && request.auth.uid != userId && isOwner(existing().reviewerUid) && isValidReview(incoming())
+          && incoming().createdAt == existing().createdAt;
+        allow delete: if isOwner(existing().reviewerUid) || isAdmin();
+      }
     }
 
     // --- Blood Requests ---
@@ -368,6 +385,14 @@ service cloud.firestore {
         isAdmin()
       );
       allow delete: if (isSignedIn() && existing().ownerUid == request.auth.uid) || isAdmin();
+    }
+
+    // --- Ambulance Requests ---
+    match /ambulance_requests/{requestId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update: if isAdmin() || (isSignedIn() && existing().createdByUid == request.auth.uid);
+      allow delete: if isAdmin();
     }
   }
 }
